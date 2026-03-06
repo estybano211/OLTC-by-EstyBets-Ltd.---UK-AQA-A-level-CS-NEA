@@ -11,10 +11,15 @@ class User_Interface:
     Automatically creates the database if it does not already exist.
     """
 
-    def __init__(self):
+    def __init__(self, show_terms=True):
         """
         Initialises the User Interface window, checks for database existence,
         and starts the application at the Terms & Conditions screen.
+
+        Args:
+            show_terms (bool): If True, the Terms & Conditions screen is shown
+                               on startup. If False, the casino introduction
+                               screen is shown directly.
         """
         self.interface_root = Tk()
 
@@ -39,7 +44,10 @@ class User_Interface:
 
         self.current_section_frame = None
 
-        set_view(self, self.show_terms_and_conditions)
+        if show_terms:
+            set_view(self, self.show_terms_and_conditions)
+        else:
+            set_view(self, self.casino_intro)
 
         self.interface_root.mainloop()
 
@@ -138,4 +146,4 @@ class User_Interface:
 
 
 if __name__ == "__main__":
-    User_Interface()
+    User_Interface(show_terms=False)

@@ -176,6 +176,6 @@ class ShowGameRules:
         continue_button = Button(
             bottom_frame,
             text="Continue",
-            command=lambda: (window.destroy(), callback())
+            command=lambda: (window.destroy(), callback()),
         )
         continue_button.pack(pady=10)

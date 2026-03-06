@@ -75,7 +75,7 @@ class Casino_Interface:
     tournament, gauntlet and endless play.
     """
 
-    def __init__(self, administrator):
+    def __init__(self, administrator, user_data=None):
         """
         Initialises the Casino Interface window, sets up the database manager,
         font styles, and user data state. If launched in administrator mode,
@@ -85,6 +85,11 @@ class Casino_Interface:
         Args:
             administrator (bool): If True, the interface launches in
                                   administrator mode, bypassing login.
+            user_data (dict, optional): A dictionary containing user information
+                                        to pre-populate the session with.
+                                        Expected keys: 'user_id', 'username',
+                                        'administrator'. If None, defaults to
+                                        an unsigned-in state.
         """
         self.interface_root = Tk()
         self.interface_root.title(
@@ -100,11 +105,14 @@ class Casino_Interface:
         self.styles = fetch_font_settings(self.interface_root)
         self.signed_in = False
 
-        self.user_data = {
-            "user_id": None,
-            "username": None,
-            "administrator": False,
-        }
+        if user_data is not None:
+            self.user_data = user_data
+        else:
+            self.user_data = {
+                "user_id": None,
+                "username": None,
+                "administrator": False,
+            }
 
         if administrator:
             self.user_data["user_id"] = 0
@@ -1584,6 +1592,8 @@ class Casino_Interface:
 
         WhiteJoe(self.user_data)
 
+        self.interface_root.destroy()
+
     def harrogate_hold_em_rules(self):
         """
         Launches the Harrogate Hold 'Em rules window. Requires a linked
@@ -1627,6 +1637,8 @@ class Casino_Interface:
         bots = [[roster[i % len(roster)], difficulty] for i in range(bot_count)]
 
         HarrogateHoldEm(self.user_data, settings, bots)
+
+        self.interface_root.destroy()
 
     def start_gauntlet(self, start_difficulty=None):
         """
@@ -1676,6 +1688,8 @@ class Casino_Interface:
         rounds = int(settings.get("rounds_survived", 0))
         self.show_special_mode_summary("gauntlet", rounds)
 
+        self.interface_root.destroy()
+
     def start_endless(self):
         """
         Launches Endless Mode.
@@ -1712,6 +1726,8 @@ class Casino_Interface:
 
         rounds = int(settings.get("rounds_survived", 0))
         self.show_special_mode_summary("endless", rounds)
+
+        self.interface_root.destroy()
 
 
 if __name__ == "__main__":

@@ -33,9 +33,6 @@ class WhiteJoe:
             user_data (dict): Dictionary containing at minimum 'username'
                               (str) and 'administrator' (bool) keys, and
                               optionally 'user_id'.
-            settings (dict or None): Optional game settings dictionary.
-                                     Currently unused but reserved for future
-                                     configuration.
         """
         self.user_data = user_data
 
@@ -73,6 +70,7 @@ class WhiteJoe:
             "widget_bg": "#6a2e4f",
             "text_bg": "#141414",
             "text_fg": "#f2f2f2",
+            "left_fg": "#1e1e1e",
             # Log panel
             "log_bg": "#1a1a1a",
             "log_fg": "#cfcfcf",
@@ -83,8 +81,8 @@ class WhiteJoe:
             "win_fg": "#a8e6c1",
             "loss_bg": "#4a1e1e",
             "loss_fg": "#f2a3a3",
-            "push_bg": "#5c5c5c",
-            "push_fg": "#ededed",
+            "tie_bg": "#5c4a10",
+            "tie_fg": "#f0d898",
         }
 
         # Game state
@@ -112,60 +110,56 @@ class WhiteJoe:
         Args:
             frame (Frame): The parent frame to build the view into.
         """
+        cs = self.colour_scheme
+
         frame.columnconfigure(0, weight=2)
         frame.columnconfigure(1, weight=1)
         frame.rowconfigure(0, weight=1)
         frame.rowconfigure(1, weight=1)
 
         # Left panel
-        left_frame = Frame(
-            frame, bd=2, relief="sunken", bg=self.colour_scheme["left_bg"]
-        )
+        left_frame = Frame(frame, bd=2, relief="sunken", bg=cs["left_bg"])
         left_frame.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=5, pady=5)
 
         # Canvas + Scrollbar
-        self.log_canvas = Canvas(
-            left_frame, bg=self.colour_scheme["left_bg"], highlightthickness=0
-        )
-
+        self.log_canvas = Canvas(left_frame, bg=cs["left_bg"], highlightthickness=0)
         scrollbar = Scrollbar(
             left_frame, orient="vertical", command=self.log_canvas.yview
         )
         self.log_canvas.configure(yscrollcommand=scrollbar.set)
-
         scrollbar.pack(side="right", fill="y")
         self.log_canvas.pack(side="left", fill="both", expand=True)
 
         # Inner frame
-        self.log_frame = Frame(self.log_canvas, bg=self.colour_scheme["left_bg"])
+        self.log_frame = Frame(self.log_canvas, bg=cs["left_bg"])
         self.log_window = self.log_canvas.create_window(
             (0, 0), window=self.log_frame, anchor="nw"
         )
 
-        def configure_canvas(event):
-            """Resizes the log inner frame to match the canvas width."""
-            self.log_canvas.itemconfig(self.log_window, width=event.width)
-
-        self.log_canvas.bind("<Configure>", configure_canvas)
-
-        def configure_frame(event):
-            """Updates the canvas scroll region when the log frame changes size."""
-            self.log_canvas.configure(scrollregion=self.log_canvas.bbox("all"))
-
-        self.log_frame.bind("<Configure>", configure_frame)
+        self.log_canvas.bind(
+            "<Configure>",
+            lambda e: self.log_canvas.itemconfig(self.log_window, width=e.width),
+        )
+        self.log_frame.bind(
+            "<Configure>",
+            lambda e: self.log_canvas.configure(
+                scrollregion=self.log_canvas.bbox("all")
+            ),
+        )
 
         # Top-right panel
-        top_right_frame = Frame(
-            frame, bd=2, relief="sunken", bg=self.colour_scheme["top_right_bg"]
-        )
+        top_right_frame = Frame(frame, bd=2, relief="sunken", bg=cs["top_right_bg"])
         top_right_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 
-        # Return to menu button
         Button(
             top_right_frame,
             text="Return to Menu",
             font=self.styles["button"],
-            bg=self.colour_scheme["widget_bg"],
+            bg=cs["widget_bg"],
+            fg=cs["text_fg"],
+            relief="flat",
+            bd=0,
+            cursor="hand2",
             command=self.return_to_menu,
         ).pack(pady=5)
 
@@ -173,15 +167,12 @@ class WhiteJoe:
 
         if not self.user_data.get("administrator"):
             balance_data = self.dbm.fetch_user_balance(self.user_data["username"])
-
             if not balance_data["found"]:
                 self.return_to_menu(
                     is_error=True, error=Exception("User not found in database.")
                 )
                 return
-
             balance = balance_data["balance"]
-
         else:
             self.admin_modify_bet(frame)
 
@@ -191,7 +182,14 @@ class WhiteJoe:
             f"Balance: £{balance}",
             "Current Bet: £0",
         ):
-            label = Label(top_right_frame, text=text, font=self.styles["text"])
+            label = Label(
+                top_right_frame,
+                text=text,
+                font=self.styles["text"],
+                bg=cs["top_right_bg"],
+                fg=cs["text_fg"],
+                anchor="w",
+            )
             label.pack(anchor="w", pady=5, padx=5)
             labels.append(label)
 
@@ -200,43 +198,25 @@ class WhiteJoe:
 
         # Bottom-right panel
         bottom_right_frame = Frame(
-            frame, bd=2, relief="sunken", bg=self.colour_scheme["bottom_right_bg"]
+            frame, bd=2, relief="sunken", bg=cs["bottom_right_bg"]
         )
         bottom_right_frame.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
 
         def adjust_current_bet(amount):
-            """
-            Adjusts the current bet entry by the given amount, clamping the
-            result between 1 and the user's current balance. Enables or
-            disables the Start button based on whether the resulting bet is
-            positive.
-
-            Args:
-                amount (int): The amount to add to (or subtract from) the
-                              current bet value.
-            """
             try:
                 value = int(self.bet_var.get())
             except Exception:
                 value = 0
-
             value += amount
             balance = self.return_balance()
             if balance is not None:
                 value = max(1, min(value, int(balance)))
-
             self.bet_var.set(str(value))
             self.current_bet_label.config(text=f"Current Bet: £{value}")
-
             state = "normal" if value > 0 else "disabled"
             self.start_button.config(state=state)
 
         def check_bet_input(*_):
-            """
-            Validates the bet entry field on every write, clamping the value
-            to a non-negative integer no greater than the user's balance.
-            Enables or disables the Start button accordingly.
-            """
             try:
                 value = int(self.bet_var.get())
                 if value < 0:
@@ -246,10 +226,8 @@ class WhiteJoe:
                     value = int(balance)
             except Exception:
                 value = 0
-
             self.bet_var.set(str(value))
             self.current_bet_label.config(text=f"Current Bet: £{value}")
-
             state = "normal" if value > 0 else "disabled"
             self.start_button.config(state=state)
 
@@ -262,13 +240,24 @@ class WhiteJoe:
             textvariable=self.bet_var,
             width=12,
             font=self.styles["text"],
-            bg=self.colour_scheme["widget_bg"],
+            bg=cs["widget_bg"],
+            fg=cs["text_fg"],
+            insertbackground=cs["text_fg"],
+            relief="flat",
+            bd=4,
             justify="center",
         ).pack(pady=(8, 6))
 
         # Increment rows
         for inc in (10, 100, 1000):
-            row = Frame(bottom_right_frame, bd=2, relief="ridge", padx=6, pady=3)
+            row = Frame(
+                bottom_right_frame,
+                bg=cs["text_bg"],
+                bd=2,
+                relief="ridge",
+                padx=6,
+                pady=3,
+            )
             row.pack(fill="x", pady=3)
 
             Button(
@@ -276,7 +265,11 @@ class WhiteJoe:
                 text="+",
                 font=self.styles["button"],
                 width=3,
-                bg=self.colour_scheme["widget_bg"],
+                bg=cs["widget_bg"],
+                fg=cs["text_fg"],
+                relief="flat",
+                bd=0,
+                cursor="hand2",
                 command=lambda v=inc: adjust_current_bet(v),
             ).pack(side="left", padx=4)
 
@@ -284,7 +277,8 @@ class WhiteJoe:
                 row,
                 text=str(inc),
                 font=self.styles["text"],
-                bg=self.colour_scheme["text_bg"],
+                bg=cs["text_bg"],
+                fg=cs["text_fg"],
                 width=8,
                 anchor="center",
             ).pack(side="left", expand=True)
@@ -293,8 +287,12 @@ class WhiteJoe:
                 row,
                 text="-",
                 font=self.styles["button"],
-                bg=self.colour_scheme["widget_bg"],
+                bg=cs["widget_bg"],
+                fg=cs["text_fg"],
+                relief="flat",
+                bd=0,
                 width=3,
+                cursor="hand2",
                 command=lambda v=-inc: adjust_current_bet(v),
             ).pack(side="right", padx=4)
 
@@ -309,8 +307,12 @@ class WhiteJoe:
                 bottom_right_frame,
                 text=text,
                 font=self.styles["button"],
-                bg=self.colour_scheme["widget_bg"],
+                bg=cs["widget_bg"],
+                fg=cs["text_fg"],
+                relief="flat",
+                bd=0,
                 width=18,
+                cursor="hand2",
                 command=command,
                 state="disabled",
             )
@@ -321,8 +323,13 @@ class WhiteJoe:
             bottom_right_frame,
             text="Start Round",
             font=self.styles["button"],
-            bg=self.colour_scheme["widget_bg"],
+            bg=cs["start_bg"],
+            fg=cs["start_fg"],
+            relief="flat",
+            bd=0,
             width=18,
+            activebackground="#3a52a0",
+            cursor="hand2",
             command=self.start_round,
         )
         self.start_button.pack(pady=10)
@@ -735,7 +742,7 @@ class WhiteJoe:
         """
         Destroys the game window and returns the user to the appropriate
         interface. Navigates to Admin_Interface for administrators or
-        User_Interface for regular users. Optionally displays an error dialog
+        Casino_Interface for regular users. Optionally displays an error dialog
         before returning.
 
         Args:
@@ -754,9 +761,9 @@ class WhiteJoe:
 
             Admin_Interface(True)
         else:
-            from user_interface_V6 import User_Interface
+            from casino_interface_V6 import Casino_Interface
 
-            User_Interface()
+            Casino_Interface(self.user_data)
 
     def hit(self):
         """

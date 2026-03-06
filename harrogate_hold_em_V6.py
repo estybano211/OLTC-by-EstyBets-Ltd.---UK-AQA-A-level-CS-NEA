@@ -372,7 +372,6 @@ class HarrogateHoldEm:
                     user_id=self.user_data["user_id"], is_bot=False
                 )
             except Exception as exc:
-                # non-fatal; fall back to None but log for debugging
                 messagebox.showerror(
                     "Error", f"Failed to initialise player model: {exc}"
                 )
@@ -419,8 +418,6 @@ class HarrogateHoldEm:
         self.player_count = len(self.players)
         self.player_go = None
 
-        # initial_position tracks dealer button; starts at -1 so first
-        # round begins at position 0 after blind_management advances it.
         self.initial_position = -1
         self.current_position = 0
         self.action_position = 0
@@ -457,7 +454,8 @@ class HarrogateHoldEm:
             # Interactive widgets
             "widget_bg": "#6a2e4f",
             "text_bg": "#141414",
-            "text_fg": "#322020",
+            "text_fg": "#f2f2f2",
+            "left_fg": "#1e1e1e",
             # Log panel
             "log_bg": "#1a1a1a",
             "log_fg": "#cfcfcf",
@@ -483,8 +481,7 @@ class HarrogateHoldEm:
 
     def run(self):
         """
-        Starts the tkinter main event loop for the Harrogate Hold 'Em
-        window.  Blocks until the window is closed.
+        Starts the tkinter main event loop for the Harrogate Hold 'Em window.
         """
         self.hhe_root.mainloop()
 
@@ -494,15 +491,12 @@ class HarrogateHoldEm:
         """
         Builds the main five-panel game layout using a grid:
 
-        - **Top-left**: game state labels (round, board, blinds, pot, turn,
+        - Top-left: game state labels (round, board, blinds, pot, turn,
           tournament status).
-        - **Bottom-left**: scrollable colour-coded game log.
-        - **Top-right**: user information, balance, and Return to Menu
-          button.
-        - **Middle-right**: scrollable players list showing statuses,
-          cards, balances, and bets.
-        - **Bottom-right**: bet entry controls (+/- buttons) and action
-          buttons (Raise / Call / Fold) plus Start Round.
+        - Bottom-left: scrollable colour-coded game log.
+        - Top-right: user information, balance, and Return to Menu button.
+        - Middle-right: scrollable players list.
+        - Bottom-right: bet entry controls and action buttons.
 
         Args:
             frame (Frame): The parent frame to build the view into.
@@ -520,23 +514,49 @@ class HarrogateHoldEm:
         top_left.grid(column=0, row=0, sticky="nsew", padx=5, pady=5)
 
         self.round_number_label = Label(
-            top_left, bg=cs["top_left_bg"], fg=cs["text_fg"]
+            top_left,
+            bg=cs["top_left_bg"],
+            fg=cs["left_fg"],
+            anchor="w",
+            font=self.styles["text"],
         )
-        self.round_number_label.pack(pady=5)
+        self.round_number_label.pack(fill="x", padx=10, pady=5)
 
-        self.board_label = Label(top_left, bg=cs["top_left_bg"], fg=cs["text_fg"])
-        self.board_label.pack(pady=5)
+        self.board_label = Label(
+            top_left,
+            bg=cs["top_left_bg"],
+            fg=cs["left_fg"],
+            anchor="w",
+            font=self.styles["text"],
+        )
+        self.board_label.pack(fill="x", padx=10, pady=5)
 
         self.player_blinds_label = Label(
-            top_left, bg=cs["top_left_bg"], fg=cs["text_fg"]
+            top_left,
+            bg=cs["top_left_bg"],
+            fg=cs["left_fg"],
+            anchor="w",
+            font=self.styles["text"],
         )
-        self.player_blinds_label.pack(pady=5)
+        self.player_blinds_label.pack(fill="x", padx=10, pady=5)
 
-        self.pot_size_label = Label(top_left, bg=cs["top_left_bg"], fg=cs["text_fg"])
-        self.pot_size_label.pack(pady=5)
+        self.pot_size_label = Label(
+            top_left,
+            bg=cs["top_left_bg"],
+            fg=cs["left_fg"],
+            anchor="w",
+            font=self.styles["text"],
+        )
+        self.pot_size_label.pack(fill="x", padx=10, pady=5)
 
-        self.player_turn_label = Label(top_left, bg=cs["top_left_bg"], fg=cs["text_fg"])
-        self.player_turn_label.pack(pady=5)
+        self.player_turn_label = Label(
+            top_left,
+            bg=cs["top_left_bg"],
+            fg=cs["left_fg"],
+            anchor="w",
+            font=self.styles["text"],
+        )
+        self.player_turn_label.pack(fill="x", padx=10, pady=5)
 
         self.tournament_label = Label(
             top_left,
@@ -589,9 +609,9 @@ class HarrogateHoldEm:
             font=self.styles["button"],
             bg=cs["widget_bg"],
             fg=cs["text_fg"],
-            activebackground=cs["top_left_bg"],
             relief="flat",
             bd=0,
+            cursor="hand2",
             command=self.return_to_menu,
         ).pack(pady=5)
 
@@ -621,8 +641,9 @@ class HarrogateHoldEm:
                 font=self.styles["text"],
                 bg=cs["top_right_bg"],
                 fg=cs["text_fg"],
+                anchor="w",
             )
-            lbl.pack(anchor="w", pady=5, padx=8)
+            lbl.pack(anchor="w", pady=5, padx=5)
             labels.append(lbl)
 
         self.balance_label = cast(Label, labels[1])
@@ -665,62 +686,13 @@ class HarrogateHoldEm:
             ),
         )
 
-        Label(
-            self.players_frame,
-            text="Players",
-            font=self.styles["subheading"],
-            bg=cs["middle_right_bg"],
-            fg=cs["text_fg"],
-        ).pack(anchor="w", padx=8, pady=(6, 10))
-
-        Frame(self.players_frame, height=1, bg=cs["widget_bg"]).pack(
-            fill="x", padx=8, pady=2
-        )
-
-        for player in self.players:
-            row_f = Frame(self.players_frame, bg=cs["middle_right_bg"])
-            row_f.pack(fill="x", padx=8, pady=4)
-            left_f = Frame(row_f, bg=cs["middle_right_bg"])
-            left_f.pack(side="left", fill="x", expand=True)
-            Label(
-                left_f,
-                text=player["player"],
-                font=self.styles["text"],
-                bg=cs["middle_right_bg"],
-                fg=cs["text_fg"],
-                anchor="w",
-                wraplength=180,
-            ).pack(fill="x")
-            right_f = Frame(row_f, bg=cs["middle_right_bg"])
-            right_f.pack(side="right")
-            Label(
-                right_f,
-                text=f"£{player['bet']}",
-                font=self.styles["text"],
-                bg=cs["middle_right_bg"],
-                fg=cs["text_fg"],
-                anchor="e",
-                width=8,
-            ).pack(anchor="e")
-            Label(
-                right_f,
-                text=player["status"],
-                font=self.styles["text"],
-                bg=cs["middle_right_bg"],
-                fg=cs["text_fg"],
-                anchor="e",
-            ).pack(anchor="e")
-            Frame(self.players_frame, height=1, bg=cs["widget_bg"]).pack(
-                fill="x", padx=8, pady=2
-            )
+        self.build_players_panel()
 
         # Bottom-right
         bot_right = Frame(frame, bd=2, relief="sunken", bg=cs["bottom_right_bg"])
         bot_right.grid(row=2, column=1, sticky="nsew", padx=5, pady=5)
 
         def adjust_current_bet(amount):
-            """Increments or decrements the bet entry by amount, clamped to
-            [1, player_balance]."""
             try:
                 value = int(self.bet_var.get())
             except Exception:
@@ -733,8 +705,6 @@ class HarrogateHoldEm:
             self.current_bet_label.config(text=f"Current Bet: £{value}")
 
         def check_bet_input(*_):
-            """Validates the bet entry field on every keystroke, clamping the
-            value to [0, player_balance]."""
             try:
                 value = int(self.bet_var.get())
                 value = max(0, value)
@@ -757,19 +727,22 @@ class HarrogateHoldEm:
             bg=cs["widget_bg"],
             fg=cs["text_fg"],
             insertbackground=cs["text_fg"],
+            relief="flat",
+            bd=4,
             justify="center",
         ).pack(pady=(8, 6))
 
         for inc in (10, 100, 1000):
             row_f = Frame(
                 bot_right,
-                bd=1,
+                bg=cs["text_bg"],
+                bd=2,
                 relief="ridge",
                 padx=6,
                 pady=3,
-                bg=cs["bottom_right_bg"],
             )
             row_f.pack(fill="x", pady=3)
+
             Button(
                 row_f,
                 text="+",
@@ -779,8 +752,10 @@ class HarrogateHoldEm:
                 fg=cs["text_fg"],
                 relief="flat",
                 bd=0,
+                cursor="hand2",
                 command=lambda v=inc: adjust_current_bet(v),
             ).pack(side="left", padx=4)
+
             Label(
                 row_f,
                 text=str(inc),
@@ -790,6 +765,7 @@ class HarrogateHoldEm:
                 width=8,
                 anchor="center",
             ).pack(side="left", expand=True)
+
             Button(
                 row_f,
                 text="−",
@@ -799,6 +775,7 @@ class HarrogateHoldEm:
                 relief="flat",
                 bd=0,
                 width=3,
+                cursor="hand2",
                 command=lambda v=-inc: adjust_current_bet(v),
             ).pack(side="right", padx=4)
 
@@ -816,6 +793,7 @@ class HarrogateHoldEm:
                 relief="flat",
                 bd=0,
                 width=18,
+                cursor="hand2",
                 command=command,
                 state="disabled",
             )
@@ -831,6 +809,8 @@ class HarrogateHoldEm:
             relief="flat",
             bd=0,
             width=18,
+            activebackground="#3a52a0",
+            cursor="hand2",
             command=self.check_round,
         )
         self.start_button.pack(pady=10)
@@ -838,158 +818,18 @@ class HarrogateHoldEm:
         self.update_labels()
         self.update_button_states()
 
-    # UI update helpers
+    # Players panel helper
 
-    def update_ui(self):
+    def build_players_panel(self):
         """
-        Convenience wrapper that refreshes all three UI components —
-        labels, button states, and the players list panel — in one call.
-        """
-        self.update_labels()
-        self.update_button_states()
-        self.update_player_status()
+        Rebuilds the players list panel from scratch inside self.players_frame.
+        Displays for each player: name with position indicators ([SB], [BB],
+        current-turn arrow <), hole cards (visible for the human player and at
+        showdown; face-down [?] [?] for bots otherwise), chip balance,
+        current-round bet, and status string.
 
-    def update_labels(self):
-        """
-        Refreshes all dynamic game-state labels: balance, blinds, round
-        number, board cards, blind assignments, pot size, current turn,
-        and (when in tournament mode) the tournament status banner.
-        Guards safely against updating already-destroyed widgets.
-        """
-
-        if (
-            not getattr(self, "balance_label", None)
-            or not self.balance_label.winfo_exists()
-        ):
-            return
-
-        self.balance_label.config(text=f"Balance: £{self.return_balance()}")
-
-        if getattr(self, "blinds_label", None) and self.blinds_label.winfo_exists():
-            self.blinds_label.config(
-                text=f"Blinds: £{self.small_blind_value} / £{self.big_blind_value}"
-            )
-
-        if (
-            getattr(self, "tournament_label", None)
-            and self.tournament_label.winfo_exists()
-        ):
-            if self.tournament_mode and self.tournament:
-                self.tournament_label.config(text=self.tournament.fetch_status_text())
-
-        if (
-            not getattr(self, "round_number_label", None)
-            or not self.round_number_label.winfo_exists()
-        ):
-            return
-
-        if not self.round_active:
-            self.round_number_label.config(
-                text="Harrogate Hold 'Em"
-                + ("  —  TOURNAMENT" if self.tournament_mode else "")
-            )
-            if self.tournament_mode and self.tournament:
-                board_text = (
-                    f"Tournament Round "
-                    f"{self.tournament.current_round}/"
-                    f"{self.tournament.total_rounds}"
-                )
-            else:
-                board_text = "Casual mode."
-            self.board_label.config(text=board_text)
-            self.player_blinds_label.config(text="")
-            self.pot_size_label.config(text="Waiting for round to commence…")
-            self.player_turn_label.config(text="")
-            return
-
-        self.round_number_label.config(text=f"Round {self.round_number}")
-
-        if self.street == "preflop":
-            self.board_label.config(text="The Board:  |?|  |?|  |?|  |?|  |?|")
-        elif self.street == "flop":
-            self.board_label.config(
-                text=f"The Board:  {' '.join(str(c) for c in self.flop[1])}  |?|  |?|"
-            )
-        elif self.street == "turn":
-            flop_c = self.flop[1] if isinstance(self.flop, list) else []
-            turn_c = self.turn[1] if isinstance(self.turn, list) else []
-            self.board_label.config(
-                text=f"The Board:  {' '.join(str(c) for c in flop_c + turn_c)}  |?|"
-            )
-        elif self.street in ("river", "showdown"):
-            self.board_label.config(
-                text=f"The Board:  {' '.join(str(c) for c in self.board[1])}"
-            )
-        else:
-            self.board_label.config(text="")
-
-        if self.small_blind_player and self.big_blind_player:
-            self.player_blinds_label.config(
-                text=(
-                    f"Small Blind: {self.small_blind_player['player']}  |  "
-                    f"Big Blind: {self.big_blind_player['player']}"
-                )
-            )
-
-        self.pot_size_label.config(text=f"Pot: £{self.pot_size}")
-
-        if self.street == "showdown":
-            self.player_turn_label.config(text="— SHOWDOWN —")
-        elif self.player_go and self.street:
-            self.player_turn_label.config(text=f"It is {self.player_go}'s turn.")
-        else:
-            self.player_turn_label.config(text="")
-
-    def update_button_states(self):
-        """
-        Enables or disables the Start Round and action buttons based on
-        the current game and turn state.
-
-        During the human player's turn the buttons are labelled to reflect
-        the exact call amount and minimum raise. The Raise button is
-        disabled when the player cannot afford the minimum raise.  All
-        action buttons are disabled outside the human player's turn.
-        """
-
-        self.start_button.config(state="disabled" if self.round_active else "normal")
-
-        if self.round_active and self.player_turn:
-            human = next((p for p in self.players if not p["is_bot"]), None)
-            if human:
-                call_amount = max(0, self.current_bet - human["bet"])
-                min_raise = max(
-                    self.current_bet - human["bet"] + self.big_blind_value,
-                    self.big_blind_value,
-                )
-                raise_state = "normal" if min_raise <= human["balance"] else "disabled"
-                self.action_buttons[0].config(
-                    text=f"Raise  (min £{min_raise})", state=raise_state
-                )
-                if call_amount == 0:
-                    self.action_buttons[1].config(text="Check", state="normal")
-                else:
-                    self.action_buttons[1].config(
-                        text=f"Call  £{call_amount}",
-                        state=(
-                            "normal" if call_amount <= human["balance"] else "disabled"
-                        ),
-                    )
-                self.action_buttons[2].config(state="normal")
-            else:
-                for button in self.action_buttons:
-                    button.config(state="disabled")
-        else:
-            self.action_buttons[0].config(text="Raise", state="disabled")
-            self.action_buttons[1].config(text="Call", state="disabled")
-            self.action_buttons[2].config(text="Fold", state="disabled")
-
-    def update_player_status(self):
-        """
-        Rebuilds the players list panel from scratch, displaying for each
-        player: name, position indicators ([SB], [BB], current-turn arrow
-        ◀), hole cards (visible for the human player and at showdown, face-
-        down [?] [?] for bots otherwise), chip balance, current-round bet,
-        and status string.
+        Called both on initial layout and by update_player_status() on every
+        refresh so that styling is always consistent.
         """
         cs = self.colour_scheme
 
@@ -1096,6 +936,157 @@ class HarrogateHoldEm:
             Frame(self.players_frame, height=1, bg=cs["widget_bg"]).pack(
                 fill="x", padx=8, pady=2
             )
+
+    # UI update helpers
+
+    def update_ui(self):
+        """
+        Convenience wrapper that refreshes all three UI components —
+        labels, button states, and the players list panel — in one call.
+        """
+        self.update_labels()
+        self.update_button_states()
+        self.update_player_status()
+
+    def update_labels(self):
+        """
+        Refreshes all dynamic game-state labels: balance, blinds, round
+        number, board cards, blind assignments, pot size, current turn,
+        and (when in tournament mode) the tournament status banner.
+        Guards safely against updating already-destroyed widgets.
+        """
+        if (
+            not getattr(self, "balance_label", None)
+            or not self.balance_label.winfo_exists()
+        ):
+            return
+
+        self.balance_label.config(text=f"Balance: £{self.return_balance()}")
+
+        if getattr(self, "blinds_label", None) and self.blinds_label.winfo_exists():
+            self.blinds_label.config(
+                text=f"Blinds: £{self.small_blind_value} / £{self.big_blind_value}"
+            )
+
+        if (
+            getattr(self, "tournament_label", None)
+            and self.tournament_label.winfo_exists()
+        ):
+            if self.tournament_mode and self.tournament:
+                self.tournament_label.config(text=self.tournament.fetch_status_text())
+
+        if (
+            not getattr(self, "round_number_label", None)
+            or not self.round_number_label.winfo_exists()
+        ):
+            return
+
+        if not self.round_active:
+            self.round_number_label.config(
+                text="Harrogate Hold 'Em"
+                + ("  —  TOURNAMENT" if self.tournament_mode else "")
+            )
+            if self.tournament_mode and self.tournament:
+                board_text = (
+                    f"Tournament Round "
+                    f"{self.tournament.current_round}/"
+                    f"{self.tournament.total_rounds}"
+                )
+            else:
+                board_text = "Casual mode."
+            self.board_label.config(text=board_text)
+            self.player_blinds_label.config(text="")
+            self.pot_size_label.config(text="Waiting for round to commence…")
+            self.player_turn_label.config(text="")
+            return
+
+        self.round_number_label.config(text=f"Round {self.round_number}")
+
+        if self.street == "preflop":
+            self.board_label.config(text="The Board:  |?|  |?|  |?|  |?|  |?|")
+        elif self.street == "flop":
+            self.board_label.config(
+                text=f"The Board:  {' '.join(str(c) for c in self.flop[1])}  |?|  |?|"
+            )
+        elif self.street == "turn":
+            flop_c = self.flop[1] if isinstance(self.flop, list) else []
+            turn_c = self.turn[1] if isinstance(self.turn, list) else []
+            self.board_label.config(
+                text=f"The Board:  {' '.join(str(c) for c in flop_c + turn_c)}  |?|"
+            )
+        elif self.street in ("river", "showdown"):
+            self.board_label.config(
+                text=f"The Board:  {' '.join(str(c) for c in self.board[1])}"
+            )
+        else:
+            self.board_label.config(text="")
+
+        if self.small_blind_player and self.big_blind_player:
+            self.player_blinds_label.config(
+                text=(
+                    f"Small Blind: {self.small_blind_player['player']}  |  "
+                    f"Big Blind: {self.big_blind_player['player']}"
+                )
+            )
+
+        self.pot_size_label.config(text=f"Pot: £{self.pot_size}")
+
+        if self.street == "showdown":
+            self.player_turn_label.config(text="— SHOWDOWN —")
+        elif self.player_go and self.street:
+            self.player_turn_label.config(text=f"It is {self.player_go}'s turn.")
+        else:
+            self.player_turn_label.config(text="")
+
+    def update_button_states(self):
+        """
+        Enables or disables the Start Round and action buttons based on
+        the current game and turn state.
+
+        During the human player's turn the buttons are labelled to reflect
+        the exact call amount and minimum raise. The Raise button is
+        disabled when the player cannot afford the minimum raise. All
+        action buttons are disabled outside the human player's turn.
+        """
+        self.start_button.config(state="disabled" if self.round_active else "normal")
+
+        if self.round_active and self.player_turn:
+            human = next((p for p in self.players if not p["is_bot"]), None)
+            if human:
+                call_amount = max(0, self.current_bet - human["bet"])
+                min_raise = max(
+                    self.current_bet - human["bet"] + self.big_blind_value,
+                    self.big_blind_value,
+                )
+                raise_state = "normal" if min_raise <= human["balance"] else "disabled"
+                self.action_buttons[0].config(
+                    text=f"Raise  (min £{min_raise})", state=raise_state
+                )
+                if call_amount == 0:
+                    self.action_buttons[1].config(text="Check", state="normal")
+                else:
+                    self.action_buttons[1].config(
+                        text=f"Call  £{call_amount}",
+                        state=(
+                            "normal" if call_amount <= human["balance"] else "disabled"
+                        ),
+                    )
+                self.action_buttons[2].config(state="normal")
+            else:
+                for button in self.action_buttons:
+                    button.config(state="disabled")
+        else:
+            self.action_buttons[0].config(text="Raise", state="disabled")
+            self.action_buttons[1].config(text="Call", state="disabled")
+            self.action_buttons[2].config(text="Fold", state="disabled")
+
+    def update_player_status(self):
+        """
+        Refreshes the players list panel by delegating to _build_players_panel().
+        Kept as a separate public method so external callers continue to work
+        without change.
+        """
+        self.build_players_panel()
 
     # Player helpers
 
@@ -1655,6 +1646,7 @@ class HarrogateHoldEm:
                 else:
                     self.player_turn = True
                     self.update_ui()
+                    self.log_message("It's your turn to play.")
                     return
 
             self.current_position = (self.current_position + 1) % self.player_count
@@ -2297,7 +2289,7 @@ class HarrogateHoldEm:
         """
         Destroys the game window and returns the user to the appropriate
         interface: Admin_Interface for administrators, Casino_Interface
-        (main menu) for regular users. Optionally shows an error dialog
+        for regular users. Optionally shows an error dialog
         before navigating.
 
         Args:
@@ -2316,7 +2308,7 @@ class HarrogateHoldEm:
         else:
             from casino_interface_V6 import Casino_Interface
 
-            Casino_Interface(False)
+            Casino_Interface(self.user_data)
 
     # Human player action buttons
 

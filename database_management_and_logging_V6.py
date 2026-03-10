@@ -112,6 +112,7 @@ if not database_logger.handlers:
     database_logger.addHandler(db_handler)
 
 
+# Only neccessary if the program is modularised.
 def fetch_database_logger():
     """
     Returns the configured database logger instance. This logger writes to the

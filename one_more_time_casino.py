@@ -23,10 +23,10 @@ import os
 import sqlite3
 import pandas as pd
 import json
+from time import time, sleep
 from datetime import datetime
 import logging
 from queue import Queue, Empty
-import threading
 from threading import Thread, Event
 from typing import cast
 from tkinter import (
@@ -182,18 +182,6 @@ if not database_logger.handlers:
     database_logger.addHandler(db_handler)
 
 
-def fetch_database_logger():
-    """
-    Returns the configured database logger instance. This logger writes to the
-    'db_logs' table and can be imported by other modules.
-
-    Returns:
-        logging.Logger: The database logger instance configured with
-                        DatabaseLogHandler.
-    """
-    return database_logger
-
-
 class AdminLogHandler(logging.Handler):
     """
     Custom logging handler that writes log messages directly into the
@@ -315,11 +303,7 @@ class DatabaseManagement:
         Returns:
             bool: True if the database file exists, False otherwise.
         """
-        program_dir = os.path.dirname(os.path.abspath(__file__))
-
-        DB_FILE = os.path.join(program_dir, os.path.basename(self.DB_FILE))
-
-        return os.path.exists(DB_FILE)
+        return os.path.exists(self.DB_FILE)
 
     # SQL Database Schema.
     # Each dictionary value is a CREATE TABLE statement run during database creation.
@@ -499,7 +483,7 @@ class DatabaseManagement:
             try:
                 admin_logger.info("Request to change Admin Password.")
 
-                database_logger.info(f"Request to change Administrator password.")
+                database_logger.info("Request to change Administrator password.")
 
                 password_hash = hash_function(new_password)
 
@@ -629,7 +613,7 @@ class DatabaseManagement:
 
                 admin_logger.info("Change username request successful.")
 
-                database_logger.info(f"User username changed.")
+                database_logger.info("User username changed.")
 
             except sqlite3.Error as error:
                 admin_logger.error("Change username request failed.")
@@ -665,7 +649,7 @@ class DatabaseManagement:
 
                 admin_logger.info("Change user password request successful.")
 
-                database_logger.info(f"User password changed.")
+                database_logger.info("User password changed.")
 
             except sqlite3.Error as error:
                 admin_logger.error("Change user password request failed.")
@@ -734,7 +718,7 @@ class DatabaseManagement:
 
                 admin_logger.info("Change user balance request successful.")
 
-                database_logger.info(f"User balance changed.")
+                database_logger.info("User balance changed.")
 
             except sqlite3.Error as error:
                 admin_logger.error("Change user balance request failed.")
@@ -783,7 +767,7 @@ class DatabaseManagement:
 
                 admin_logger.info("Change user status request successful.")
 
-                database_logger.info(f"User status changed.")
+                database_logger.info("User status changed.")
 
             except sqlite3.Error as error:
                 admin_logger.error("Change user status request failed.")
@@ -807,7 +791,7 @@ class DatabaseManagement:
 
                 admin_logger.info("Delete user record request successful.")
 
-                database_logger.info(f"User record deleted.")
+                database_logger.info("User record deleted.")
 
             except sqlite3.Error as error:
                 admin_logger.error("Delete user record request failed.")
@@ -992,42 +976,11 @@ class DatabaseManagement:
         verified = verify_hash(row["password_hash"], password)
 
         if verified:
-            database_logger.info(f"Password verification successful'.")
+            database_logger.info("Password verification successful'.")
         else:
-            database_logger.info(f"Failed password attempt.")
+            database_logger.info("Failed password attempt.")
 
         return {"found": True, "verified": verified}
-
-    def reset_user_password(self, user_id, new_password):
-        """
-        Resets a user's password to the given value. Hashes the new password
-        before storing it.
-
-        Args:
-            user_id (int): The user ID whose password will be reset.
-            new_password (str): The new plaintext password to hash and store.
-        """
-        with self.connect() as conn:
-            try:
-                database_logger.info(
-                    f"User request to reset User ID: '{user_id}' password."
-                )
-
-                password_hash = hash_function(new_password)
-
-                conn.execute(
-                    """
-                    UPDATE users 
-                    SET password_hash = ? 
-                    WHERE user_id = ?
-                    """,
-                    (password_hash, user_id),
-                )
-
-                database_logger.info(f"Password for User reset successfully.")
-
-            except sqlite3.Error as error:
-                database_logger.exception(f"'reset_user_password' error. {error}")
 
     def fetch_user_id(self, username):
         """
@@ -1055,10 +1008,10 @@ class DatabaseManagement:
                 row = cursor.fetchone()
 
                 if row:
-                    database_logger.info(f"User 'user_id' found.")
+                    database_logger.info("User 'user_id' found.")
                     return {"found": True, "user_id": row["user_id"]}
                 else:
-                    database_logger.info(f"User 'user_id' not found.")
+                    database_logger.info("User 'user_id' not found.")
                     return {"found": False, "user_id": None}
 
             except sqlite3.Error as error:
@@ -1091,10 +1044,10 @@ class DatabaseManagement:
                 row = cursor.fetchone()
 
                 if row:
-                    database_logger.info(f"User 'username' found.")
+                    database_logger.info("User 'username' found.")
                     return {"found": True, "username": row["username"]}
                 else:
-                    database_logger.info(f"User 'username' not found.")
+                    database_logger.info("User 'username' not found.")
                     return {"found": False, "username": None}
 
             except sqlite3.Error as error:
@@ -1128,10 +1081,10 @@ class DatabaseManagement:
                 row = cursor.fetchone()
 
                 if row:
-                    database_logger.info(f"User 'balance' found.")
+                    database_logger.info("User 'balance' found.")
                     return {"found": True, "balance": float(row["balance"])}
                 else:
-                    database_logger.info(f"User 'balance' not found.")
+                    database_logger.info("User 'balance' not found.")
                     return {"found": False, "balance": 0.0}
 
             except sqlite3.Error as error:
@@ -1159,7 +1112,7 @@ class DatabaseManagement:
                     (float(new_balance), username),
                 )
 
-                database_logger.info(f"User balance modified.")
+                database_logger.info("User balance modified.")
                 return
 
             except sqlite3.Error as error:
@@ -1191,7 +1144,7 @@ class DatabaseManagement:
                     (timestamp, reason, username),
                 )
 
-                database_logger.info(f"User account terminated.")
+                database_logger.info("User account terminated.")
                 return
 
             except sqlite3.Error as error:
@@ -1302,7 +1255,7 @@ class DatabaseManagement:
                 ).fetchone()
 
                 if exists:
-                    database_logger.info(f"User poker data already exists")
+                    database_logger.info("User poker data already exists")
                     return True
 
                 conn.execute(
@@ -1323,7 +1276,7 @@ class DatabaseManagement:
                     (json.dumps(generate_range_chart()), user_id),
                 )
 
-                database_logger.info(f"User poker data initialised.")
+                database_logger.info("User poker data initialised.")
                 return True
 
             except sqlite3.Error as error:
@@ -1373,7 +1326,7 @@ class DatabaseManagement:
                 ).fetchone()
 
                 if not row:
-                    database_logger.warning(f"User not found in poker data")
+                    database_logger.warning("User not found in poker data")
                     return None
 
                 # Convert to dictionary
@@ -1449,7 +1402,7 @@ class DatabaseManagement:
                     (range_json, user_id),
                 )
 
-                database_logger.info(f"User player range updated.")
+                database_logger.info("User player range updated.")
 
                 return True
 
@@ -1501,61 +1454,13 @@ class DatabaseManagement:
                     ),
                 )
 
-                database_logger.info(f"Action logged for User.")
+                database_logger.info("Action logged for User.")
 
                 return True
 
             except sqlite3.Error as error:
                 database_logger.exception(f"'log_player_action' error. {error}")
                 return False
-
-    def fetch_unresolved_player_actions(self, user_id):
-        """
-        Retrieves all unresolved actions for a user, ordered by round number
-        and creation time.
-
-        Args:
-            user_id (int): The user ID to retrieve unresolved actions for.
-
-        Returns:
-            list: A list of action dictionaries, or an empty list on error.
-        """
-        with self.connect() as conn:
-            try:
-                database_logger.info(
-                    f"Fetching unresolved actions for User ID: '{user_id}'."
-                )
-
-                rows = conn.execute(
-                    """
-                    SELECT
-                        id,
-                        user_id,
-                        round_number,
-                        street,
-                        action,
-                        bet_size,
-                        pot_size,
-                        created_at
-                    FROM user_poker_actions
-                    WHERE user_id = ?
-                    AND resolved = 0
-                    ORDER BY round_number ASC, created_at ASC
-                    """,
-                    (user_id,),
-                ).fetchall()
-
-                database_logger.info(
-                    f"Fetched {len(rows)} unresolved actions for User."
-                )
-
-                return [dict(r) for r in rows]
-
-            except sqlite3.Error as error:
-                database_logger.exception(
-                    f"'fetch_unresolved_player_actions' error. {error}"
-                )
-                return []
 
     def resolve_player_actions(self, user_id, round_number):
         """
@@ -1583,7 +1488,7 @@ class DatabaseManagement:
                     (user_id, round_number),
                 )
 
-                database_logger.info(f"User actions resolved.")
+                database_logger.info("User actions resolved.")
 
                 return True
 
@@ -1653,7 +1558,7 @@ class DatabaseManagement:
                 # Recalculate VPIP and PFR percentages
                 self.recalculate_frequencies(conn, user_id)
 
-                database_logger.info(f"User hand statistics updated.")
+                database_logger.info("User hand statistics updated.")
 
                 return True
 
@@ -1701,7 +1606,7 @@ class DatabaseManagement:
                 (vpip, pfr, user_id),
             )
 
-            database_logger.info(f"User frequencies recalculated.")
+            database_logger.info("User frequencies recalculated.")
 
         except sqlite3.Error as error:
             database_logger.exception(f"'recalculate_frequencies' error. {error}")
@@ -1748,60 +1653,13 @@ class DatabaseManagement:
                 rounds = max(1, statistics["rounds_played"])
                 statistics["avg_bet_size"] = statistics["total_bets"] / rounds
 
-                database_logger.info(f"User player statistics fetched.")
+                database_logger.info("User player statistics fetched.")
 
                 return statistics
 
             except sqlite3.Error as error:
                 database_logger.exception(f"'fetch_player_statistics' error. {error}")
                 return None
-
-    def fetch_hand_history(self, user_id, limit=50, resolved_only=True):
-        """
-        Retrieves recent hand action history for a player, ordered by most recent first.
-
-        Args:
-            user_id (int): The user ID to retrieve history for.
-            limit (int): Maximum number of actions to return. Defaults to 50.
-            resolved_only (bool): If True, only returns resolved actions.
-                                  Defaults to True.
-
-        Returns:
-            list: A list of action dictionaries, or an empty list on error.
-        """
-        with self.connect() as conn:
-            try:
-                database_logger.info(f"Fetching hand history for User ID: '{user_id}'.")
-
-                query = """
-                    SELECT
-                        round_number,
-                        street,
-                        action,
-                        bet_size,
-                        pot_size,
-                        resolved,
-                        created_at
-                    FROM user_poker_actions
-                    WHERE user_id = ?
-                    """
-
-                if resolved_only:
-                    query += " AND resolved = 1"
-
-                query += " ORDER BY created_at DESC LIMIT ?"
-
-                rows = conn.execute(query, (user_id, limit)).fetchall()
-
-                database_logger.info(
-                    f"Fetched {len(rows)} hand history records for User."
-                )
-
-                return [dict(r) for r in rows]
-
-            except sqlite3.Error as error:
-                database_logger.exception(f"'fetch_hand_history' error. {error}")
-                return []
 
     def fetch_all_players_data(self):
         """
@@ -1899,7 +1757,7 @@ class DatabaseManagement:
                         (user_id,),
                     )
 
-                database_logger.info(f"User statistics reset.")
+                database_logger.info("User statistics reset.")
                 return True
 
             except sqlite3.Error as error:
@@ -1939,7 +1797,7 @@ class DatabaseManagement:
                     )
                     return None
 
-                database_logger.info(f"User special-mode scores fetched.")
+                database_logger.info("User special-mode scores fetched.")
 
                 return {
                     "gauntlet_max_rounds": int(row["gauntlet_max_rounds"] or 0),
@@ -1968,10 +1826,6 @@ class DatabaseManagement:
         Raises:
             ValueError: If 'column' is not one of the two allowed values.
         """
-        allowed = {"gauntlet_max_rounds", "endless_high_score"}
-        if column not in allowed:
-            raise ValueError(f"column must be one of {allowed}, got {column!r}")
-
         with self.connect() as conn:
             try:
                 conn.execute(
@@ -2524,8 +2378,6 @@ class Admin_Interface:
 
         self.interface_root.title("One More Time Casino - Administrator Interface")
 
-        from database_management_and_logging_V6 import DatabaseManagement, DB_FILE
-
         self.dbm = DatabaseManagement()
         self.DB_FILE = DB_FILE
 
@@ -2538,6 +2390,8 @@ class Admin_Interface:
         self.main_frame.pack(expand=True, fill="both", padx=20, pady=20)
 
         self.current_section_frame = None
+
+        set_view(self, self.administrative_check)
 
         self.interface_root.mainloop()
 
@@ -2607,7 +2461,6 @@ class Admin_Interface:
         Opens the Admin Console window by instantiating the Admin_Console class
         from admin_console_V6.
         """
-        from admin_console_V6 import Admin_Console
 
         Admin_Console()
 
@@ -2616,7 +2469,8 @@ class Admin_Interface:
         Opens the Casino Interface in administrator mode by instantiating
         Casino_Interface with administrator=True from casino_interface_V6.
         """
-        from casino_interface_V6 import Casino_Interface
+
+        self.interface_root.destroy()
 
         Casino_Interface(True)
 
@@ -2711,7 +2565,7 @@ class Admin_Console:
             return
         if messagebox.askyesno(
             "Confirm password change",
-            f"Are you sure you want to change the administrative password to the system?",
+            "Are you sure you want to change the administrative password to the system?",
         ):
             try:
                 password = simpledialog.askstring(
@@ -3890,6 +3744,8 @@ class User_Interface:
         Casino_Interface with administrator=False from casino_interface_V6.
         """
 
+        self.interface_root.destroy()
+
         Casino_Interface(False)
 
 
@@ -4085,6 +3941,12 @@ class Casino_Interface:
                 return 0, 0
             gauntlet_pb = int(statistics.get("gauntlet_max_rounds", 0))
             endless_pb = int(statistics.get("endless_high_score", 0))
+            # with:
+            scores = self.dbm.fetch_special_mode_scores(user_id)
+            if not scores:
+                return 0, 0
+            gauntlet_pb = scores["gauntlet_max_rounds"]
+            endless_pb = scores["endless_high_score"]
             return gauntlet_pb, endless_pb
         except Exception:
             return 0, 0
@@ -4644,16 +4506,16 @@ class Casino_Interface:
             self.settings["tournament_mode"] = False
             v_tournament.set(False)
         else:
-            row = Frame(frame)
-            row.pack(fill="x", padx=30, pady=2)
+            toggle_row = Frame(frame)
+            toggle_row.pack(fill="x", padx=30, pady=2)
             Label(
-                row,
+                toggle_row,
                 text="Enable Tournament Mode:",
                 font=self.styles["text"],
                 width=32,
                 anchor="w",
             ).pack(side="left")
-            Checkbutton(row, variable=v_tournament).pack(side="left")
+            Checkbutton(toggle_row, variable=v_tournament).pack(side="left")
 
             Label(
                 frame,
@@ -5336,10 +5198,9 @@ class ShowGameRules:
     def show_rules_window(self, title, rules_text, callback):
         """
         Creates and displays a modal rules window with a scrollable read-only
-        text area, a confirmation checkbox, and a Continue button that is
-        disabled until the checkbox is ticked. The window cannot be closed
-        via the window manager's close button. Calls the callback and destroys
-        the window when the user clicks Continue.
+        text area and a Continue button.
+        The window cannot be closed via the window manager's close button.
+        Calls the callback and destroys the window when the user clicks Continue.
 
         Args:
             title (str): The window title and heading label text.
@@ -5764,8 +5625,6 @@ class WhiteJoe:
             self.wj_root.attributes("-fullscreen", True)
         except Exception:
             pass
-
-        from database_management_and_logging_V6 import DatabaseManagement
 
         self.dbm = DatabaseManagement()
 
@@ -6192,7 +6051,7 @@ class WhiteJoe:
                         self.colour_scheme["loss_bg"]
                         if is_loss
                         else (
-                            self.colour_scheme["push_bg"]
+                            self.colour_scheme["tie_bg"]
                             if is_push
                             else self.colour_scheme["log_bg"]
                         )
@@ -6209,7 +6068,7 @@ class WhiteJoe:
                         self.colour_scheme["loss_fg"]
                         if is_loss
                         else (
-                            self.colour_scheme["push_fg"]
+                            self.colour_scheme["tie_bg"]
                             if is_push
                             else self.colour_scheme["log_fg"]
                         )
@@ -7863,46 +7722,10 @@ DEFAULT_BOT_ROSTER = [
     "Grey",
     "Mr Rhodes",
     "Leon S. Kennedy",
-    "Ada Wong",
     "Albert Wesker",
-    "Jack Krauser",
-    "Luis Serra",
-    "Nathan Drake",
-    "Joel Miller",
-    "Tobias Rieper",
-    "Arthur Morgan",
-    "Dutch Van Der Linde",
-    "Jin Sakai",
-    "Atsu Onryo",
-    "Alfred",
-    "Danny Trejo",
-    "Bagley",
     "Sauron",
     "Morgoth",
     "Han Solo",
-    "Gordon Freeman",
-    "Mr Chips",
-    "Dante from Devil May Cry",
-    "Cal Kestis",
-    "Master Chief",
-    "Lara Croft",
-    "Vector the Crocodile",
-    "Rayman",
-    "Hideo Kojima",
-    "Naked Snake",
-    "Big Boss",
-    "Venom Snake",
-    "Liquid Snake",
-    "Solidus Snake",
-    "Archimedes",
-    "Giancarlo Esposito",
-    "Kinji Hakari",
-    "Toji Fushiguro",
-    "Jon Snow",
-    "Pikmin",
-    "Hatsune Miku",
-    "Oggdo Bogdo",
-    "Spawn of Oggdo",
 ]
 
 
@@ -8164,8 +7987,6 @@ class HarrogateHoldEm:
         # Bot decision queue
         self.bot_decision_queue = Queue()
         self.bot_thinking = False
-
-        from database_management_and_logging_V6 import DatabaseManagement
 
         self.dbm = DatabaseManagement()
 
@@ -9520,7 +9341,7 @@ class HarrogateHoldEm:
         jitter = random.uniform(-200, 200)
         min_ms = int(base_ms + jitter)
 
-        threading.Thread(
+        Thread(
             target=self.bot_decision_worker,
             args=(player, min_ms),
             daemon=True,
@@ -9537,15 +9358,13 @@ class HarrogateHoldEm:
             min_thinking_ms (int): Minimum elapsed time in milliseconds
                                    before the result is queued.
         """
-        import time
-
-        start = time.time()
+        start = time()
         try:
             decision = self.bot_decision(player)
-            elapsed_ms = (time.time() - start) * 1000
+            elapsed_ms = (time() - start) * 1000
             remaining = max(0, min_thinking_ms - elapsed_ms)
             if remaining > 0:
-                time.sleep(remaining / 1000.0)
+                sleep(remaining / 1000.0)
             self.bot_decision_queue.put((player, decision, None))
         except Exception as exception:
             self.bot_decision_queue.put((player, None, exception))

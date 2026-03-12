@@ -1,27 +1,29 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# one_more_time_casino.py
+# one_less_time_casino.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # This is a compilation of 14 seperate programs:
-# 1. database_management_and_logging_V6.py
-# 2. gui_helpers_V6.py
-# 3. encryption_software_V6.py
-# 4. check_systems_V6.py
-# 5. admin_interface_V6.py
-# 6. admin_console_V6.py
-# 7. terms_and_conditions_V6.py
-# 8. user_interface_V6.py
-# 9. casino_interface_V6.py
-# 10. game_rules_V6.py
-# 11. deck_management_V6.py
-# 12. whitejoe_V6.py
-# 13. poker_player_management_V6.py
-# 14. harrogate_hold_em_V6.py
+# 1. database_management_and_logging_V6.py ~ lines
+# 2. gui_helpers_V6.py ~ lines
+# 3. search_sort_algorithms_V6.py ~ lines
+# 3. encryption_software_V6.py ~ lines
+# 4. check_systems_V6.py ~ lines
+# 5. admin_interface_V6.py ~ lines
+# 6. admin_console_V6.py ~ lines
+# 7. terms_and_conditions_V6.py ~ lines
+# 8. user_interface_V6.py ~ lines
+# 9. casino_interface_V6.py ~ lines
+# 10. game_rules_V6.py ~ lines
+# 11. deck_management_V6.py ~ lines
+# 12. whitejoe_V6.py ~ lines
+# 13. poker_player_management_V6.py ~ lines
+# 14. harrogate_hold_em_V6.py ~ lines
 
 import sys
 import os
 import sqlite3
 import pandas as pd
+import csv
 import json
 from time import time, sleep
 from datetime import datetime
@@ -402,10 +404,10 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                for table_name, table in self.SCHEMA.items():
+                for table, table in self.SCHEMA.items():
                     conn.execute(table)
 
-                    database_logger.info(f"Table: '{table_name}' created.")
+                    database_logger.info(f"Table: '{table}' created.")
 
                 conn.commit()
 
@@ -1502,7 +1504,6 @@ class DatabaseManagement:
         user_id,
         action,
         bet_size,
-        pot_size,
         voluntarily_entered,
         preflop_raised,
         faced_raise,
@@ -1515,7 +1516,6 @@ class DatabaseManagement:
             user_id (int): The user ID to update.
             action (str): The final action taken ('fold', 'call', 'raise').
             bet_size (float): The amount bet during the hand.
-            pot_size (float): The final pot size.
             voluntarily_entered (bool): Whether the player voluntarily put
                                         money in the pot (contributes to VPIP).
             preflop_raised (bool): Whether the player raised preflop
@@ -1540,6 +1540,7 @@ class DatabaseManagement:
                         total_hands_played = total_hands_played + ?,
                         total_hands_raised = total_hands_raised + ?,
                         total_bets = total_bets + ?,
+                        pot_size = pot_size + ?,
                         fold_to_raise = fold_to_raise + ?,
                         call_when_weak = call_when_weak + ?,
                         last_updated = CURRENT_TIMESTAMP
@@ -1566,7 +1567,7 @@ class DatabaseManagement:
                 database_logger.exception(f"'update_hand_statistics' error. {error}")
                 return False
 
-    def recalculate_frequencies(self, conn: sqlite3.Connection, user_id: int):
+    def recalculate_frequencies(self, conn, user_id):
         """
         Recalculates and updates VPIP and PFR percentage values based on the
         current aggregate counters.
@@ -1700,6 +1701,71 @@ class DatabaseManagement:
             except sqlite3.Error as error:
                 database_logger.exception(f"'fetch_all_players_data' error. {error}")
                 return []
+
+    def export_to_csv(self, table, file_path):
+        """
+        Exports a database table to a CSV text file.
+        This provides non-SQL table access - the data is written as
+        comma-separated text with a header row.
+
+        Args:
+            table (str): The SQLite table to export.
+            file_path (str): The path to the CSV text file.
+
+        Returns:
+            bool: True on success, False on error.
+        """
+        try:
+            with self.connect() as conn:
+                database_logger.info(
+                    f"Exporting table '{table}' to a CSV text file at '{file_path}'."
+                )
+
+                rows = conn.execute(f"SELECT * FROM {table}").fetchall()
+                if not rows:
+                    database_logger.warning(f"Table '{table}' is empty.")
+                    return False
+
+                headers = list(rows[0].keys())  # Get column names from the first row
+
+                with open(file_path, "w") as file:
+                    writer = csv.writer(file)
+                    writer.writerow(headers)
+                    writer.writerows(rows)
+
+                database_logger.info(
+                    f"Successfully exported table '{table}' to a CSV text file at '{file_path}'."
+                )
+                return True
+
+        except Exception as error:
+            database_logger.exception(f"'export_to_csv' error. {error}")
+            return False
+
+    def import_from_csv(self, file_path):
+        """
+        Reads a CSV text file and returns its contents as a list of dictionaries.
+
+        Args:
+            file_path (str): The path to the CSV text file.
+
+        Returns:
+            list: A list of dictionaries representing the CSV rows.
+        """
+        records = []
+        try:
+            with open(file_path, "r") as file:
+                headers = file.readline().strip().split(",")  # Read header line
+                for line in file:
+                    values = line.strip().split(",")
+                    record = dict(zip(headers, values))
+                    records.append(record)
+            database_logger.info(
+                f"Successfully imported data from CSV text file at '{file_path}'."
+            )
+        except Exception as error:
+            database_logger.exception(f"'import_from_csv' error. {error}")
+            return records
 
     def reset_player_statistics(self, user_id, keep_range=True):
         """
@@ -1919,6 +1985,88 @@ def set_view(self, view_builder):
     self.current_section_frame.pack(expand=True, fill="both")
 
     view_builder(self.current_section_frame)
+
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# search_sort_algorithms_V6.py
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+def linear_search(array, key, value):
+    """
+    Performs a linear search through a list of dictionaries.
+    Checks every element from a starting index 0 until the target is found.
+    Time complexity: O(n).
+
+    Arg:
+        array (list): A list of dictionaries to search.
+        key (str): The dictionary key to inspect.
+        value : The value to search for.
+
+    Returns:
+        int: Index of the first matching element, or -1 if not found.
+    """
+    for index in range(len(array)):
+        if array[index].get(key) == value:
+            return index
+    return -1
+
+
+def bubble_sort(array, key, reverse):
+    """
+    Sorts a list of dictionaries by a given key using bubble sort.
+    Compares adjacent pairs and swaps if out of order.
+    Time complexity: O(n^2)
+
+    Args:
+        array (list): List of dictionaries to sort.
+        key (str): The dictionary key to sort by.
+        reverse (bool): True for descending, False for ascending.
+
+    Returns:
+        list: A new sorted list.
+    """
+    array = array.copy()
+    array_length = len(array)
+    for pass_num in range(array_length - 1):
+        swapped = False
+        for index in range(
+            array_length - 1 - pass_num
+        ):  # Last 'pass_num' elements are already sorted
+            value_a = array[index].get(key)
+            value_b = array[index + 1].get(key)
+            if (reverse and value_a < value_b) or (
+                not reverse and value_a > value_b
+            ):  # Compare based on sort order
+                array[index], array[index + 1] = array[index + 1], array[index]
+                swapped = True
+        if not swapped:  # No swaps means the array is already sorted
+            break
+    return array
+
+def binary_search_by_id(array, target_id):
+    """
+    Binary search on a list of dictionaries sorted ascending by 'user_id'.
+    Time complexity: O(log n). List must be sorted first.
+    
+    Args:
+        array (list): List of dictionaries sorted by 'user_id' ascending.
+        target_id (int): The user_id to find.
+    
+    Returns:
+        int: Index of the matching element, or -1 if not found.
+    """
+    low, high = 0, len(array) - 1
+    while low <= high:
+        mid = (low + high) // 2
+        mid_id = array[mid].get('user_id', -1)
+        if mid_id == target_id:
+            return mid # Target founf
+        elif mid_id < target_id:
+            low = mid + 1 # Target is in the upper half.
+        else:
+            high = mid - 1 # Target is in the lower half.
+    return -1
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2666,6 +2814,7 @@ class Admin_Console:
             ("Create Database", self.create_database),
             ("Delete Database", self.delete_database),
             ("View Database", lambda: set_view(self, self.show_view_database)),
+            ("Export Table to CSV", self.table_to_csv),
             ("Back to Main Menu", lambda: set_view(self, self.show_console_menu)),
         ]
 
@@ -2812,7 +2961,7 @@ class Admin_Console:
             command=lambda: set_view(self, self.show_database_management),
         ).pack(pady=5)
 
-    def display_table(self, frame, dataframe, table_name):
+    def display_table(self, frame, dataframe, table):
         """
         Renders the contents of a database table in a scrollable Treeview
         widget with alternating row colours. Column widths are automatically
@@ -2821,11 +2970,9 @@ class Admin_Console:
         Args:
             frame (Frame): The parent frame to build the view into.
             dataframe (pd.DataFrame): The table data to display.
-            table_name (str): The name of the table, shown in the heading.
+            table (str): The name of the table, shown in the heading.
         """
-        Label(frame, text=f"'{table_name}' Table", font=self.styles["heading"]).pack(
-            pady=10
-        )
+        Label(frame, text=f"'{table}' Table", font=self.styles["heading"]).pack(pady=10)
 
         # Frame to hold Treeview.
         inner_frame = Frame(frame)
@@ -2870,6 +3017,37 @@ class Admin_Console:
             width=25,
             command=lambda: set_view(self, self.show_view_database),
         ).pack(pady=5)
+
+    def table_to_csv(self):
+        """
+        Prompts the user to select a database table and a save location,
+        then exports the selected table's contents to a CSV text file.
+        """
+        table = simpledialog.askstring(
+            "Export Table",
+            "Enter the name of the table to export:",
+            parent=self.adm_console_root,
+        )
+
+        if not table:
+            messagebox.showerror("Returning to Menu", "No table name provided.")
+            return
+
+        save_path = filedialog.asksaveasfilename(
+            title="Save CSV",
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+
+        if not save_path:
+            messagebox.showerror("Returning to Menu", "No save location provided.")
+            return
+
+        try:
+            self.dbm.export_table_to_csv(table, save_path)
+            messagebox.showinfo("Success", f"'{table}' exported to:\n{save_path}")
+        except Exception as error:
+            messagebox.showerror("Error", f"Failed to export '{table}': {error}")
 
     def show_user_management(self, frame):
         """
@@ -3801,10 +3979,6 @@ TOURNAMENT_WIN_CRITERIA = {
     "survive_rounds": "Survive a set number of rounds",
     "last_man_blind": "Outlast opponents as blinds escalate",
 }
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# casino_Interface_V6.py
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 class Casino_Interface:
@@ -4812,11 +4986,22 @@ class Casino_Interface:
             ).pack(pady=(12, 2))
             Frame(frame, height=1, bg="#888888").pack(fill="x", padx=40)
 
-            ranked = sorted(
-                [p for p in all_data if p.get(key, 0)],
-                key=lambda p: p[key],
-                reverse=True,
-            )[:5]
+            candidates = [p for p in all_data if p.get(key, 0)] # Filter out players with no score for this metric
+            ranked = bubble_sort(candidates, key=key, reverse=True)[:5] # Sort and take top 5
+            
+            # Use binary_search_by_id for the username lookup
+            sorted_by_id = bubble_sort(all_data, key="user_id") # Ensure data is sorted by user_id for binary search
+            for entry in ranked:
+                index = binary_search_by_id(sorted_by_id, entry['user_id'])
+                if index != -1:
+                    try:
+                        result = self.dbm.fetch_username(sorted_by_id[index]['user_id'])
+                        username = result['username'] if result['found'] else f"User {entry['user_id']}"
+                    except Exception:
+                        username = f"User {entry['user_id']}"
+                else:
+                    username = f"User {entry['user_id']}"
+                
 
             if not ranked:
                 Label(
@@ -4826,7 +5011,7 @@ class Casino_Interface:
                 ).pack(pady=4)
                 return
 
-            for i, entry in enumerate(ranked, 1):
+            for index, entry in enumerate(ranked, 1):
                 try:
                     result = self.dbm.fetch_username(entry["user_id"])
                     username = (
@@ -4840,7 +5025,7 @@ class Casino_Interface:
                 score = int(entry[key])
                 Label(
                     frame,
-                    text=f"  {i}.  {username:<20}  {score} {unit}",
+                    text=f"  {index}.  {username:<20}  {score} {unit}",
                     font=self.styles["text"],
                     anchor="w",
                 ).pack(fill="x", padx=60, pady=1)
@@ -4970,7 +5155,7 @@ class Casino_Interface:
 
         roster = list(DEFAULT_BOT_ROSTER)
         random.shuffle(roster)
-        bots = [[roster[i % len(roster)], difficulty] for i in range(bot_count)]
+        bots = [[roster[index % len(roster)], difficulty] for index in range(bot_count)]
 
         HarrogateHoldEm(self.user_data, settings, bots)
 
@@ -5013,8 +5198,8 @@ class Casino_Interface:
         roster = list(DEFAULT_BOT_ROSTER)
         random.shuffle(roster)
         bots = [
-            [roster[i % len(roster)], start_difficulty]
-            for i in range(GAUNTLET_BOT_COUNT)
+            [roster[index % len(roster)], start_difficulty]
+            for index in range(GAUNTLET_BOT_COUNT)
         ]
 
         HarrogateHoldEm(self.user_data, settings, bots)
@@ -5047,11 +5232,11 @@ class Casino_Interface:
 
         # Spread difficulties evenly across the range then shuffle
         step = 100 // ENDLESS_BOT_COUNT
-        difficulties = [min(100, i * step) for i in range(ENDLESS_BOT_COUNT)]
+        difficulties = [min(100, index * step) for index in range(ENDLESS_BOT_COUNT)]
         random.shuffle(difficulties)
 
         bots = [
-            [roster[i % len(roster)], difficulties[i]] for i in range(ENDLESS_BOT_COUNT)
+            [roster[index % len(roster)], difficulties[index]] for index in range(ENDLESS_BOT_COUNT)
         ]
 
         HarrogateHoldEm(self.user_data, settings, bots)
@@ -6491,7 +6676,7 @@ FOLD_BIAS_MIN = 0.04  # 4% override at difficulty 100
 
 class PokerPlayer:
     """
-    Represents a poker participant, either a human or a bot. Human players
+    Represents a poker participant, either a human player or a bot. Human players
     load and persist statistics while bots generate tendencies procedurally
     based on difficulty. Handles range charts and decision-making logic.
     """
@@ -6864,7 +7049,7 @@ def generate_bot_range(vpip_target, difficulty):
         reverse=True,
     )
     target = int(len(ordered) * vpip_target / 100)
-    return {h: 1.0 if i < target else 0.0 for i, h in enumerate(ordered)}
+    return {h: 1.0 if index < target else 0.0 for index, h in enumerate(ordered)}
 
 
 def validate_hand_notation(hand):
@@ -7062,8 +7247,8 @@ def hand_equity(player_hand, community_cards, opponent_range, bot=None):
     wins = ties = total = 0
     cards_to_draw = 5 - len(board_known)
 
-    for i in range(sim_count):
-        if i > 0 and i % TIME_OUT == 0 and total == 0:
+    for index in range(sim_count):
+        if index > 0 and index % TIME_OUT == 0 and total == 0:
             return 0.5
 
         sim_dm = dm_base.copy()
@@ -7750,18 +7935,18 @@ class TournamentManager:
 
     Attributes:
         total_rounds (int): Total rounds in the tournament.
-        total_players (int): Total player count (human + bots).
+        total_players (int): Total player count (human player + bots).
         win_criteria (str): Active win-criteria key constant.
         target_amount (int): Chip target for WIN_CRITERIA_EARN_TARGET.
         base_small_blind (int): Starting small blind before escalation.
         base_big_blind (int): Starting big blind before escalation.
         current_round (int): The current round number (1-indexed).
-        rounds_survived (int): How many rounds the human has survived.
+        rounds_survived (int): How many rounds the human player has survived.
         human_chips_at_round_start (int): Human's chip count at the start
                                           of the current round.
-        round_wins (int): Number of rounds the human has won.
+        round_wins (int): Number of rounds the human player has won.
         tournament_over (bool): True once the tournament has concluded.
-        tournament_won (bool): True if the human won the tournament.
+        tournament_won (bool): True if the human player won the tournament.
     """
 
     def __init__(self, settings):
@@ -7842,7 +8027,7 @@ class TournamentManager:
             all_players (list[dict]): All player dictionaries in the game.
 
         Returns:
-            bool: True if the human has won this round.
+            bool: True if the human player has won this round.
         """
         if self.win_criteria == WIN_CRITERIA_ELIMINATE_ALL:
             active_bots = [
@@ -7869,14 +8054,14 @@ class TournamentManager:
         survival counters and checking for tournament completion.
 
         Args:
-            human_won_round (bool): Whether the human met the win criteria
+            human_won_round (bool): Whether the human player met the win criteria
                                     for the round that just finished.
 
         Returns:
             dict: A result dictionary with keys:
                   - 'tournament_over' (bool)
                   - 'tournament_won' (bool)
-                  - 'message' (str) — human-readable outcome message.
+                  - 'message' (str) — outcome message.
         """
         if human_won_round:
             self.round_wins += 1
@@ -7951,7 +8136,7 @@ class HarrogateHoldEm:
     def __init__(self, user_data, settings, bots):
         """
         Initialises the Harrogate Hold 'Em window, game state, player list
-        (human + bots), UI layout, and the background bot-decision queue
+        (human player + bots), UI layout, and the background bot-decision queue
         checker.
 
         Args:
@@ -8001,7 +8186,7 @@ class HarrogateHoldEm:
             difficulty = settings.get("bot_difficulty", 50)
             roster = list(DEFAULT_BOT_ROSTER)
             random.shuffle(roster)
-            bots = [[roster[i % len(roster)], difficulty] for i in range(bot_count)]
+            bots = [[roster[index % len(roster)], difficulty] for index in range(bot_count)]
 
         # Tournament setup
         self.tournament_mode = settings.get("tournament_mode", False)
@@ -8016,8 +8201,8 @@ class HarrogateHoldEm:
 
         # Build bot lookup
         self.bots = {}
-        for i, bot in enumerate(bots[: settings.get("bot_count", len(bots))]):
-            self.bots[i] = {"name": bot[0], "difficulty": bot[1]}
+        for index, bot in enumerate(bots[: settings.get("bot_count", len(bots))]):
+            self.bots[index] = {"name": bot[0], "difficulty": bot[1]}
 
         # Build player list
         self.players = []
@@ -8051,10 +8236,10 @@ class HarrogateHoldEm:
         self.current_round_number = 1
         self.actions_logged = []
 
-        for i in range(settings.get("bot_count", len(self.bots))):
+        for index in range(settings.get("bot_count", len(self.bots))):
             self.players.append(
                 {
-                    "player": self.bots[i]["name"],
+                    "player": self.bots[index]["name"],
                     "position": None,
                     "cards": [],
                     "balance": settings.get("bot_balance", 1000),
@@ -8063,7 +8248,7 @@ class HarrogateHoldEm:
                     "is_bot": True,
                     "user_id": None,
                     "model": PokerPlayer(
-                        is_bot=True, difficulty=max(0, self.bots[i]["difficulty"])
+                        is_bot=True, difficulty=max(0, self.bots[index]["difficulty"])
                     ),
                 }
             )
@@ -9767,7 +9952,6 @@ class HarrogateHoldEm:
                     user_id=player["user_id"],
                     action=final_action,
                     bet_size=total_bet,
-                    pot_size=self.pot_size,
                     voluntarily_entered=voluntarily_entered,
                     preflop_raised=preflop_raised,
                     faced_raise=faced_raise,
@@ -9875,7 +10059,7 @@ class HarrogateHoldEm:
         """
         Completes round teardown after the log queue has finished
         rendering. Resets the current-bet label, eliminates bots with
-        zero chips, marks the human as 'OUT' if they have no chips,
+        zero chips, marks the human player as 'OUT' if they have no chips,
         checks for game-over conditions, increments the round display
         number, and re-enables the Start Round button.
         """
@@ -9891,7 +10075,9 @@ class HarrogateHoldEm:
                 player["status"] = "OUT"
                 self.log_message(f"{player['player']} has been eliminated.")
 
-        human = next((p for p in self.players if not p["is_bot"]), None)
+        human_index = linear_search(self.players, "is_bot", False)
+        human = self.players[human_index] if human_index != -1 else None
+
         if human and human["balance"] <= 0:
             human["status"] = "OUT"
 

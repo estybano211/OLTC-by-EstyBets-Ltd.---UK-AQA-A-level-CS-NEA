@@ -2,7 +2,7 @@ import os
 import hashlib
 import hmac
 import binascii
-from tkinter import Entry, Label, Button, Frame, Toplevel
+from tkinter import Entry, Label, Button, Frame, Toplevel, messagebox
 from gui_helpers_V6 import fetch_font_settings
 
 PBKDF2_ITERATIONS = 200_000  # Iterations for password hashing. (Password-Based Key Derivation Function 2)
@@ -94,23 +94,20 @@ def passwords_confirmation(frame, root):
     # Default return state
     password = {"confirmed": False, "password": None}
 
-    pwd_window = Toplevel(frame)
-    pwd_window.title("Confirm Password")
+    password_window = Toplevel(frame)
+    password_window.title("Confirm Password")
 
-    pwd_window.protocol("WM_DELETE_WINDOW", lambda: None)
+    password_window.protocol("WM_DELETE_WINDOW", lambda: None)
 
-    Label(pwd_window, text="Enter password:", font=styles["text"]).pack(pady=5)
+    Label(password_window, text="Enter password:", font=styles["text"]).pack(pady=5)
 
-    pwd_entry_1 = Entry(pwd_window, show="*", width=30, font=styles["text"])
-    pwd_entry_1.pack(pady=5)
+    password_entry_1 = Entry(password_window, show="*", width=30, font=styles["text"])
+    password_entry_1.pack(pady=5)
 
-    Label(pwd_window, text="Confirm password:", font=styles["text"]).pack(pady=5)
+    Label(password_window, text="Confirm password:", font=styles["text"]).pack(pady=5)
 
-    pwd_entry_2 = Entry(pwd_window, show="*", width=30, font=styles["text"])
-    pwd_entry_2.pack(pady=5)
-
-    error_label = Label(pwd_window, text="", font=styles["emphasis"], fg="red")
-    error_label.pack(pady=5)
+    password_entry_2 = Entry(password_window, show="*", width=30, font=styles["text"])
+    password_entry_2.pack(pady=5)
 
     def validate_passwords():
         """
@@ -118,24 +115,28 @@ def passwords_confirmation(frame, root):
         On success, updates the shared password dict and closes the dialog.
         On failure, displays an error message inside the dialog.
         """
-        password_1 = pwd_entry_1.get().strip()
-        password_2 = pwd_entry_2.get().strip()
+        password_1 = password_entry_1.get().strip()
+        password_2 = password_entry_2.get().strip()
 
         if password_1 and password_1 == password_2:
             password["confirmed"] = True
             password["password"] = password_1
-            pwd_window.destroy()
+            password_window.destroy()
         else:
-            error_label.config(text="Passwords do not match or are empty.")
+            messagebox.showerror(
+                "Error",
+                "Passwords do not match or are empty. Please try again.",
+                parent=password_window,
+            )
 
     def cancel_password():
         """
         Closes the password dialog without confirming, leaving the shared
         password dict in its default unconfirmed state.
         """
-        pwd_window.destroy()
+        password_window.destroy()
 
-    button = Frame(pwd_window)
+    button = Frame(password_window)
     button.pack(pady=10)
 
     Button(
@@ -146,6 +147,6 @@ def passwords_confirmation(frame, root):
         side="left", padx=5
     )
 
-    root.wait_window(pwd_window)
+    root.wait_window(password_window)
 
     return password

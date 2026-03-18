@@ -173,8 +173,8 @@ class Admin_Console:
                     )
                     set_view(self, self.show_console_menu)
 
-            except Exception as e:
-                messagebox.showerror("Error", f": {e}")
+            except Exception as error:
+                messagebox.showerror("Error", f": {error}")
         else:
             messagebox.showinfo("Cancelled", "Password change cancelled.")
             set_view(self, self.show_console_menu)
@@ -242,8 +242,10 @@ class Admin_Console:
                         "Error", "Incorrect password. Operation cancelled."
                     )
 
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to create '{self.DB_FILE}': {e}")
+            except Exception as error:
+                messagebox.showerror(
+                    "Error", f"Failed to create '{self.DB_FILE}': {error}"
+                )
 
     def delete_database(self):
         """
@@ -277,8 +279,10 @@ class Admin_Console:
                         "Error", "Incorrect password. Operation cancelled."
                     )
 
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to delete '{self.DB_FILE}': {e}")
+            except Exception as error:
+                messagebox.showerror(
+                    "Error", f"Failed to delete '{self.DB_FILE}': {error}"
+                )
 
     def show_view_database(self, frame):
         """

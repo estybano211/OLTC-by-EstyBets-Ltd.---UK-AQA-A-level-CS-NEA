@@ -34,6 +34,8 @@ class Admin_Interface:
 
         self.current_section_frame = None
 
+        set_view(self, self.administrative_check)
+
         self.interface_root.mainloop()
 
     def administrative_check(self, frame):
@@ -112,6 +114,8 @@ class Admin_Interface:
         Casino_Interface with administrator=True from casino_interface_V6.
         """
         from casino_interface_V6 import Casino_Interface
+
+        self.interface_root.destroy()
 
         Casino_Interface(True)
 

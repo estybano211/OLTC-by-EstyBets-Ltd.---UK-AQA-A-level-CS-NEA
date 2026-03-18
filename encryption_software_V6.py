@@ -97,19 +97,19 @@ class Encryption_Software:
 
             public_path = os.path.join(save_dir, f"public_key_{timestamp}.pem")
 
-            with open(private_path, "wb") as f:
-                f.write(private_key)
+            with open(private_path, "wb") as file:
+                file.write(private_key)
 
-            with open(public_path, "wb") as f:
-                f.write(public_key)
+            with open(public_path, "wb") as file:
+                file.write(public_key)
 
             messagebox.showinfo(
                 "Success",
                 f"RSA keys generated and saved:\n{private_path}\n{public_path}",
             )
 
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to generate RSA keys: {e}")
+        except Exception as error:
+            messagebox.showerror("Error", f"Failed to generate RSA keys: {error}")
 
     def generate_encrypted_aes_key(self):
         """
@@ -136,8 +136,8 @@ class Encryption_Software:
         try:
             aes_key = get_random_bytes(32)
 
-            with open(rsa_pub_file, "rb") as f:
-                public_key = RSA.import_key(f.read())
+            with open(rsa_pub_file, "rb") as file:
+                public_key = RSA.import_key(file.read())
 
             cipher_rsa = PKCS1_OAEP.new(public_key)
 
@@ -147,13 +147,15 @@ class Encryption_Software:
 
             save_path = os.path.join(save_dir, f"aes_key_{timestamp}.bin")
 
-            with open(save_path, "wb") as f:
-                f.write(encrypted_aes)
+            with open(save_path, "wb") as file:
+                file.write(encrypted_aes)
 
             messagebox.showinfo("Success", f"Encrypted AES key saved to:\n{save_path}")
 
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to generate/encrypt AES key: {e}")
+        except Exception as error:
+            messagebox.showerror(
+                "Error", f"Failed to generate/encrypt AES key: {error}"
+            )
 
     def load_rsa_aes_key(self):
         """
@@ -179,11 +181,11 @@ class Encryption_Software:
             return
 
         try:
-            with open(rsa_private_file, "rb") as f:
-                private_key = RSA.import_key(f.read())
+            with open(rsa_private_file, "rb") as file:
+                private_key = RSA.import_key(file.read())
 
-            with open(encrypted_aes_file, "rb") as f:
-                encrypted_aes = f.read()
+            with open(encrypted_aes_file, "rb") as file:
+                encrypted_aes = file.read()
 
             cipher_rsa = PKCS1_OAEP.new(private_key)
 
@@ -191,8 +193,8 @@ class Encryption_Software:
 
             messagebox.showinfo("Success", "AES key loaded successfully.")
 
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load AES key: {e}")
+        except Exception as error:
+            messagebox.showerror("Error", f"Failed to load AES key: {error}")
 
     def encrypt_file(self):
         """
@@ -216,8 +218,8 @@ class Encryption_Software:
             return
 
         try:
-            with open(file_path, "rb") as f:
-                data = f.read()
+            with open(file_path, "rb") as file:
+                data = file.read()
 
             cipher = AES.new(self.aes_key, AES.MODE_EAX)
 
@@ -225,17 +227,17 @@ class Encryption_Software:
 
             save_path = file_path + ".enc"
 
-            with open(save_path, "wb") as f:
-                f.write(cipher.nonce)
-                f.write(tag)
-                f.write(ciphertext)
+            with open(save_path, "wb") as file:
+                file.write(cipher.nonce)
+                file.write(tag)
+                file.write(ciphertext)
 
             messagebox.showinfo(
                 "Success", f"Database encrypted and saved to:\n{save_path}"
             )
 
-        except Exception as e:
-            messagebox.showerror("Error", f"Encryption failed: {e}")
+        except Exception as error:
+            messagebox.showerror("Error", f"Encryption failed: {error}")
 
     def decrypt_file(self):
         """
@@ -261,10 +263,10 @@ class Encryption_Software:
             return
 
         try:
-            with open(file_path, "rb") as f:
-                nonce = f.read(16)
-                tag = f.read(16)
-                ciphertext = f.read()
+            with open(file_path, "rb") as file:
+                nonce = file.read(16)
+                tag = file.read(16)
+                ciphertext = file.read()
 
             cipher = AES.new(self.aes_key, AES.MODE_EAX, nonce=nonce)
 
@@ -274,15 +276,15 @@ class Encryption_Software:
                 file_path[:-4] if file_path.endswith(".enc") else file_path + ".dec"
             )
 
-            with open(save_path, "wb") as f:
-                f.write(data)
+            with open(save_path, "wb") as file:
+                file.write(data)
 
             messagebox.showinfo(
                 "Success", f"Database decrypted and saved to:\n{save_path}"
             )
 
-        except Exception as e:
-            messagebox.showerror("Error", f"Decryption failed: {e}")
+        except Exception as error:
+            messagebox.showerror("Error", f"Decryption failed: {error}")
 
 
 if __name__ == "__main__":

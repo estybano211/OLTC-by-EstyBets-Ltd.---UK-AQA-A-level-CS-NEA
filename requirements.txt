@@ -1,7 +1,7 @@
 # One More Time Casino — third-party dependencies
 # Install with: pip install -r requirements.txt
 #
-# Python standard library modules used (no install needed):
+# Python standard library modules used:
 #   sys, os, sqlite3, json, datetime, logging, queue,
 #   threading, typing, tkinter, hashlib, hmac, binascii,
 #   random, itertools

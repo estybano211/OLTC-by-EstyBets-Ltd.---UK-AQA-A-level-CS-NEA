@@ -142,6 +142,8 @@ class User_Interface:
         """
         from casino_interface_V6 import Casino_Interface
 
+        self.interface_root.destroy()
+
         Casino_Interface(False)
 
 

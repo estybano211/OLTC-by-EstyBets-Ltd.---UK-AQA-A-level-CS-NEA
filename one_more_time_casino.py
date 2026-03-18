@@ -2,7 +2,7 @@
 # one_less_time_casino.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-# This is a compilation of 15 seperate programs:
+# This is a compilation of 15 separate programs:
 # 1. database_management_and_logging_V6.py ~ lines
 # 2. gui_helpers_V6.py ~ lines
 # 3. search_sort_algorithms_V6.py ~ lines
@@ -337,9 +337,6 @@ class DatabaseManagement:
             registered INTEGER,
             balance REAL DEFAULT 10000 CHECK (balance >= 0),
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            terminated INTEGER DEFAULT 0,
-            terminated_at TEXT,
-            termination_reason TEXT
         )
         """,
         # Poker data per user.
@@ -552,8 +549,6 @@ class DatabaseManagement:
         new_password=None,
         new_account_type=None,
         new_balance=None,
-        terminated=None,
-        reason=None,
     ):
         """
         Updates one or more fields on a user record by delegating to the
@@ -567,10 +562,6 @@ class DatabaseManagement:
                                           hashed before storage.
             new_account_type (int, optional): New registered status (0 or 1).
             new_balance (float, optional): New balance value.
-            terminated (int, optional): Termination flag (0 = active,
-                                        1 = terminated).
-            reason (str, optional): Reason for termination, required when
-                                    terminated is set to 1.
         """
 
         if new_username is not None:
@@ -584,9 +575,6 @@ class DatabaseManagement:
 
         if new_balance is not None:
             self.change_user_balance(user_id, new_balance)
-
-        if terminated is not None:
-            self.change_user_status(user_id, terminated, reason)
 
     def change_user_username(self, user_id, new_username):
         """
@@ -726,55 +714,6 @@ class DatabaseManagement:
                 admin_logger.error("Change user balance request failed.")
 
                 database_logger.exception(f"'change_user_balance' error. {error}")
-
-    def change_user_status(self, user_id, terminated, reason=None):
-        """
-        Changes a user's termination status. If terminated is truthy, sets the
-        termination timestamp and reason. If falsy, clears all termination
-        data.
-
-        Args:
-            user_id (int): The user ID whose status will be changed.
-            terminated (int): Terminated status (0 for active, 1 for
-                              terminated).
-            reason (str, optional): Reason for termination. Required when
-                                    terminated is 1.
-        """
-        with self.connect() as conn:
-            try:
-                timestamp = datetime.now().strftime("%d-%m-%Y | %H:%M:%S")
-
-                admin_logger.info(f"Request to change User ID: '{user_id}' status.")
-
-                database_logger.info(f"Request to change User ID: '{user_id}' status.")
-
-                if terminated:
-                    conn.execute(
-                        """
-                        UPDATE users 
-                        SET terminated = 1, terminated_at = ?, termination_reason = ? 
-                        WHERE user_id = ?
-                        """,
-                        (timestamp, reason, user_id),
-                    )
-                else:
-                    conn.execute(
-                        """
-                        UPDATE users 
-                        SET terminated = 0, terminated_at = NULL, termination_reason = NULL 
-                        WHERE user_id = ?
-                        """,
-                        (user_id,),
-                    )
-
-                admin_logger.info("Change user status request successful.")
-
-                database_logger.info("User status changed.")
-
-            except sqlite3.Error as error:
-                admin_logger.error("Change user status request failed.")
-
-                database_logger.exception(f"'change_user_status' error. {error}")
 
     def delete_user_record(self, user_id):
         """
@@ -1119,38 +1058,6 @@ class DatabaseManagement:
 
             except sqlite3.Error as error:
                 database_logger.exception(f"'modify_user_balance' error. {error}")
-
-    def terminate_user_account(self, username, reason):
-        """
-        Marks a user's account as terminated, recording the current timestamp
-        and the reason for termination.
-
-        Args:
-            username (str): The username whose account will be terminated.
-            reason (str): The reason for account termination.
-        """
-        with self.connect() as conn:
-            try:
-                timestamp = datetime.now().strftime("%d-%m-%Y | %H:%M:%S")
-
-                database_logger.info(
-                    f"Request to terminate User: '{username}' account."
-                )
-
-                conn.execute(
-                    """
-                    UPDATE users 
-                    SET terminated = 1, terminated_at = ?, termination_reason = ? 
-                    WHERE username = ?
-                    """,
-                    (timestamp, reason, username),
-                )
-
-                database_logger.info("User account terminated.")
-                return
-
-            except sqlite3.Error as error:
-                database_logger.exception(f"'terminate_user_account' error. {error}")
 
     def admin_password_check(self, password):
         """
@@ -2049,24 +1956,24 @@ def binary_search_by_id(array, target_id):
     """
     Binary search on a list of dictionaries sorted ascending by 'user_id'.
     Time complexity: O(log n). List must be sorted first.
-    
+
     Args:
         array (list): List of dictionaries sorted by 'user_id' ascending.
         target_id (int): The user_id to find.
-    
+
     Returns:
         int: Index of the matching element, or -1 if not found.
     """
     low, high = 0, len(array) - 1
     while low <= high:
         mid = (low + high) // 2
-        mid_id = array[mid].get('user_id', -1)
+        mid_id = array[mid].get("user_id", -1)
         if mid_id == target_id:
-            return mid # Target founf
+            return mid  # Target founf
         elif mid_id < target_id:
-            low = mid + 1 # Target is in the upper half.
+            low = mid + 1  # Target is in the upper half.
         else:
-            high = mid - 1 # Target is in the lower half.
+            high = mid - 1  # Target is in the lower half.
     return -1
 
 
@@ -3187,15 +3094,6 @@ class Admin_Console:
             ("Account Type", "Registered" if record["registered"] else "Guest"),
             ("Balance", record["balance"]),
             ("Creation Time", record["created_at"]),
-            (
-                "Account Status",
-                (
-                    f"Terminated\n At {record['terminated_at']}\n"
-                    f"Because \"{record['termination_reason']}\""
-                    if record["terminated"]
-                    else "Active"
-                ),
-            ),
         ]:
             Label(
                 frame, text=f"{key}: {value}", font=self.styles["text"], anchor="w"
@@ -3430,8 +3328,7 @@ class Admin_Console:
         """
         Renders an editable form pre-populated with the current user record.
         Allows changing username, password, account type, balance, and
-        termination status. A termination reason is required when setting the
-        status to Terminated. Calls change_user_record with only the fields
+        termination status. Calls change_user_record with only the fields
         that have been filled in.
 
         Args:
@@ -3462,23 +3359,10 @@ class Admin_Console:
         balance_entry.insert(0, str(record.get("balance", 0)))
         balance_entry.pack()
 
-        Label(frame, text="Account Status:").pack()
-        status_box = Combobox(frame, values=["Active", "Terminated"], state="readonly")
-        status_box.set("Active" if not record.get("terminated") else "Terminated")
-        status_box.pack()
-
-        Label(
-            frame,
-            text="New Status Reason (if terminated):",
-        ).pack()
-        status_reason_entry = Entry(frame)
-        status_reason_entry.pack()
-
         def save():
             """
             Collects all non-empty field values from the form, validates the
-            balance as a float and requires a termination reason when the
-            status is set to Terminated, then calls change_user_record to
+            balance as a float then calls change_user_record to
             apply the changes.
             """
             kwargs = {"user_id": record["user_id"]}
@@ -3499,19 +3383,6 @@ class Admin_Console:
             except ValueError:
                 messagebox.showerror("Error", "Invalid balance.")
                 return
-
-            if status_box.get() == "Active":
-                kwargs["terminated"] = False
-                kwargs["reason"] = None
-            else:
-                kwargs["terminated"] = True
-                if status_reason_entry.get().strip():
-                    kwargs["reason"] = status_reason_entry.get().strip()
-                else:
-                    messagebox.showerror(
-                        "Error", "Status reason required for terminated accounts."
-                    )
-                    return
 
             self.dbm.change_user_record(**kwargs)
 
@@ -3595,7 +3466,6 @@ class Admin_Console:
 
 def terms_and_conditions():
     return """
-
     ---
 
     **Terms and Conditions for One More Time Casino Ltd**
@@ -4524,15 +4394,6 @@ class Casino_Interface:
             ("Account Type", "Registered" if record["registered"] else "Guest"),
             ("Balance", record["balance"]),
             ("Created", record["created_at"]),
-            (
-                "Account Status",
-                (
-                    f"Terminated\nAt {record['terminated_at']}\n"
-                    f"Reason: \"{record['termination_reason']}\""
-                    if record["terminated"]
-                    else "Active"
-                ),
-            ),
         ]:
             Label(
                 frame,
@@ -4987,22 +4848,31 @@ class Casino_Interface:
             ).pack(pady=(12, 2))
             Frame(frame, height=1, bg="#888888").pack(fill="x", padx=40)
 
-            candidates = [p for p in all_data if p.get(key, 0)] # Filter out players with no score for this metric
-            ranked = bubble_sort(candidates, key=key, reverse=True)[:5] # Sort and take top 5
-            
+            candidates = [
+                p for p in all_data if p.get(key, 0)
+            ]  # Filter out players with no score for this metric
+            ranked = bubble_sort(candidates, key=key, reverse=True)[
+                :5
+            ]  # Sort and take top 5
+
             # Use binary_search_by_id for the username lookup
-            sorted_by_id = bubble_sort(all_data, key="user_id") # Ensure data is sorted by user_id for binary search
+            sorted_by_id = bubble_sort(
+                all_data, key="user_id"
+            )  # Ensure data is sorted by user_id for binary search
             for entry in ranked:
-                index = binary_search_by_id(sorted_by_id, entry['user_id'])
+                index = binary_search_by_id(sorted_by_id, entry["user_id"])
                 if index != -1:
                     try:
-                        result = self.dbm.fetch_username(sorted_by_id[index]['user_id'])
-                        username = result['username'] if result['found'] else f"User {entry['user_id']}"
+                        result = self.dbm.fetch_username(sorted_by_id[index]["user_id"])
+                        username = (
+                            result["username"]
+                            if result["found"]
+                            else f"User {entry['user_id']}"
+                        )
                     except Exception:
                         username = f"User {entry['user_id']}"
                 else:
                     username = f"User {entry['user_id']}"
-                
 
             if not ranked:
                 Label(
@@ -5237,7 +5107,8 @@ class Casino_Interface:
         random.shuffle(difficulties)
 
         bots = [
-            [roster[index % len(roster)], difficulties[index]] for index in range(ENDLESS_BOT_COUNT)
+            [roster[index % len(roster)], difficulties[index]]
+            for index in range(ENDLESS_BOT_COUNT)
         ]
 
         HarrogateHoldEm(self.user_data, settings, bots)
@@ -6301,8 +6172,7 @@ class WhiteJoe:
     def check_balance(self):
         """
         Checks whether the user's balance is zero. For administrators,
-        opens the balance modification dialog. For regular users, terminates
-        the account and returns to the menu.
+        opens the balance modification dialog.
 
         Returns:
             bool: True if the user can continue playing, False if they have
@@ -6321,10 +6191,7 @@ class WhiteJoe:
             else:
                 messagebox.showinfo(
                     "Balance Depleted",
-                    "Your balance is now £0. Given that you have no more money, your account will be terminated.",
-                )
-                self.dbm.terminate_user_account(
-                    self.user_data["username"], "Balance reached £0"
+                    "Your balance is now £0. Returning to menu.",
                 )
                 self.return_to_menu()
                 return False
@@ -6382,6 +6249,14 @@ class WhiteJoe:
 
         # Deal cards
         self.player_hand.extend([self.deck.draw(1), self.deck.draw(1)])
+
+        if self.deck.blackjack_hand_value(self.player_hand) == 21:
+            self.log_message(text="You have been dealt a natural WhiteJoe!")
+            balance = self.return_balance()
+            balance += int(self.current_bet * 2.5)
+            self.modify_user_balance(balance)
+            self.end_round(win=True)
+
         self.dealer_hand.extend([self.deck.draw(1), self.deck.draw(1)])
 
         self.round_active = True
@@ -6402,125 +6277,6 @@ class WhiteJoe:
             text=f"{self.dealer} has been dealt their cards. The dealer shows {self.deck.treys_to_pretty(self.dealer_hand[0])} with a total value of {self.deck.blackjack_hand_value([self.dealer_hand[0]])}."
         )
         self.log_message(text=f"{self.dealer} then motions for you to make your move.")
-
-    def resolve_dealer(self):
-        """
-        Reveals the dealer's hidden card and draws additional cards until the
-        dealer's hand value reaches 17 or more. Then compares the final hand
-        values to determine the round outcome and calls end_round accordingly.
-        Handles WhiteJoe (natural blackjack on first two cards) as a special
-        winning case paying 2.5x the bet.
-        """
-        self.log_message(
-            text=f"{self.dealer} reveals their hidden card: "
-            f"{self.deck.treys_to_pretty(self.dealer_hand[1])} with the "
-            f"hand value of "
-            f"{self.deck.blackjack_hand_value(self.dealer_hand)}."
-        )
-
-        while self.deck.blackjack_hand_value(self.dealer_hand) < 17:
-            self.log_message(
-                text=f"Given that {self.dealer}'s hand value is less than 17, "
-                f"they must hit."
-            )
-            self.dealer_hand.append(self.deck.draw(1))
-            self.log_message(
-                text=f"{self.dealer} draws "
-                f"{self.deck.treys_to_pretty(self.dealer_hand[-1])}, "
-                f"bringing their hand value to "
-                f"{self.deck.blackjack_hand_value(self.dealer_hand)}."
-            )
-
-        player = self.deck.blackjack_hand_value(self.player_hand)
-        dealer = self.deck.blackjack_hand_value(self.dealer_hand)
-
-        if player == 21 and len(self.player_hand) == 2:
-            self.log_message(text="You have WhiteJoe!")
-            balance = self.return_balance()
-            balance += int(self.current_bet * 2.5)
-            self.modify_user_balance(balance)
-            self.end_round(win=True)
-            return
-
-        if dealer > 21 or player > dealer:
-            if dealer > 21:
-                self.log_message(text=f"{self.dealer} has busted!")
-            if player > dealer:
-                self.log_message(text="Your hand is higher than the dealer's!")
-            self.end_round(win=True)
-        elif player == dealer:
-            self.end_round(push=True)
-        else:
-            if dealer <= 21 and dealer > player:
-                self.log_message(text=f"{self.dealer}'s hand is higher than yours.")
-            self.end_round(loss=True)
-
-    def end_round(self, *, win=False, loss=False, push=False):
-        """
-        Concludes the current round by updating the user's balance based on
-        the outcome, logging the result, resetting the bet and round state,
-        and re-enabling the Start button.
-
-        Args:
-            win (bool): If True, pays out 2x the bet to the player's balance.
-            loss (bool): If True, logs a loss message with a responsible
-                         gambling reminder.
-            push (bool): If True, returns the bet to the player's balance.
-        """
-        balance_data = self.dbm.fetch_user_balance(self.user_data["username"])
-        balance = balance_data["balance"] if balance_data["found"] else 0
-
-        if win:
-            balance += self.current_bet * 2
-            self.log_message(text="Congrats! You've won this round.", is_win=True)
-        elif loss:
-            self.log_message(
-                text="You've lost this round. Better luck next time.", is_loss=True
-            )
-            self.log_message(
-                text="Did you know that most gambling losses are due to chasing "
-                "losses? Remember to gamble responsibly!"
-            )
-        elif push:
-            self.log_message(
-                text="You and the dealer have the same hand. Therefore you tie "
-                "and your bet is returned to you.",
-                is_push=True,
-            )
-            balance += self.current_bet
-            self.log_message(text=f"You have a total of £{balance} to your disposal.")
-
-        self.modify_user_balance(balance)
-        self.current_bet = 0
-        self.current_bet_label.config(text="Current Bet: £0")
-        self.round_active = False
-        self.update_button_states()
-
-        for button in self.action_buttons:
-            button.config(state="disabled")
-
-    def return_to_menu(self, is_error=False, error=None):
-        """
-        Destroys the game window and returns the user to the appropriate
-        interface. Navigates to Admin_Interface for administrators or
-        Casino_Interface for regular users. Optionally displays an error dialog
-        before returning.
-
-        Args:
-            is_error (bool): If True, displays an error message before
-                             returning. Defaults to False.
-            error (Exception, optional): The error to display if is_error is
-                                         True.
-        """
-        if is_error:
-            messagebox.showerror("Error", f"{error}, exiting game.")
-
-        self.wj_root.destroy()
-
-        Casino_Interface(
-            administrator=True if self.user_data.get("administrator") else False,
-            user_data=self.user_data,
-        )
 
     def hit(self):
         """
@@ -6640,6 +6396,117 @@ class WhiteJoe:
         self.current_bet_label.config(text="Current Bet: £0")
         self.round_active = False
         self.update_button_states()
+
+    def resolve_dealer(self):
+        """
+        Reveals the dealer's hidden card and draws additional cards until the
+        dealer's hand value reaches 17 or more. Then compares the final hand
+        values to determine the round outcome and calls end_round accordingly.
+        Handles WhiteJoe (natural blackjack on first two cards) as a special
+        winning case paying 2.5x the bet.
+        """
+        self.log_message(
+            text=f"{self.dealer} reveals their hidden card: "
+            f"{self.deck.treys_to_pretty(self.dealer_hand[1])} with the "
+            f"hand value of "
+            f"{self.deck.blackjack_hand_value(self.dealer_hand)}."
+        )
+
+        while self.deck.blackjack_hand_value(self.dealer_hand) < 17:
+            self.log_message(
+                text=f"Given that {self.dealer}'s hand value is less than 17, "
+                f"they must hit."
+            )
+            self.dealer_hand.append(self.deck.draw(1))
+            self.log_message(
+                text=f"{self.dealer} draws "
+                f"{self.deck.treys_to_pretty(self.dealer_hand[-1])}, "
+                f"bringing their hand value to "
+                f"{self.deck.blackjack_hand_value(self.dealer_hand)}."
+            )
+
+        player = self.deck.blackjack_hand_value(self.player_hand)
+        dealer = self.deck.blackjack_hand_value(self.dealer_hand)
+
+        if dealer > 21 or player > dealer:
+            if dealer > 21:
+                self.log_message(text=f"{self.dealer} has busted!")
+            if player > dealer:
+                self.log_message(text="Your hand is higher than the dealer's!")
+            self.end_round(win=True)
+        elif player == dealer:
+            self.end_round(push=True)
+        else:
+            if dealer <= 21 and dealer > player:
+                self.log_message(text=f"{self.dealer}'s hand is higher than yours.")
+            self.end_round(loss=True)
+
+    def end_round(self, *, win=False, loss=False, push=False):
+        """
+        Concludes the current round by updating the user's balance based on
+        the outcome, logging the result, resetting the bet and round state,
+        and re-enabling the Start button.
+
+        Args:
+            win (bool): If True, pays out 2x the bet to the player's balance.
+            loss (bool): If True, logs a loss message with a responsible
+                         gambling reminder.
+            push (bool): If True, returns the bet to the player's balance.
+        """
+        balance_data = self.dbm.fetch_user_balance(self.user_data["username"])
+        balance = balance_data["balance"] if balance_data["found"] else 0
+
+        if win:
+            balance += self.current_bet * 2
+            self.log_message(text="Congrats! You've won this round.", is_win=True)
+        elif loss:
+            self.log_message(
+                text="You've lost this round. Better luck next time.", is_loss=True
+            )
+            self.log_message(
+                text="Did you know that most gambling losses are due to chasing "
+                "losses? Remember to gamble responsibly!"
+            )
+        elif push:
+            self.log_message(
+                text="You and the dealer have the same hand. Therefore you tie "
+                "and your bet is returned to you.",
+                is_push=True,
+            )
+            balance += self.current_bet
+            self.log_message(text=f"You have a total of £{balance} to your disposal.")
+
+        self.modify_user_balance(balance)
+        self.current_bet = 0
+        self.current_bet_label.config(text="Current Bet: £0")
+        self.round_active = False
+        self.update_button_states()
+
+        for button in self.action_buttons:
+            button.config(state="disabled")
+
+    def return_to_menu(self, is_error=False, error=None):
+        """
+        Destroys the game window and returns the user to the appropriate
+        interface. Navigates to Admin_Interface for administrators or
+        Casino_Interface for regular users. Optionally displays an error dialog
+        before returning.
+
+        Args:
+            is_error (bool): If True, displays an error message before
+                             returning. Defaults to False.
+            error (Exception, optional): The error to display if is_error is
+                                         True.
+        """
+        if is_error:
+            messagebox.showerror("Error", f"{error}, exiting game.")
+
+        self.wj_root.destroy()
+
+        Casino_Interface(
+            administrator=True if self.user_data.get("administrator") else False,
+            user_data=self.user_data,
+        )
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -7376,9 +7243,7 @@ def calculate_simulation_count(street, difficulty):
     return base
 
 
-def collective_hand_equity(
-    player_hand, community_cards, opponent_ranges, bot=None
-):
+def collective_hand_equity(player_hand, community_cards, opponent_ranges, bot=None):
     """
     Estimates the player's joint equity against multiple opponents by
     multiplying individual equities together.
@@ -8184,7 +8049,9 @@ class HarrogateHoldEm:
             difficulty = settings.get("bot_difficulty", 50)
             roster = list(DEFAULT_BOT_ROSTER)
             random.shuffle(roster)
-            bots = [[roster[index % len(roster)], difficulty] for index in range(bot_count)]
+            bots = [
+                [roster[index % len(roster)], difficulty] for index in range(bot_count)
+            ]
 
         # Tournament setup
         self.tournament_mode = settings.get("tournament_mode", False)

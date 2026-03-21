@@ -6040,32 +6040,6 @@ class WhiteJoe:
             command=submit_balance,
         ).pack(pady=10)
 
-        def submit_balance():
-            """
-            Validates the entered balance as a non-negative integer, updates
-            the balance label and database, and closes the dialog. Displays
-            an inline error message if the value is invalid.
-            """
-            try:
-                balance = int(balance_entry.get().strip())
-                if balance < 0:
-                    raise ValueError()
-
-                self.balance_label.config(text=f"Balance: £{balance}")
-                balance_window.destroy()
-
-                self.dbm.modify_user_balance(self.user_data["username"], balance)
-
-            except Exception:
-                messagebox.showerror(text="Please enter a valid positive number.")
-
-        Button(
-            balance_window,
-            text="Submit",
-            font=self.styles["button"],
-            command=submit_balance,
-        ).pack(pady=10)
-
     def log_message(
         self, text, round_start=False, is_win=False, is_loss=False, is_push=False
     ):
@@ -8886,32 +8860,6 @@ class HarrogateHoldEm:
             fg=self.colour_scheme["text_fg"],
             relief="flat",
             bd=0,
-            command=submit_balance,
-        ).pack(pady=10)
-
-        def submit_balance():
-            """
-            Validates the entered balance as a non-negative integer, updates
-            the balance label and database, and closes the dialog. Displays
-            an error message if the value is invalid.
-            """
-            try:
-                balance = int(balance_entry.get().strip())
-                if balance < 0:
-                    raise ValueError()
-
-                self.balance_label.config(text=f"Balance: £{balance}")
-                balance_window.destroy()
-
-                self.dbm.modify_user_balance(self.user_data["username"], balance)
-
-            except Exception:
-                messagebox.showerror(text="Please enter a valid positive number.")
-
-        Button(
-            balance_window,
-            text="Submit",
-            font=self.styles["button"],
             command=submit_balance,
         ).pack(pady=10)
 

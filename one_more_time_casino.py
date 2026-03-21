@@ -1,5 +1,5 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# one_less_time_casino.py
+# one_more_time_casino.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # This is a compilation of 15 separate programs:
@@ -336,7 +336,7 @@ class DatabaseManagement:
             password_hash TEXT,
             registered INTEGER,
             balance REAL DEFAULT 10000 CHECK (balance >= 0),
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
         """,
         # Poker data per user.
@@ -1996,6 +1996,14 @@ class Encryption_Software:
         """
         self.enc_soft_root = Tk()
         self.enc_soft_root.title("One More Time Casino - Encryption Software")
+        try:
+            self.enc_soft_root.attributes("-zoomed", True)  # MacOS/Linux
+        except Exception:
+            pass
+        try:
+            self.enc_soft_root.state("zoomed")  # Windows
+        except Exception:
+            pass
 
         self.styles = fetch_font_settings(self.enc_soft_root)
 
@@ -2355,8 +2363,15 @@ def passwords_confirmation(frame, root):
 
     password_window = Toplevel(frame)
     password_window.title("Confirm Password")
-
     password_window.protocol("WM_DELETE_WINDOW", lambda: None)
+    try:
+        password_window.attributes("-zoomed", True)  # MacOS/Linux
+    except Exception:
+        pass
+    try:
+        password_window.state("zoomed")  # Windows
+    except Exception:
+        pass
 
     Label(password_window, text="Enter password:", font=styles["text"]).pack(pady=5)
 
@@ -2431,8 +2446,15 @@ class Admin_Interface:
         administrator is already authenticated.
         """
         self.interface_root = Tk()
-
         self.interface_root.title("One More Time Casino - Administrator Interface")
+        try:
+            self.interface_root.attributes("-zoomed", True)  # MacOS/Linux
+        except Exception:
+            pass
+        try:
+            self.interface_root.state("zoomed")  # Windows
+        except Exception:
+            pass
 
         self.dbm = DatabaseManagement()
         self.DB_FILE = DB_FILE
@@ -2550,9 +2572,12 @@ class Admin_Console:
         """
         self.adm_console_root = Tk()
         self.adm_console_root.title("One More Time Casino - Administrator Console")
-
         try:
-            self.adm_console_root.attributes("-fullscreen", True)
+            self.adm_console_root.attributes("-zoomed", True)  # MacOS/Linux
+        except Exception:
+            pass
+        try:
+            self.adm_console_root.state("zoomed")  # Windows
         except Exception:
             pass
 
@@ -3683,11 +3708,13 @@ class User_Interface:
         and starts the application at the Terms & Conditions screen.
         """
         self.interface_root = Tk()
-
         self.interface_root.title("One More Time Casino - User Interface")
-
         try:
-            self.interface_root.attributes("-fullscreen", True)
+            self.interface_root.attributes("-zoomed", True)  # MacOS/Linux
+        except Exception:
+            pass
+        try:
+            self.interface_root.state("zoomed")  # Windows
         except Exception:
             pass
 
@@ -3881,6 +3908,14 @@ class Casino_Interface:
             if administrator
             else "One More Time Casino"
         )
+        try:
+            self.interface_root.attributes("-zoomed", True)  # MacOS/Linux
+        except Exception:
+            pass
+        try:
+            self.interface_root.state("zoomed")  # Windows
+        except Exception:
+            pass
 
         self.dbm = DatabaseManagement()
 
@@ -4706,28 +4741,39 @@ class Casino_Interface:
 
             try:
                 bot_count = int(v_bot_count.get())
-                assert 1 <= bot_count <= 9
+                if not (1 <= bot_count <= 9):
+                    raise Exception("Bot count out of range.")
             except Exception:
                 errors.append("Bot count must be between 1 and 9.")
                 bot_count = self.settings["bot_count"]
 
             try:
                 bot_balance = int(v_bot_balance.get())
-                assert bot_balance > 0
+                if bot_balance <= 0:
+                    raise Exception("Bot balance must be positive.")
             except Exception:
                 errors.append("Bot balance must be a positive integer.")
                 bot_balance = self.settings["bot_balance"]
 
             try:
                 small_blind = int(v_small_blind.get())
-                assert small_blind > 0
+                if small_blind <= 0:
+                    raise Exception("Small blind must be positive.")
             except Exception:
                 errors.append("Small blind must be a positive integer.")
                 small_blind = self.settings["small_blind"]
 
             try:
                 big_blind = int(v_big_blind.get())
-                assert big_blind >= small_blind
+                if big_blind <= 0:
+                    raise Exception("Big blind must be a positive integer.")
+                raw_small = (
+                    int(v_small_blind.get())
+                    if v_small_blind.get().isdigit()
+                    else small_blind
+                )
+                if big_blind < raw_small:
+                    raise Exception("Big blind must be ≥ small blind.")
             except Exception:
                 errors.append("Big blind must be ≥ small blind.")
                 big_blind = self.settings["big_blind"]
@@ -4739,21 +4785,24 @@ class Casino_Interface:
 
             try:
                 total_rounds = int(v_total_rounds.get())
-                assert total_rounds >= 1
+                if total_rounds < 1:
+                    raise Exception("Tournament rounds must be ≥ 1.")
             except Exception:
                 errors.append("Tournament rounds must be ≥ 1.")
                 total_rounds = self.settings["tournament_rounds"]
 
             try:
                 total_players = int(v_total_players.get())
-                assert 2 <= total_players <= 10
+                if not (2 <= total_players <= 10):
+                    raise Exception("Tournament players out of range.")
             except Exception:
                 errors.append("Tournament players must be between 2 and 10.")
                 total_players = self.settings["tournament_players"]
 
             try:
                 win_target = int(v_win_target.get())
-                assert win_target > 0
+                if win_target <= 0:
+                    raise Exception("Win target must be positive.")
             except Exception:
                 errors.append("Win target must be a positive integer.")
                 win_target = self.settings["win_criteria_target"]
@@ -5267,12 +5316,14 @@ class ShowGameRules:
         """
         window = Toplevel(self.interface_root)
         window.title(title)
-        window.geometry("850x650")
         window.grab_set()
-        window.protocol("WM_DELETE_WINDOW", lambda: None)  # Disable X button
-
+        window.protocol("WM_DELETE_WINDOW", lambda: None)
         try:
-            window.attributes("-fullscreen", True)
+            window.attributes("-zoomed", True)
+        except Exception:
+            pass
+        try:
+            window.state("zoomed")
         except Exception:
             pass
 
@@ -5668,20 +5719,22 @@ class WhiteJoe:
                               (str) and 'administrator' (bool) keys, and
                               optionally 'user_id'.
         """
+        self.wj_root = Tk()
+        self.wj_root.title("One More Time Casino - WhiteJoe")
+        try:
+            self.wj_root.attributes("-zoomed", True)  # MacOS/Linux
+        except Exception:
+            pass
+        try:
+            self.wj_root.state("zoomed")  # Windows
+        except Exception:
+            pass
+
         self.user_data = user_data
 
-        # Delay for message logging
         self.log_queue = []
         self.log_active = False
         self.log_delay_ms = int(DELAY * 1000)
-
-        self.wj_root = Tk()
-        self.wj_root.title("One More Time Casino - WhiteJoe")
-
-        try:
-            self.wj_root.attributes("-fullscreen", True)
-        except Exception:
-            pass
 
         self.dbm = DatabaseManagement()
 
@@ -5694,19 +5747,19 @@ class WhiteJoe:
 
         self.colour_scheme = {
             # Left-hand panels
-            "left_bg": "#e6dcc6",
+            "left_bg": "#252525",
             # Right-hand panels
             "top_right_bg": "#2e7d73",
             "bottom_right_bg": "#5b2a3c",
-            # Interactive widgets
+            # Widgets
             "widget_bg": "#6a2e4f",
-            "text_bg": "#141414",
+            "text_bg": "#1a1a1a",
             "text_fg": "#f2f2f2",
-            "left_fg": "#1e1e1e",
+            "left_fg": "#e8e8e8",
             # Log panel
             "log_bg": "#1a1a1a",
             "log_fg": "#cfcfcf",
-            # Log entry colour coding
+            # Log entry
             "start_bg": "#243b7a",
             "start_fg": "#ffffff",
             "win_bg": "#244d3a",
@@ -5834,6 +5887,7 @@ class WhiteJoe:
         )
         bottom_right_frame.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
 
+        # Functions for user bet adjustment
         def adjust_current_bet(amount):
             try:
                 value = int(self.bet_var.get())
@@ -5845,23 +5899,29 @@ class WhiteJoe:
                 value = max(1, min(value, int(balance)))
             self.bet_var.set(str(value))
             self.current_bet_label.config(text=f"Current Bet: £{value}")
-            state = "normal" if value > 0 else "disabled"
-            self.start_button.config(state=state)
+            self.update_button_states()
 
         def check_bet_input(*_):
+            raw = self.bet_var.get()
+            if raw in ("", "-"):
+                self.current_bet_label.config(text="Current Bet: £0")
+                self.start_button.config(state="disabled")
+                return
+
+            digits_only = "".join(c for c in raw if c.isdigit())
+            if digits_only != raw:
+                self.bet_var.set(digits_only if digits_only else "0")
+                return
             try:
-                value = int(self.bet_var.get())
-                if value < 0:
-                    value = 0
-                balance = self.return_balance()
-                if balance is not None and value > balance:
-                    value = int(balance)
+                value = int(digits_only) if digits_only else 0
             except Exception:
                 value = 0
-            self.bet_var.set(str(value))
+
+            balance = self.return_balance()
+            if balance is not None:
+                value = min(value, int(balance))
             self.current_bet_label.config(text=f"Current Bet: £{value}")
-            state = "normal" if value > 0 else "disabled"
-            self.start_button.config(state=state)
+            self.update_button_states()
 
         # Bet entry
         self.bet_var = StringVar(value="0")
@@ -5981,41 +6041,84 @@ class WhiteJoe:
             bet = 0
 
         # Start button
-        if self.round_active or bet <= 0:
-            self.start_button.config(state="disabled")
-        else:
-            self.start_button.config(state="normal")
+        self.start_button.config(
+            state="disabled" if self.round_active or bet <= 0 else "normal"
+        )
 
         # Action buttons
         state = "normal" if self.round_active else "disabled"
         for button in self.action_buttons:
             button.config(state=state)
 
+    # Admin helper
+
     def admin_modify_bet(self, frame):
         """
-        Opens a modal Toplevel dialog allowing the administrator to set a
-        custom starting balance. Updates the balance label and database on
-        submission. The dialog cannot be closed via the window manager.
+        Opens a modal Toplevel dialog that allows the administrator to set
+        a custom starting chip balance. The dialog cannot be dismissed
+        via the window manager — a valid balance must be submitted.
+
+        On submission, updates the balance label and persists the new
+        balance to the database.
 
         Args:
             frame: The parent widget used to position the Toplevel.
         """
-        balance_label = Toplevel(frame)
-        balance_label.title("Choose Balance")
-        balance_label.grab_set()
-        balance_label.protocol("WM_DELETE_WINDOW", lambda: None)
+        balance_window = Toplevel(frame)
+        balance_window.title("Set Starting Balance")
+        balance_window.grab_set()
+        balance_window.protocol("WM_DELETE_WINDOW", lambda: None)
+        balance_window.configure(bg=self.colour_scheme["left_bg"])
+        try:
+            balance_window.attributes("-zoomed", True)  # MacOS/Linux
+        except Exception:
+            pass
+        try:
+            balance_window.state("zoomed")  # Windows
+        except Exception:
+            pass
 
         Label(
-            balance_label, text="Enter starting balance (£):", font=self.styles["text"]
-        ).pack(pady=5)
+            balance_window,
+            text="Enter starting balance (£):",
+            font=self.styles["text"],
+            bg=self.colour_scheme["left_bg"],
+            fg=self.colour_scheme["text_fg"],
+        ).pack(pady=8)
 
-        balance_entry = Entry(balance_label, width=30, font=self.styles["text"])
+        balance_entry = Entry(
+            balance_window,
+            width=20,
+            font=self.styles["text"],
+            bg=self.colour_scheme["widget_bg"],
+            fg=self.colour_scheme["text_fg"],
+            insertbackground=self.colour_scheme["text_fg"],
+        )
         balance_entry.pack(pady=5)
 
-        error_label = Label(
-            balance_label, text="", font=self.styles["emphasis"], fg="red"
-        )
-        error_label.pack(pady=5)
+        def submit_balance():
+            """Validates the entry, updates the UI and database, and closes
+            the dialog. Shows an error on invalid input."""
+            try:
+                balance = int(balance_entry.get().strip())
+                if balance < 0:
+                    raise ValueError()
+                self.balance_label.config(text=f"Balance: £{balance}")
+                balance_window.destroy()
+                self.dbm.modify_user_balance(self.user_data["username"], balance)
+            except Exception:
+                messagebox.showerror(text="Please enter a valid positive integer.")
+
+        Button(
+            balance_window,
+            text="Submit",
+            font=self.styles["button"],
+            bg=self.colour_scheme["widget_bg"],
+            fg=self.colour_scheme["text_fg"],
+            relief="flat",
+            bd=0,
+            command=submit_balance,
+        ).pack(pady=10)
 
         def submit_balance():
             """
@@ -6029,15 +6132,15 @@ class WhiteJoe:
                     raise ValueError()
 
                 self.balance_label.config(text=f"Balance: £{balance}")
-                balance_label.destroy()
+                balance_window.destroy()
 
                 self.dbm.modify_user_balance(self.user_data["username"], balance)
 
             except Exception:
-                error_label.config(text="Please enter a valid positive number.")
+                messagebox.showerror(text="Please enter a valid positive number.")
 
         Button(
-            balance_label,
+            balance_window,
             text="Submit",
             font=self.styles["button"],
             command=submit_balance,
@@ -6689,7 +6792,6 @@ class PokerPlayer:
                    - '("raise", amount)'
         """
         opponent_ranges = [opp.active_range for opp in opponents]
-        opponent_count = len(opponents)
 
         return make_decision(
             player_hand=player_hand,
@@ -6697,7 +6799,6 @@ class PokerPlayer:
             community_cards=community_cards,
             opponent_ranges=opponent_ranges,
             opponents=opponents,
-            opponent_count=opponent_count,
             pot=pot,
             balance=balance,
             to_call=to_call,
@@ -7621,7 +7722,6 @@ def make_decision(
         community_cards (list[str]): Current community cards (0–5).
         opponent_ranges (list[dict]): One range chart per opponent.
         opponents (list[PokerPlayer]): Active opponent player objects.
-        opponent_count (int): Number of active opponents.
         pot (float): Current pot size.
         balance (float): Player's available chips.
         to_call (float): Amount required to call.
@@ -8021,9 +8121,12 @@ class HarrogateHoldEm:
 
         self.hhe_root = Tk()
         self.hhe_root.title("One More Time Casino — Harrogate Hold 'Em")
-
         try:
-            self.hhe_root.attributes("-fullscreen", True)
+            self.hhe_root.attributes("-zoomed", True)  # MacOS/Linux
+        except Exception:
+            pass
+        try:
+            self.hhe_root.state("zoomed")  # Windows
         except Exception:
             pass
 
@@ -8150,23 +8253,24 @@ class HarrogateHoldEm:
 
         self.action_buttons = []
 
+        # AFTER
         self.colour_scheme = {
             # Left-hand panels
-            "top_left_bg": "#ddd3bc",
-            "bottom_left_bg": "#e6dcc6",
+            "top_left_bg": "#252525",
+            "bottom_left_bg": "#1e1e1e",
             # Right-hand panels
             "top_right_bg": "#2e7d73",
             "middle_right_bg": "#286b62",
             "bottom_right_bg": "#5b2a3c",
-            # Interactive widgets
+            # Widgets
             "widget_bg": "#6a2e4f",
-            "text_bg": "#141414",
-            "text_fg": "#f2f2f2",
-            "left_fg": "#1e1e1e",
+            "text_bg": "#1a1a1a",
+            "text_fg": "#e8e8e8",
+            "left_fg": "#e8e8e8",
             # Log panel
             "log_bg": "#1a1a1a",
             "log_fg": "#cfcfcf",
-            # Log entry colour coding
+            # Log entry
             "start_bg": "#243b7a",
             "start_fg": "#ffffff",
             "win_bg": "#244d3a",
@@ -8399,29 +8503,41 @@ class HarrogateHoldEm:
         bot_right = Frame(frame, bd=2, relief="sunken", bg=cs["bottom_right_bg"])
         bot_right.grid(row=2, column=1, sticky="nsew", padx=5, pady=5)
 
+        # Functions for user bet adjustment
         def adjust_current_bet(amount):
             try:
                 value = int(self.bet_var.get())
             except Exception:
                 value = 0
             value += amount
-            bal = self.return_balance()
-            if bal is not None:
-                value = max(1, min(value, int(bal)))
+            balance = self.return_balance()
+            if balance is not None:
+                value = max(1, min(value, int(balance)))
             self.bet_var.set(str(value))
             self.current_bet_label.config(text=f"Current Bet: £{value}")
+            self.update_button_states()
 
         def check_bet_input(*_):
+            raw = self.bet_var.get()
+            if raw in ("", "-"):
+                self.current_bet_label.config(text="Current Bet: £0")
+                self.start_button.config(state="disabled")
+                return
+
+            digits_only = "".join(c for c in raw if c.isdigit())
+            if digits_only != raw:
+                self.bet_var.set(digits_only if digits_only else "0")
+                return
             try:
-                value = int(self.bet_var.get())
-                value = max(0, value)
-                bal = self.return_balance()
-                if bal is not None and value > bal:
-                    value = int(bal)
+                value = int(digits_only) if digits_only else 0
             except Exception:
                 value = 0
-            self.bet_var.set(str(value))
+
+            balance = self.return_balance()
+            if balance is not None:
+                value = min(value, int(balance))
             self.current_bet_label.config(text=f"Current Bet: £{value}")
+            self.update_button_states()
 
         self.bet_var = StringVar(value="0")
         self.bet_var.trace_add("write", check_bet_input)
@@ -8758,7 +8874,8 @@ class HarrogateHoldEm:
         self.start_button.config(state="disabled" if self.round_active else "normal")
 
         if self.round_active and self.player_turn:
-            human = next((p for p in self.players if not p["is_bot"]), None)
+            human_index = linear_search(self.players, "is_bot", False)
+            human = self.players[human_index] if human_index != -1 else None
             if human:
                 call_amount = max(0, self.current_bet - human["bet"])
                 min_raise = max(
@@ -8790,7 +8907,7 @@ class HarrogateHoldEm:
     def update_player_status(self):
         """
         Refreshes the players list panel by delegating to _build_players_panel().
-        Kept as a separate public method so external callers continue to work
+        Kept as a separate method so external callers continue to work
         without change.
         """
         self.build_players_panel()
@@ -8878,13 +8995,21 @@ class HarrogateHoldEm:
         balance_window.title("Set Starting Balance")
         balance_window.grab_set()
         balance_window.protocol("WM_DELETE_WINDOW", lambda: None)
-        balance_window.configure(bg=self.colour_scheme["top_left_bg"])
+        balance_window.configure(bg=self.colour_scheme["left_bg"])
+        try:
+            balance_window.attributes("-zoomed", True)  # MacOS/Linux
+        except Exception:
+            pass
+        try:
+            balance_window.state("zoomed")  # Windows
+        except Exception:
+            pass
 
         Label(
             balance_window,
             text="Enter starting balance (£):",
             font=self.styles["text"],
-            bg=self.colour_scheme["top_left_bg"],
+            bg=self.colour_scheme["left_bg"],
             fg=self.colour_scheme["text_fg"],
         ).pack(pady=8)
 
@@ -8898,18 +9023,9 @@ class HarrogateHoldEm:
         )
         balance_entry.pack(pady=5)
 
-        error_label = Label(
-            balance_window,
-            text="",
-            font=self.styles["emphasis"],
-            fg="#e08080",
-            bg=self.colour_scheme["top_left_bg"],
-        )
-        error_label.pack(pady=4)
-
         def submit_balance():
             """Validates the entry, updates the UI and database, and closes
-            the dialog. Shows an inline error on invalid input."""
+            the dialog. Shows an error on invalid input."""
             try:
                 balance = int(balance_entry.get().strip())
                 if balance < 0:
@@ -8918,7 +9034,7 @@ class HarrogateHoldEm:
                 balance_window.destroy()
                 self.dbm.modify_user_balance(self.user_data["username"], balance)
             except Exception:
-                error_label.config(text="Please enter a valid positive integer.")
+                messagebox.showerror(text="Please enter a valid positive integer.")
 
         Button(
             balance_window,
@@ -8928,6 +9044,32 @@ class HarrogateHoldEm:
             fg=self.colour_scheme["text_fg"],
             relief="flat",
             bd=0,
+            command=submit_balance,
+        ).pack(pady=10)
+
+        def submit_balance():
+            """
+            Validates the entered balance as a non-negative integer, updates
+            the balance label and database, and closes the dialog. Displays
+            an error message if the value is invalid.
+            """
+            try:
+                balance = int(balance_entry.get().strip())
+                if balance < 0:
+                    raise ValueError()
+
+                self.balance_label.config(text=f"Balance: £{balance}")
+                balance_window.destroy()
+
+                self.dbm.modify_user_balance(self.user_data["username"], balance)
+
+            except Exception:
+                messagebox.showerror(text="Please enter a valid positive number.")
+
+        Button(
+            balance_window,
+            text="Submit",
+            font=self.styles["button"],
             command=submit_balance,
         ).pack(pady=10)
 
@@ -9303,7 +9445,9 @@ class HarrogateHoldEm:
         if self.tournament_mode and self.tournament:
             self.small_blind_value = self.tournament.current_small_blind
             self.big_blind_value = self.tournament.current_big_blind
-            human = next((p for p in self.players if not p["is_bot"]), None)
+
+            human_index = linear_search(self.players, "is_bot", False)
+            human = self.players[human_index] if human_index != -1 else None
             if human:
                 self.tournament.record_round_start(human["balance"])
 
@@ -9707,6 +9851,7 @@ class HarrogateHoldEm:
         Handles split pots when multiple players tie.
         """
         self.log_message("— SHOWDOWN —", round_start=True)
+        self.log_message("Board cards: " + " ".join(self.board[0]))
         self.update_ui()
 
         active = [p for p in self.players if p["status"] not in ("Folded", "OUT")]
@@ -9779,6 +9924,8 @@ class HarrogateHoldEm:
             winner = winners[0]["player"]
             self.log_message(f"{winner['player']} wins with {winners[0]['hand_name']}!")
             if winner["is_bot"]:
+                winner["balance"] += self.pot_size // max(1, len(winners))
+
                 self.hhe_root.after(delay, lambda: self.end_round(loss=True))
             else:
                 self.hhe_root.after(delay, lambda: self.end_round(win=True))
@@ -9851,7 +9998,9 @@ class HarrogateHoldEm:
             split_count (int): Number of winners in a split.
                                Defaults to 1.
         """
-        human = next((p for p in self.players if not p["is_bot"]), None)
+
+        human_index = linear_search(self.players, "is_bot", False)
+        human = self.players[human_index] if human_index != -1 else None
         if not human:
             return
 
@@ -9970,7 +10119,8 @@ class HarrogateHoldEm:
             bool: True if the game is over and the window is being
                   closed; False if the game should continue.
         """
-        human = next((p for p in self.players if not p["is_bot"]), None)
+        human_index = linear_search(self.players, "is_bot", False)
+        human = self.players[human_index] if human_index != -1 else None
 
         if human and human["status"] == "OUT":
             messagebox.showinfo(

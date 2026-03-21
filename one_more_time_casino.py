@@ -75,11 +75,13 @@ from itertools import combinations
 # database_management_and_logging_V6.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-# Database file paths
-if getattr(sys, "frozen", False):
-    BASE_DIR = os.path.dirname(sys.executable)
-else:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Database file paths.
+BASE_DIR = (
+    os.path.dirname(sys.executable)
+    if getattr(sys, "frozen", False)
+    else os.path.dirname(os.path.abspath(__file__))
+)
 DB_FILE = os.path.join(BASE_DIR, "OMTC_database.db")
 
 
@@ -389,7 +391,7 @@ class DatabaseManagement:
 
         conn.row_factory = sqlite3.Row
 
-        # Enable foreign key constraints
+        # Enable foreign key constraints.
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
@@ -803,10 +805,9 @@ class DatabaseManagement:
                 row = cursor.fetchone()
                 found = row is not None
 
-                if found:
-                    database_logger.info(f"User '{username}' found.")
-                else:
-                    database_logger.info(f"User '{username}' not found.")
+                database_logger.info(
+                    f"User '{username}' {'found' if found else 'not found'}."
+                )
 
                 return {"found": found}
 
@@ -916,10 +917,11 @@ class DatabaseManagement:
 
         verified = verify_hash(row["password_hash"], password)
 
-        if verified:
-            database_logger.info("Password verification successful'.")
-        else:
-            database_logger.info("Failed password attempt.")
+        database_logger.info(
+            "Password verification successful."
+            if verified
+            else "Failed password attempt."
+        )
 
         return {"found": True, "verified": verified}
 
@@ -1095,10 +1097,11 @@ class DatabaseManagement:
 
         verified = verify_hash(row["password_hash"], password)
 
-        if verified:
-            database_logger.info("Administrator password verification successful.")
-        else:
-            database_logger.info("Administrator password verification failed.")
+        database_logger.info(
+            "Password verification successful."
+            if verified
+            else "Failed password attempt."
+        )
 
         return {"found": True, "verified": verified}
 
@@ -1175,7 +1178,7 @@ class DatabaseManagement:
                     (user_id,),
                 )
 
-                # Create a base range chart
+                # Create a base range chart.
                 conn.execute(
                     """
                     UPDATE user_poker_data
@@ -1213,7 +1216,7 @@ class DatabaseManagement:
             try:
                 database_logger.info(f"Loading poker data for User ID: '{user_id}'.")
 
-                # Get user data with poker statistics
+                # Get user data with poker statistics.
                 row = conn.execute(
                     """
                     SELECT
@@ -1238,22 +1241,22 @@ class DatabaseManagement:
                     database_logger.warning("User not found in poker data")
                     return None
 
-                # Convert to dictionary
+                # Convert to dictionary.
                 record = dict(row)
 
-                # Parse player_range JSON
+                # Parse player_range JSON.
                 record["player_range"] = (
                     json.loads(record["player_range"])
                     if record.get("player_range")
                     else None
                 )
 
-                # Calculate derived statistics
+                # Calculate derived statistics.
                 rounds = max(1, record["rounds_played"])
                 record["avg_bet_size"] = record["total_bets"] / rounds
 
-                # Normalise fold_to_raise and call_when_weak to 0.0-1.0
-                # These are stored as counts, convert to frequencies
+                # Normalise fold_to_raise and call_when_weak to 0.0-1.0.
+                # These are stored as counts, convert to frequencies.
                 total_pressure_situations = (
                     record["fold_to_raise"] + record["call_when_weak"]
                 )
@@ -1265,7 +1268,7 @@ class DatabaseManagement:
                         record["call_when_weak"] / total_pressure_situations
                     )
                 else:
-                    # Default values if no data
+                    # Default values if no data.
                     record["fold_to_raise"] = 0.5
                     record["call_when_weak"] = 0.5
 
@@ -1454,16 +1457,16 @@ class DatabaseManagement:
                     WHERE user_id = ?
                     """,
                     (
-                        int(voluntarily_entered),  # VPIP counter
-                        int(preflop_raised),  # PFR counter
-                        bet_size,  # Total bets
-                        int(faced_raise and action == "fold"),  # Fold to raise
-                        int(faced_raise and action == "call"),  # Call when weak
+                        int(voluntarily_entered),  # VPIP counter.
+                        int(preflop_raised),  # PFR counter.
+                        bet_size,  # Total bets.
+                        int(faced_raise and action == "fold"),  # Fold to raise.
+                        int(faced_raise and action == "call"),  # Call when weak.
                         user_id,
                     ),
                 )
 
-                # Recalculate VPIP and PFR percentages
+                # Recalculate VPIP and PFR percentages.
                 self.recalculate_frequencies(conn, user_id)
 
                 database_logger.info("User hand statistics updated.")
@@ -1557,7 +1560,7 @@ class DatabaseManagement:
 
                 statistics = dict(row)
 
-                # Calculate derived statistics
+                # Calculate derived statistics.
                 rounds = max(1, statistics["rounds_played"])
                 statistics["avg_bet_size"] = statistics["total_bets"] / rounds
 
@@ -1633,7 +1636,7 @@ class DatabaseManagement:
                     database_logger.warning(f"Table '{table}' is empty.")
                     return False
 
-                headers = list(rows[0].keys())  # Get column names from the first row
+                headers = list(rows[0].keys())  # Get column names from the first row.
 
                 with open(file_path, "w") as file:
                     writer = csv.writer(file)
@@ -1662,7 +1665,7 @@ class DatabaseManagement:
         records = []
         try:
             with open(file_path, "r") as file:
-                headers = file.readline().strip().split(",")  # Read header line
+                headers = file.readline().strip().split(",")  # Read header line.
                 for line in file:
                     values = line.strip().split(",")
                     record = dict(zip(headers, values))
@@ -1856,7 +1859,7 @@ def fetch_font_settings(root):
     return styles
 
 
-# Default delay for message logging in seconds
+# Default delay for message logging in seconds.
 DELAY = 1.5
 
 
@@ -1939,15 +1942,15 @@ def bubble_sort(array, key, reverse):
         swapped = False
         for index in range(
             array_length - 1 - pass_num
-        ):  # Last 'pass_num' elements are already sorted
+        ):  # Last 'pass_num' elements are already sorted.
             value_a = array[index].get(key)
             value_b = array[index + 1].get(key)
             if (reverse and value_a < value_b) or (
                 not reverse and value_a > value_b
-            ):  # Compare based on sort order
+            ):  # Compare based on sort order.
                 array[index], array[index + 1] = array[index + 1], array[index]
                 swapped = True
-        if not swapped:  # No swaps means the array is already sorted
+        if not swapped:  # No swaps means the array is already sorted.
             break
     return array
 
@@ -1969,7 +1972,7 @@ def binary_search_by_id(array, target_id):
         mid = (low + high) // 2
         mid_id = array[mid].get("user_id", -1)
         if mid_id == target_id:
-            return mid  # Target founf
+            return mid  # Target found.
         elif mid_id < target_id:
             low = mid + 1  # Target is in the upper half.
         else:
@@ -1996,14 +1999,10 @@ class Encryption_Software:
         """
         self.enc_soft_root = Tk()
         self.enc_soft_root.title("One More Time Casino - Encryption Software")
-        try:
-            self.enc_soft_root.attributes("-zoomed", True)  # MacOS/Linux
-        except Exception:
-            pass
-        try:
-            self.enc_soft_root.state("zoomed")  # Windows
-        except Exception:
-            pass
+        width = self.enc_soft_root.winfo_screenwidth()
+        height = self.enc_soft_root.winfo_screenheight()
+        self.enc_soft_root.geometry(f"{width}x{height}+0+0")
+        self.enc_soft_root.focus_force()
 
         self.styles = fetch_font_settings(self.enc_soft_root)
 
@@ -2011,8 +2010,6 @@ class Encryption_Software:
             self.dbm = DatabaseManagement()
             self.dbm.admin_accessed_system("Encryption Software")
         except:
-            # In case that this software is not used with the casino software.
-            # However, it will still require 'gui_helpers_V6.py' to run, so it is not fully standalone.
             pass
 
         self.aes_key = None
@@ -2272,8 +2269,9 @@ class Encryption_Software:
 # check_systems_V6.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-PBKDF2_ITERATIONS = 200_000  # Iterations for password hashing. (Password-Based Key Derivation Function 2)
-SALT_BYTES = 16  # Number of random bytes for salt
+
+PBKDF2_ITERATIONS = 200_000  # Iterations for password hashing (Password-Based Key Derivation Function 2).
+SALT_BYTES = 16  # Number of random bytes for salt.
 
 
 def hash_function(string):
@@ -2295,15 +2293,15 @@ def hash_function(string):
     if not isinstance(string, str):
         raise TypeError("Input must be a string.")
 
-    # Generate a random salt
+    # Generate a random salt.
     salt = os.urandom(SALT_BYTES)
 
-    # Derive the hash using PBKDF2-HMAC-SHA256
+    # Derive the hash using PBKDF2-HMAC-SHA256.
     derived_key = hashlib.pbkdf2_hmac(
         "sha256", string.encode("utf-8"), salt, PBKDF2_ITERATIONS
     )
 
-    # Return the salt and hash joined by a '$' character
+    # Return the salt and hash joined by a '$' character.
     return f"{binascii.hexlify(salt).decode()}${binascii.hexlify(derived_key).decode()}"
 
 
@@ -2324,13 +2322,13 @@ def verify_hash(stored_string, input_string):
     try:
         salt_hex, hash_hex = stored_string.split("$")
     except ValueError:
-        # The stored hash isn't in the expected format
+        # The stored hash isn't in the expected format.
         return False
 
     salt = binascii.unhexlify(salt_hex)
     stored_hash = binascii.unhexlify(hash_hex)
 
-    # Derive a hash using the same salt and parameters
+    # Derive a hash using the same salt and parameters.
     input_hash = hashlib.pbkdf2_hmac(
         "sha256", input_string.encode("utf-8"), salt, PBKDF2_ITERATIONS
     )
@@ -2358,20 +2356,12 @@ def passwords_confirmation(frame, root):
     """
     styles = fetch_font_settings(root)
 
-    # Default return state
+    # Default return state.
     password = {"confirmed": False, "password": None}
 
     password_window = Toplevel(frame)
     password_window.title("Confirm Password")
     password_window.protocol("WM_DELETE_WINDOW", lambda: None)
-    try:
-        password_window.attributes("-zoomed", True)  # MacOS/Linux
-    except Exception:
-        pass
-    try:
-        password_window.state("zoomed")  # Windows
-    except Exception:
-        pass
 
     Label(password_window, text="Enter password:", font=styles["text"]).pack(pady=5)
 
@@ -2447,14 +2437,10 @@ class Admin_Interface:
         """
         self.interface_root = Tk()
         self.interface_root.title("One More Time Casino - Administrator Interface")
-        try:
-            self.interface_root.attributes("-zoomed", True)  # MacOS/Linux
-        except Exception:
-            pass
-        try:
-            self.interface_root.state("zoomed")  # Windows
-        except Exception:
-            pass
+        width = self.interface_root.winfo_screenwidth()
+        height = self.interface_root.winfo_screenheight()
+        self.interface_root.geometry(f"{width}x{height}+0+0")
+        self.interface_root.focus_force()
 
         self.dbm = DatabaseManagement()
         self.DB_FILE = DB_FILE
@@ -2572,14 +2558,10 @@ class Admin_Console:
         """
         self.adm_console_root = Tk()
         self.adm_console_root.title("One More Time Casino - Administrator Console")
-        try:
-            self.adm_console_root.attributes("-zoomed", True)  # MacOS/Linux
-        except Exception:
-            pass
-        try:
-            self.adm_console_root.state("zoomed")  # Windows
-        except Exception:
-            pass
+        width = self.adm_console_root.winfo_screenwidth()
+        height = self.adm_console_root.winfo_screenheight()
+        self.adm_console_root.geometry(f"{width}x{height}+0+0")
+        self.adm_console_root.focus_force()
 
         self.dbm = DatabaseManagement()
         self.DB_FILE = DB_FILE
@@ -3398,10 +3380,7 @@ class Admin_Console:
             if password_entry.get().strip():
                 kwargs["new_password"] = password_entry.get().strip()
 
-            if type_box.get() == "Registered":
-                kwargs["new_account_type"] = True
-            else:
-                kwargs["new_account_type"] = False
+            kwargs["new_account_type"] = type_box.get() == "Registered"
 
             try:
                 kwargs["new_balance"] = float(balance_entry.get())
@@ -3709,14 +3688,10 @@ class User_Interface:
         """
         self.interface_root = Tk()
         self.interface_root.title("One More Time Casino - User Interface")
-        try:
-            self.interface_root.attributes("-zoomed", True)  # MacOS/Linux
-        except Exception:
-            pass
-        try:
-            self.interface_root.state("zoomed")  # Windows
-        except Exception:
-            pass
+        width = self.interface_root.winfo_screenwidth()
+        height = self.interface_root.winfo_screenheight()
+        self.interface_root.geometry(f"{width}x{height}+0+0")
+        self.interface_root.focus_force()
 
         self.dbm = DatabaseManagement()
 
@@ -3746,7 +3721,7 @@ class User_Interface:
         """
         Label(frame, text="Terms & Conditions", font=self.styles["title"]).pack(pady=10)
 
-        # Create a scrolled text area for long T&C content
+        # Create a scrolled text area for long T&C content.
         text_area = scrolledtext.ScrolledText(
             frame, wrap=WORD, font=self.styles["terms_and_conditions"]
         )
@@ -3829,45 +3804,39 @@ class User_Interface:
 # casino_interface_V6.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+
 # Minimum rounds played before a user may enable Tournament Mode.
-# At 25 rounds the VPIP/PFR counters carry statistical weight and the
-# hand-range chart has been updated to a reasonable level to reflect player tendencies.
 TOURNAMENT_MIN_ROUNDS = 25
 
-# Gauntlet Mode
-
-# Bot difficulty starts at GAUNTLET_START_DIFFICULTY and increases by
-# GAUNTLET_DIFFICULTY_STEP every GAUNTLET_RAMP_INTERVAL rounds.
-
+# Gauntlet Mode.
 GAUNTLET_START_DIFFICULTY = 10  # default starting difficulty
 GAUNTLET_DIFFICULTY_STEP = 10  # +10 per ramp interval
 GAUNTLET_RAMP_INTERVAL = 5  # ramp every N rounds
 GAUNTLET_BOT_COUNT = 3  # fixed number of opponents
 
-# Endless Mode
-
+# Endless Mode.
 # Max bots, difficulties randomly distributed 0-100 and reshuffled each round.
 ENDLESS_BOT_COUNT = 9
 
 DEFAULT_SETTINGS = {
-    # Harrogate Hold 'Em
+    # Harrogate Hold 'Em.
     "bot_count": 3,
     "bot_balance": 1000,
     "small_blind": 50,
     "big_blind": 100,
     "bot_difficulty": 50,
-    # Tournament
+    # Tournament.
     "tournament_mode": False,
     "tournament_rounds": 5,
-    "tournament_players": 4,  # Total players including user
+    "tournament_players": 4,  # Total players including user.
     "win_criteria": "eliminate_all",
-    "win_criteria_target": 1000,  # Used when criteria is "earn_target"
-    # Gauntlet
+    "win_criteria_target": 1000,  # Used when criteria is "earn_target".
+    # Gauntlet.
     "gauntlet_mode": False,
     "gauntlet_start_difficulty": GAUNTLET_START_DIFFICULTY,
-    # Endless
+    # Endless.
     "endless_mode": False,
-    # General
+    # General.
     "starting_balance": 10000,
 }
 
@@ -3908,14 +3877,10 @@ class Casino_Interface:
             if administrator
             else "One More Time Casino"
         )
-        try:
-            self.interface_root.attributes("-zoomed", True)  # MacOS/Linux
-        except Exception:
-            pass
-        try:
-            self.interface_root.state("zoomed")  # Windows
-        except Exception:
-            pass
+        width = self.interface_root.winfo_screenwidth()
+        height = self.interface_root.winfo_screenheight()
+        self.interface_root.geometry(f"{width}x{height}+0+0")
+        self.interface_root.focus_force()
 
         self.dbm = DatabaseManagement()
 
@@ -3940,13 +3905,13 @@ class Casino_Interface:
 
         self.current_section_frame = None
 
-        # Personalised settings for casino games (starts from defaults)
+        # Personalised settings for HHE.
         self.settings = dict(DEFAULT_SETTINGS)
 
         set_view(self, self.casino_menu)
         self.interface_root.mainloop()
 
-    # Helpers
+    # Helpers.
 
     def user_linked(self):
         """
@@ -3968,7 +3933,7 @@ class Casino_Interface:
             int: Rounds played, or 0 on failure / admin session.
         """
         if self.user_data.get("administrator"):
-            # Administrators are never blocked by the rounds threshold
+            # Administrators are never blocked by the rounds threshold.
             return TOURNAMENT_MIN_ROUNDS
 
         user_id = self.user_data.get("user_id")
@@ -4021,7 +3986,6 @@ class Casino_Interface:
                 return 0, 0
             gauntlet_pb = int(statistics.get("gauntlet_max_rounds", 0))
             endless_pb = int(statistics.get("endless_high_score", 0))
-            # with:
             scores = self.dbm.fetch_special_mode_scores(user_id)
             if not scores:
                 return 0, 0
@@ -4030,8 +3994,6 @@ class Casino_Interface:
             return gauntlet_pb, endless_pb
         except Exception:
             return 0, 0
-
-    # Main menu
 
     def casino_menu(self, frame):
         """
@@ -4065,7 +4027,6 @@ class Casino_Interface:
                 font=self.styles["subheading"],
             ).pack(pady=10)
 
-        # Game Menu
         Button(
             frame,
             text="Game Menu",
@@ -4082,7 +4043,6 @@ class Casino_Interface:
                 font=self.styles["emphasis"],
             ).pack()
 
-        # Account buttons
         Button(
             frame,
             text="Sign Up",
@@ -4099,7 +4059,6 @@ class Casino_Interface:
             command=self.user_login_setup,
         ).pack(pady=5)
 
-        # Account information
         account_text = (
             "Account Information" if linked else "Sign in to access user info"
         )
@@ -4126,8 +4085,6 @@ class Casino_Interface:
             width=30,
             command=self.casino_exit,
         ).pack(pady=5)
-
-    # Game menu
 
     def show_game_menu(self, frame):
         """
@@ -4166,8 +4123,6 @@ class Casino_Interface:
                 width=30,
                 command=command,
             ).pack(pady=5)
-
-    # Registration & login
 
     def user_sign_up(self):
         """
@@ -4248,10 +4203,14 @@ class Casino_Interface:
                 messagebox.showerror("Error", "Username already exists.")
                 return
 
-            if registered:
-                set_view(self, lambda f: self.set_account_type(f, username))
-            else:
-                set_view(self, lambda f: self.user_login(f, username))
+            set_view(
+                self,
+                (
+                    (lambda f: self.set_account_type(f, username))
+                    if registered
+                    else (lambda f: self.user_login(f, username))
+                ),
+            )
 
         Button(
             frame,
@@ -4389,8 +4348,6 @@ class Casino_Interface:
             command=lambda: set_view(self, self.casino_menu),
         ).pack(pady=5)
 
-    # Account information
-
     def fetch_user_record(self, frame):
         """
         Retrieves and displays the full record for the currently signed-in
@@ -4445,8 +4402,6 @@ class Casino_Interface:
             command=lambda: set_view(self, self.casino_menu),
         ).pack(pady=10)
 
-    # Exit
-
     def casino_exit(self):
         """
         Prompts for confirmation before exiting the casino. Displays a
@@ -4462,8 +4417,6 @@ class Casino_Interface:
             self.interface_root.destroy()
             sys.exit(0)
 
-    # Game settings
-
     def game_settings(self, frame):
         """
         Displays the Harrogate Hold 'Em settings panel.
@@ -4477,7 +4430,7 @@ class Casino_Interface:
             pady=(10, 4)
         )
 
-        # Live variables
+        # Live variables.
         v_bot_count = IntVar(value=self.settings["bot_count"])
         v_bot_balance = StringVar(value=str(self.settings["bot_balance"]))
         v_small_blind = StringVar(value=str(self.settings["small_blind"]))
@@ -4507,7 +4460,6 @@ class Casino_Interface:
             ).pack(side="left")
             widget_factory(row).pack(side="left", padx=8)
 
-        # Table Settings
         label("Table Settings")
         row(
             "Number of bots (1–9):",
@@ -4539,7 +4491,6 @@ class Casino_Interface:
             ),
         )
 
-        # Bot Difficulty
         label("Bot Difficulty  (0 = easy, 100 = hard)")
         difficulty_label = Label(
             frame,
@@ -4559,7 +4510,6 @@ class Casino_Interface:
             command=lambda v: difficulty_label.config(text=f"Current: {int(float(v))}"),
         ).pack(anchor="w", padx=30, pady=2)
 
-        # Tournament Mode
         label("Tournament Mode")
         rounds_played = self.fetch_rounds_played()
         rounds_needed = max(0, TOURNAMENT_MIN_ROUNDS - rounds_played)
@@ -4664,16 +4614,16 @@ class Casino_Interface:
                 crit_desc.config(
                     text=TOURNAMENT_WIN_CRITERIA.get(v_win_criteria.get(), "")
                 )
-                if v_win_criteria.get() == "earn_target":
+                (
                     target_frame.pack(fill="x", padx=30, pady=2)
-                else:
-                    target_frame.pack_forget()
+                    if v_win_criteria.get() == "earn_target"
+                    else target_frame.pack_forget()
+                )
 
             crit_box.bind("<<ComboboxSelected>>", on_criteria_change)
             if v_win_criteria.get() == "earn_target":
                 target_frame.pack(fill="x", padx=30, pady=2)
 
-        # Gauntlet Mode
         label("Gauntlet Mode")
         gauntlet_pb, _ = self.fetch_special_scores()
         Label(
@@ -4709,7 +4659,6 @@ class Casino_Interface:
             ),
         ).pack(anchor="w", padx=30, pady=4)
 
-        # Endless Mode
         label("Endless Mode")
         _, endless_pb = self.fetch_special_scores()
         Label(
@@ -4731,7 +4680,6 @@ class Casino_Interface:
             command=self.start_endless,
         ).pack(anchor="w", padx=30, pady=4)
 
-        # Bottom buttons
         button_frame = Frame(frame)
         button_frame.pack(pady=12)
 
@@ -4814,10 +4762,11 @@ class Casino_Interface:
                     "gauntlet_start_difficulty", GAUNTLET_START_DIFFICULTY
                 )
 
-            if self.fetch_rounds_played() < TOURNAMENT_MIN_ROUNDS:
-                tournament_on = False
-            else:
-                tournament_on = bool(v_tournament.get())
+            tournament_on = (
+                False
+                if self.fetch_rounds_played() < TOURNAMENT_MIN_ROUNDS
+                else bool(v_tournament.get())
+            )
 
             if errors:
                 messagebox.showerror("Settings Error", "\n".join(errors))
@@ -4866,8 +4815,6 @@ class Casino_Interface:
                 command=command,
             ).pack(side="left", padx=10)
 
-    # Leaderboard
-
     def show_leaderboard(self, frame):
         """
         Displays a leaderboard showing the top Gauntlet and Endless scores
@@ -4889,7 +4836,7 @@ class Casino_Interface:
             all_data = []
 
         def board_section(title, key, unit="rounds"):
-            """Displays a titled top-5 table for a single metric."""
+            """Displays a titled top-5 table."""
             Label(
                 frame,
                 text=title,
@@ -4899,15 +4846,13 @@ class Casino_Interface:
 
             candidates = [
                 p for p in all_data if p.get(key, 0)
-            ]  # Filter out players with no score for this metric
-            ranked = bubble_sort(candidates, key=key, reverse=True)[
-                :5
-            ]  # Sort and take top 5
+            ]  # Filter out players with no score.
+            ranked = bubble_sort(candidates, key=key, reverse=True)[:5]
 
-            # Use binary_search_by_id for the username lookup
+            # Use binary_search_by_id for the username lookup.
             sorted_by_id = bubble_sort(
                 all_data, key="user_id"
-            )  # Ensure data is sorted by user_id for binary search
+            )  # Ensure data is sorted by user_id for binary search.
             for entry in ranked:
                 index = binary_search_by_id(sorted_by_id, entry["user_id"])
                 if index != -1:
@@ -4961,8 +4906,6 @@ class Casino_Interface:
             command=lambda: set_view(self, self.show_game_menu),
         ).pack(pady=14)
 
-    # Post-game summary (special modes)
-
     def show_special_mode_summary(self, mode, rounds_survived):
         """
         Shows a post-game summary dialog for Gauntlet or Endless mode,
@@ -5014,8 +4957,6 @@ class Casino_Interface:
         messagebox.showinfo(title, msg)
         set_view(self, self.show_game_menu)
 
-    # Game launchers
-
     def whitejoe_rules(self):
         """
         Launches the WhiteJoe rules window. Requires a linked account.
@@ -5052,7 +4993,7 @@ class Casino_Interface:
 
     def start_harrogate(self):
         """
-        Builds a bot roster from self.settings and launches standard
+        Builds a bot list from self.settings and launches standard
         Harrogate Hold 'Em.
 
         If tournament_mode is True but the player is below the round
@@ -5060,7 +5001,7 @@ class Casino_Interface:
         (the settings panel already prevents this scenario).
         """
 
-        # Never allow tournament below the threshold
+        # Never allow tournament below the threshold.
         settings = dict(self.settings)
         settings["gauntlet_mode"] = False
         settings["endless_mode"] = False
@@ -5073,9 +5014,9 @@ class Casino_Interface:
         bot_count = settings["bot_count"]
         difficulty = settings["bot_difficulty"]
 
-        roster = list(DEFAULT_BOT_ROSTER)
-        random.shuffle(roster)
-        bots = [[roster[index % len(roster)], difficulty] for index in range(bot_count)]
+        list = list(DEFAULT_BOT_LIST)
+        random.shuffle(list)
+        bots = [[list[index % len(list)], difficulty] for index in range(bot_count)]
 
         HarrogateHoldEm(self.user_data, settings, bots)
 
@@ -5113,12 +5054,12 @@ class Casino_Interface:
         settings["gauntlet_start_difficulty"] = start_difficulty
         settings["gauntlet_difficulty_step"] = GAUNTLET_DIFFICULTY_STEP
         settings["gauntlet_ramp_interval"] = GAUNTLET_RAMP_INTERVAL
-        settings["rounds_survived"] = 0  # The engine writes here on exit
+        settings["rounds_survived"] = 0
 
-        roster = list(DEFAULT_BOT_ROSTER)
-        random.shuffle(roster)
+        list = list(DEFAULT_BOT_LIST)
+        random.shuffle(list)
         bots = [
-            [roster[index % len(roster)], start_difficulty]
+            [list[index % len(list)], start_difficulty]
             for index in range(GAUNTLET_BOT_COUNT)
         ]
 
@@ -5145,18 +5086,18 @@ class Casino_Interface:
         settings["gauntlet_mode"] = False
         settings["tournament_mode"] = False
         settings["bot_count"] = ENDLESS_BOT_COUNT
-        settings["rounds_survived"] = 0  # The engine writes here on exit
+        settings["rounds_survived"] = 0
 
-        roster = list(DEFAULT_BOT_ROSTER)
-        random.shuffle(roster)
+        list = list(DEFAULT_BOT_LIST)
+        random.shuffle(list)
 
-        # Spread difficulties evenly across the range then shuffle
+        # Spread difficulties evenly across the range then shuffle.
         step = 100 // ENDLESS_BOT_COUNT
         difficulties = [min(100, index * step) for index in range(ENDLESS_BOT_COUNT)]
         random.shuffle(difficulties)
 
         bots = [
-            [roster[index % len(roster)], difficulties[index]]
+            [list[index % len(list)], difficulties[index]]
             for index in range(ENDLESS_BOT_COUNT)
         ]
 
@@ -5318,20 +5259,14 @@ class ShowGameRules:
         window.title(title)
         window.grab_set()
         window.protocol("WM_DELETE_WINDOW", lambda: None)
-        try:
-            window.attributes("-zoomed", True)
-        except Exception:
-            pass
-        try:
-            window.state("zoomed")
-        except Exception:
-            pass
+        width = window.winfo_screenwidth()
+        height = window.winfo_screenheight()
+        window.geometry(f"{width}x{height}+0+0")
+        window.focus_force()
 
-        # Heading label
         heading = Label(window, text=title, font=self.styles["title"])
         heading.pack(pady=10)
 
-        # Scrollable text area
         text_area = scrolledtext.ScrolledText(
             window, wrap=WORD, font=self.styles["terms_and_conditions"]
         )
@@ -5340,7 +5275,6 @@ class ShowGameRules:
         text_area.configure(state="disabled")
         text_area.yview_moveto(0)
 
-        # Bottom controls
         bottom_frame = Frame(window)
         bottom_frame.pack(side=BOTTOM, fill=X, pady=10)
 
@@ -5355,6 +5289,7 @@ class ShowGameRules:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # deck_management_V6.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 
 SUITS = ["♠", "♣", "♥", "♦"]
 SUIT_MAP = {"♠": "s", "♣": "c", "♥": "h", "♦": "d"}
@@ -5402,7 +5337,7 @@ class CasinoDeckManager:
         Raises:
             ValueError: If mode is not 'poker' or 'blackjack'.
         """
-        # mode: 'poker' or 'blackjack'
+        # mode: 'poker' or 'blackjack'.
         mode = mode.lower()
 
         if mode not in ("poker", "blackjack"):
@@ -5440,10 +5375,7 @@ class CasinoDeckManager:
         if self.remaining() < n:
             self.deck = TreysDeck()
             self.deck.shuffle()
-        if n != 1:
-            cards = self.deck.draw(n)
-        else:
-            cards = self.deck.draw(n)[0]
+        cards = self.deck.draw(n) if n != 1 else self.deck.draw(n)[0]
         return cards
 
     def str_draw(self, n=1):
@@ -5516,10 +5448,10 @@ class CasinoDeckManager:
         """
         new_dm = CasinoDeckManager(shuffle=False, game_mode=self.game_mode)
 
-        # Copy deck state
+        # Copy deck state.
         new_dm.deck.cards = self.deck.cards.copy()
 
-        # Evaluator is stateless and safe to reuse
+        # Evaluator is stateless and safe to reuse.
         new_dm.evaluator = self.evaluator
 
         return new_dm
@@ -5633,14 +5565,14 @@ class CasinoDeckManager:
         for card in treys_hand:
             rank_int = TreysCard.get_rank_int(card)
 
-            # Ace
+            # Ace.
             if rank_int == 12:
                 total += 11
                 aces += 1
-            # T, J, Q, K
+            # T, J, Q, K.
             elif rank_int >= 8:
                 total += 10
-            # 2–9
+            # 2–9.
             else:
                 total += rank_int + 2
 
@@ -5721,14 +5653,10 @@ class WhiteJoe:
         """
         self.wj_root = Tk()
         self.wj_root.title("One More Time Casino - WhiteJoe")
-        try:
-            self.wj_root.attributes("-zoomed", True)  # MacOS/Linux
-        except Exception:
-            pass
-        try:
-            self.wj_root.state("zoomed")  # Windows
-        except Exception:
-            pass
+        width = self.wj_root.winfo_screenwidth()
+        height = self.wj_root.winfo_screenheight()
+        self.wj_root.geometry(f"{width}x{height}+0+0")
+        self.wj_root.focus_force()
 
         self.user_data = user_data
 
@@ -5746,20 +5674,20 @@ class WhiteJoe:
         self.action_buttons = []
 
         self.colour_scheme = {
-            # Left-hand panels
-            "left_bg": "#252525",
-            # Right-hand panels
+            # Left-hand panels.
+            "left_bg": "#e6dcc6",
+            # Right-hand panels.
             "top_right_bg": "#2e7d73",
             "bottom_right_bg": "#5b2a3c",
-            # Widgets
+            # Interactive widgets.
             "widget_bg": "#6a2e4f",
-            "text_bg": "#1a1a1a",
+            "text_bg": "#141414",
             "text_fg": "#f2f2f2",
-            "left_fg": "#e8e8e8",
-            # Log panel
+            "left_fg": "#1e1e1e",
+            # Log panel.
             "log_bg": "#1a1a1a",
             "log_fg": "#cfcfcf",
-            # Log entry
+            # Log entry.
             "start_bg": "#243b7a",
             "start_fg": "#ffffff",
             "win_bg": "#244d3a",
@@ -5770,7 +5698,7 @@ class WhiteJoe:
             "tie_fg": "#f0d898",
         }
 
-        # Game state
+        # Game state.
         self.player_hand = []
         self.dealer_hand = []
         self.dealer = "Genghis Khan"
@@ -5802,11 +5730,9 @@ class WhiteJoe:
         frame.rowconfigure(0, weight=1)
         frame.rowconfigure(1, weight=1)
 
-        # Left panel
         left_frame = Frame(frame, bd=2, relief="sunken", bg=cs["left_bg"])
         left_frame.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=5, pady=5)
 
-        # Canvas + Scrollbar
         self.log_canvas = Canvas(left_frame, bg=cs["left_bg"], highlightthickness=0)
         scrollbar = Scrollbar(
             left_frame, orient="vertical", command=self.log_canvas.yview
@@ -5815,7 +5741,6 @@ class WhiteJoe:
         scrollbar.pack(side="right", fill="y")
         self.log_canvas.pack(side="left", fill="both", expand=True)
 
-        # Inner frame
         self.log_frame = Frame(self.log_canvas, bg=cs["left_bg"])
         self.log_window = self.log_canvas.create_window(
             (0, 0), window=self.log_frame, anchor="nw"
@@ -5832,7 +5757,6 @@ class WhiteJoe:
             ),
         )
 
-        # Top-right panel
         top_right_frame = Frame(frame, bd=2, relief="sunken", bg=cs["top_right_bg"])
         top_right_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 
@@ -5881,13 +5805,11 @@ class WhiteJoe:
         self.balance_label = cast(Label, labels[1])
         self.current_bet_label = cast(Label, labels[2])
 
-        # Bottom-right panel
         bottom_right_frame = Frame(
             frame, bd=2, relief="sunken", bg=cs["bottom_right_bg"]
         )
         bottom_right_frame.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
 
-        # Functions for user bet adjustment
         def adjust_current_bet(amount):
             try:
                 value = int(self.bet_var.get())
@@ -5923,7 +5845,7 @@ class WhiteJoe:
             self.current_bet_label.config(text=f"Current Bet: £{value}")
             self.update_button_states()
 
-        # Bet entry
+        # Bet entry.
         self.bet_var = StringVar(value="0")
         self.bet_var.trace_add("write", check_bet_input)
 
@@ -5940,8 +5862,8 @@ class WhiteJoe:
             justify="center",
         ).pack(pady=(8, 6))
 
-        # Increment rows
-        for inc in (10, 100, 1000):
+        # Increment rows.
+        for inc in (1, 10, 100, 1000):
             row = Frame(
                 bottom_right_frame,
                 bg=cs["text_bg"],
@@ -5988,7 +5910,7 @@ class WhiteJoe:
                 command=lambda v=-inc: adjust_current_bet(v),
             ).pack(side="right", padx=4)
 
-        # Action buttons
+        # Action buttons.
         for text, command in (
             ("Hit", self.hit),
             ("Stand", self.stand),
@@ -6040,17 +5962,15 @@ class WhiteJoe:
         except ValueError:
             bet = 0
 
-        # Start button
+        # Start button.
         self.start_button.config(
             state="disabled" if self.round_active or bet <= 0 else "normal"
         )
 
-        # Action buttons
+        # Action buttons.
         state = "normal" if self.round_active else "disabled"
         for button in self.action_buttons:
             button.config(state=state)
-
-    # Admin helper
 
     def admin_modify_bet(self, frame):
         """
@@ -6070,11 +5990,11 @@ class WhiteJoe:
         balance_window.protocol("WM_DELETE_WINDOW", lambda: None)
         balance_window.configure(bg=self.colour_scheme["left_bg"])
         try:
-            balance_window.attributes("-zoomed", True)  # MacOS/Linux
+            balance_window.attributes("-zoomed", True)  # MacOS/Linux.
         except Exception:
             pass
         try:
-            balance_window.state("zoomed")  # Windows
+            balance_window.state("zoomed")  # Windows.
         except Exception:
             pass
 
@@ -6346,11 +6266,11 @@ class WhiteJoe:
         self.player_hand.clear()
         self.dealer_hand.clear()
 
-        # Create and shuffle a new deck at the start of each round
+        # Create and shuffle a new deck at the start of each round.
         self.deck = CasinoDeckManager(shuffle=True, game_mode="blackjack")
         self.log_message(text="The deck is being shuffled...")
 
-        # Deal cards
+        # Deal cards.
         self.player_hand.extend([self.deck.draw(1), self.deck.draw(1)])
 
         if self.deck.blackjack_hand_value(self.player_hand) == 21:
@@ -6616,33 +6536,32 @@ class WhiteJoe:
 # poker_player_management_V6.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-# Timeout check: exit Monte Carlo early if no results after this many iterations
+
+# Timeout check: exit decision making early if no results after this many iterations.
 TIME_OUT = 1000
 
-# Betting size thresholds by difficulty band
+# Betting size thresholds by difficulty band.
 MIN_RAISE_FACTOR_LOW_DIFF = 0.5
 MAX_RAISE_FACTOR_LOW_DIFF = 2.0
 MIN_RAISE_FACTOR_HIGH_DIFF = 0.75
 MAX_RAISE_FACTOR_HIGH_DIFF = 3.0
 
-# Minimum rounds before a player's stored range is used
+# Minimum rounds before a player's stored range is used.
 EXPERIENCE_THRESHOLD = 50
 
-# Default delta for range chart updates
+# Default delta for range chart updates.
 DEFAULT_DELTA = 0.05
 
-# Maximum outs considered when estimating drawing equity
+# Maximum outs considered when estimating drawing equity.
 MAX_OUTS = 20
 
-# Fold-bias constants
+# Fold-bias constants.
 
-# At difficulty 0  a bot has a FOLD_BIAS_MAX chance each decision of
-# converting a marginal fold into a call.  At difficulty 100 the chance
-# drops to FOLD_BIAS_MIN, keeping high-difficulty bots close to optimal.
-FOLD_BIAS_MAX = 0.40  # 40% override at difficulty 0
-FOLD_BIAS_MIN = 0.04  # 4% override at difficulty 100
-
-# PokerPlayer
+""" At difficulty 0  a bot has a FOLD_BIAS_MAX chance each decision of
+converting a marginal fold into a call.  At difficulty 100 the chance
+drops to FOLD_BIAS_MIN, keeping high-difficulty bots close to optimal."""
+FOLD_BIAS_MAX = 0.40  # 40% override at difficulty 0.
+FOLD_BIAS_MIN = 0.04  # 4% override at difficulty 100.
 
 
 class PokerPlayer:
@@ -6674,7 +6593,7 @@ class PokerPlayer:
         self.is_bot = bool(is_bot)
         self.difficulty = difficulty
 
-        # Deck manager used for hand evaluation utilities
+        # Deck manager used for hand evaluation utilities.
         self.dm = CasinoDeckManager(game_mode="poker")
 
         if not self.is_bot:
@@ -6682,11 +6601,8 @@ class PokerPlayer:
         else:
             self.init_bot()
 
-        # Active range starts as a session copy of base_range so temporary
-        # modifications do not corrupt the persisted range.
+        # Active range starts as a session copy of base_range.
         self.active_range = self.base_range.copy()
-
-    # Initialisation helpers
 
     def init_player(self):
         """
@@ -6723,9 +6639,9 @@ class PokerPlayer:
         stored_range = record["player_range"]
 
         if self.statistics["rounds_played"] <= EXPERIENCE_THRESHOLD:
-            # Inexperienced: use a default range for gameplay but retain
-            # the stored range so it is updated correctly in the database.
+            # Inexperienced: use a default range for gameplay.
             self.base_range = generate_range_chart()
+            # Retain the stored range so it is updated correctly in the database.
             self.stored_range = stored_range if stored_range else generate_range_chart()
         else:
             self.base_range = stored_range if stored_range else generate_range_chart()
@@ -6749,7 +6665,7 @@ class PokerPlayer:
         self.dbm = None
         self.record = None
 
-        # Tendency parameters interpolated by difficulty
+        # Tendency parameters interpolated by difficulty.
         self.vpip = difficulty_curve(self.difficulty, 35, 18)
         self.pfr = difficulty_curve(self.difficulty, 10, 20)
         self.aggression_factor = self.pfr / max(1.0, self.vpip)
@@ -6765,8 +6681,6 @@ class PokerPlayer:
         }
 
         self.bot_characteristics = BotCharacteristics(self.difficulty)
-
-    # Decision entry point
 
     def decide(
         self, *, player_hand, community_cards, opponents, pot, to_call, balance, street
@@ -6805,8 +6719,6 @@ class PokerPlayer:
             bot=self.bot_characteristics,
             street=street,
         )
-
-    # State management
 
     def refresh_from_db(self):
         """
@@ -6850,8 +6762,6 @@ class PokerPlayer:
         """
         self.active_range = self.base_range.copy()
 
-    # Introspection
-
     def fetch_player_info(self):
         """
         Returns a summary dictionary of this player's characteristics and
@@ -6892,9 +6802,6 @@ class PokerPlayer:
         )
 
 
-# BotCharacteristics
-
-
 class BotCharacteristics:
     """
     Parameters shaping AI decision-making according to difficulty. Higher
@@ -6913,25 +6820,25 @@ class BotCharacteristics:
         self.is_bot = True
         self.difficulty = difficulty
 
-        # Accuracy / simulation depth
+        # Accuracy / simulation depth.
         self.simulations = int(difficulty_curve(difficulty, 500, 15000))
 
-        # Decision noise (lower = sharper)
+        # Decision noise, lower value means sharper decisions.
         self.noise_level = difficulty_curve(difficulty, 0.30, 0.02)
 
-        # Bluffing
+        # Bluffing.
         self.bluff_multiplier = difficulty_curve(difficulty, 0.6, 1.6)
 
-        # Risk appetite
+        # Risk appetite.
         self.risk_tolerance = difficulty_curve(difficulty, 0.85, 1.5)
 
-        # Minimum Defence Frequency scaling
+        # Minimum Defence Frequency scaling.
         self.mdf_threshold = difficulty_curve(difficulty, 0.9, 0.3)
 
-        # Range discipline
+        # Range discipline.
         self.range_adherence = difficulty_curve(difficulty, 0.6, 0.95)
 
-        # Fold-bias: easy bots are reluctant to fold; hard bots are rational
+        # Fold-bias. easy bots are reluctant to fold and hard bots are more rational.
         self.fold_bias = difficulty_curve(difficulty, FOLD_BIAS_MAX, FOLD_BIAS_MIN)
 
     def __repr__(self):
@@ -6949,9 +6856,6 @@ class BotCharacteristics:
         )
 
 
-# Range chart utilities
-
-
 def generate_range_chart():
     """
     Generates a default poker range chart mapping all 169 distinct starting
@@ -6965,12 +6869,7 @@ def generate_range_chart():
     ranks = "23456789TJQKA"
     for i, r1 in enumerate(ranks[::-1]):
         for j, r2 in enumerate(ranks[::-1]):
-            if i < j:
-                hand = r1 + r2 + "s"
-            elif i > j:
-                hand = r2 + r1 + "o"
-            else:
-                hand = r1 + r2
+            hand = (r1 + r2 + "s") if i < j else (r2 + r1 + "o") if i > j else (r1 + r2)
             chart[hand] = 0.0
     return chart
 
@@ -7088,9 +6987,6 @@ def update_range(chart, action, hand, delta=DEFAULT_DELTA):
     return updated
 
 
-# Maths helpers
-
-
 def difficulty_curve(level, low, high):
     """
     Linearly interpolates between 'low' and 'high' based on a difficulty
@@ -7147,9 +7043,6 @@ def describe_hand(player_hand, community_cards):
     except Exception as exception:
         print(exception)
         return "Unknown"
-
-
-# Monte Carlo equity estimation
 
 
 def build_rank_index(available):
@@ -7290,10 +7183,12 @@ def notation_to_cards_with_index(hand_notation, rank_index, dm):
     if not cards1 or not cards2:
         return None
 
-    if suitedness == "s":
-        combos = [(c1, c2) for c1 in cards1 for c2 in cards2 if c1[1] == c2[1]]
-    else:
-        combos = [(c1, c2) for c1 in cards1 for c2 in cards2 if c1[1] != c2[1]]
+    combos = [
+        (c1, c2)
+        for c1 in cards1
+        for c2 in cards2
+        if (c1[1] == c2[1]) == (suitedness == "s")
+    ]
 
     if not combos:
         return None
@@ -7365,9 +7260,6 @@ def collective_hand_equity(player_hand, community_cards, opponent_ranges, bot=No
     for opp_range in opponent_ranges:
         joint *= hand_equity(player_hand, community_cards, opp_range, bot)
     return joint
-
-
-# Pot-odds and expected value helpers
 
 
 def pot_odds(current_pot, call_amount):
@@ -7442,23 +7334,23 @@ def estimate_outs(player_hand, community_cards):
     suits = [c[1] for c in all_cards]
     outs = 0
 
-    # Flush draw
+    # Flush draw.
     for s in set(suits):
         if suits.count(s) == 4:
             outs += 9
 
-    # Straight draws
+    # Straight draws.
     rank_nums = sorted(set(rank_value(r) for r in ranks))
     for combo in combinations(rank_nums, min(4, len(rank_nums))):
         if len(combo) < 4:
             continue
         low, high = min(combo), max(combo)
         if high - low == 3:
-            outs += 8  # Open-ended
+            outs += 8
         elif high - low == 4:
-            outs += 4  # Gutshot
+            outs += 4
 
-    # Overcards
+    # Overcards.
     community_ranks = [c[0] for c in community_cards]
     for card in player_hand:
         if card[0] not in community_ranks:
@@ -7530,9 +7422,6 @@ def optimal_bluff_ratio(pot, bet):
     return bet / (pot + bet)
 
 
-# Bluffing decisions
-
-
 def should_bluff_call(pot, to_call, equity, opponent_fold_to_raise, bot):
     """
     Determines whether the bot should call with the intention of bluffing
@@ -7578,9 +7467,6 @@ def should_bluff_raise(pot, raise_amount, equity, opponent_fold_to_raise, bot):
     return random.random() < adjusted
 
 
-# Raise sizing
-
-
 def calculate_raise_amount(pot, equity, balance, bot):
     """
     Calculates an appropriate raise amount based on pot size, hand equity,
@@ -7609,9 +7495,6 @@ def calculate_raise_amount(pot, equity, balance, bot):
     return int(proposed / 5) * 5
 
 
-# Notation helper
-
-
 def cards_to_notation(player_hand):
     """
     Converts a two-card hole hand into its standard notation string with
@@ -7637,9 +7520,6 @@ def cards_to_notation(player_hand):
     if rank1 == rank2:
         return rank1 + rank2
     return rank1 + rank2 + ("s" if suit1 == suit2 else "o")
-
-
-# Decision function
 
 
 def make_decision(
@@ -7737,15 +7617,15 @@ def make_decision(
     """
     error_prob = max(0.0, 1.0 - bot.difficulty / 100.0)
 
-    # Step 1: Preflop range check
+    # Preflop range check.
     if street == "preflop" and player_range is not None:
         hand_notation = cards_to_notation(player_hand)
         hand_strength_in_range = player_range.get(hand_notation, 0.0)
 
         if hand_strength_in_range == 0.0:
-            # Hand not in range — fold unless range deviation roll passes
+            # Hand not in range, fold unless range deviation roll passes.
             if random.random() > (1.0 - bot.range_adherence):
-                pass  # Deviate: play as a bluff
+                pass  # Deviate, play as a bluff.
             else:
                 return ("fold",) if to_call > 0 else ("call",)
 
@@ -7755,7 +7635,7 @@ def make_decision(
         hand_strength_in_range = 0.5
         range_multiplier = 1.0
 
-    # Step 2: Equity calculation
+    # Equity calculation.
     equity = collective_hand_equity(
         player_hand,
         community_cards,
@@ -7769,7 +7649,7 @@ def make_decision(
     if random.random() < error_prob:
         equity *= random.uniform(0.5, 0.9)
 
-    # Step 3: Premium river hands (high difficulty only)
+    # Premium river hands (high difficulty only).
     if street == "river":
         hand_type = describe_hand(player_hand, community_cards)
         if bot.difficulty >= 85 and bot.risk_tolerance >= 1.0:
@@ -7779,11 +7659,11 @@ def make_decision(
     else:
         hand_type = None
 
-    # Step 4: Pot-odds maths
+    # Pot-odds maths.
     pot_odds_required = pot_odds(pot, to_call)
     ev_call = expected_value_of_call(pot, to_call, equity)
 
-    # Step 5: Drawing logic (flop / turn only)
+    # Drawing logic (flop and turn only).
     if street in ("flop", "turn"):
         outs = estimate_outs(player_hand, community_cards)
         cards_remaining = 52 - len(player_hand) - len(community_cards)
@@ -7791,17 +7671,17 @@ def make_decision(
         draw_equity = probability_to_hit_by_river(outs, cards_remaining, cards_to_come)
         equity = max(equity, draw_equity)
 
-    # Step 6: Value raise with strong hands
+    # Value raise with strong hands.
     if equity > 0.65 and balance > 0:
         raise_amt = calculate_raise_amount(pot, equity, balance, bot)
         if 0 < raise_amt <= balance:
             return ("raise", raise_amt)
 
-    # Step 7: Clear positive-EV call
+    # Clear positive-EV call.
     if bot.difficulty >= 50 and ev_call > 0:
         return ("call",)
 
-    # Step 8: Minimum Defence Frequency
+    # Minimum Defence Frequency.
     mdf = minimum_defense_frequency(to_call, pot) * bot.mdf_threshold
     if equity >= pot_odds_required:
         mdf_check = mdf
@@ -7810,7 +7690,7 @@ def make_decision(
         if random.random() < mdf_check:
             return ("call",)
 
-    # Step 9: Bluffing logic
+    # Bluffing logic.
     if opponents:
         avg_fold_to_raise = sum(o.fold_to_raise for o in opponents) / len(opponents)
         avg_call_when_weak = sum(o.call_when_weak for o in opponents) / len(opponents)
@@ -7834,7 +7714,7 @@ def make_decision(
             should_attempt_bluff = True
             bluff_action = "call"
 
-    # Low-difficulty bots make random bluffing errors
+    # Low-difficulty bots make random bluffing errors.
     if random.random() < error_prob:
         should_attempt_bluff = random.choice([True, False])
         bluff_action = random.choice(["raise", "call"])
@@ -7846,15 +7726,15 @@ def make_decision(
         elif bluff_action == "call" and to_call <= balance:
             return ("call",)
 
-    # Step 10: Fold bias — difficulty-scaled anti-fold nudge
-    # All bots have a small tendency to call rather than fold in marginal
-    # spots. The bias is much stronger for easy bots (who play too loose)
-    # and diminishes toward the threshold FOLD_BIAS_MIN for hard bots.
-    # Only applied when the bot can actually afford the call.
+    # Fold bias
+    """ All bots have a small tendency to call rather than fold in marginal
+    spots. The bias is much stronger for easy bots
+    and diminishes toward the threshold FOLD_BIAS_MIN for hard bots.
+    Only applied when the bot can actually afford the call."""
     if to_call <= balance and random.random() < bot.fold_bias:
         return ("call",)
 
-    # Step 11: Default action — fold
+    # Default action — fold
     return ("fold",)
 
 
@@ -7862,9 +7742,8 @@ def make_decision(
 # harrogate_hold_em_V6.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-# Bot roster
 
-DEFAULT_BOT_ROSTER = [
+DEFAULT_BOT_LIST = [
     "Angus",
     "Angeban",
     "Grey",
@@ -7877,16 +7756,10 @@ DEFAULT_BOT_ROSTER = [
 ]
 
 
-# Tournament win-criteria constants
-
-
 WIN_CRITERIA_ELIMINATE_ALL = "eliminate_all"
 WIN_CRITERIA_EARN_TARGET = "earn_target"
 WIN_CRITERIA_SURVIVE_ROUNDS = "survive_rounds"
 WIN_CRITERIA_LAST_MAN_BLIND = "last_man_blind"
-
-
-# TournamentManager
 
 
 class TournamentManager:
@@ -7937,7 +7810,7 @@ class TournamentManager:
         self.tournament_over = False
         self.tournament_won = False
 
-    # Blind escalation properties
+    # Blind escalation properties.
 
     @property
     def current_small_blind(self):
@@ -7968,7 +7841,7 @@ class TournamentManager:
         escalation = max(1, (self.current_round - 1) // 3)
         return int(self.base_big_blind * (1.5**escalation))
 
-    # State mutators
+    # State mutators.
 
     def record_round_start(self, human_balance):
         """
@@ -8086,9 +7959,6 @@ class TournamentManager:
         return f"Tournament Over  |  Wins: {self.round_wins}/{self.total_rounds}"
 
 
-# HarrogateHoldEm
-
-
 class HarrogateHoldEm:
     """
     GUI implementation of Harrogate Hold 'Em poker. Handles game flow,
@@ -8115,27 +7985,21 @@ class HarrogateHoldEm:
             bots (list or None): List of '[name, difficulty]' pairs for
                                  bot opponents.  If None, bots are
                                  auto-generated from settings and
-                                 DEFAULT_BOT_ROSTER.
+                                 DEFAULT_BOT_LIST.
         """
         self.user_data = user_data
 
         self.hhe_root = Tk()
         self.hhe_root.title("One More Time Casino — Harrogate Hold 'Em")
-        try:
-            self.hhe_root.attributes("-zoomed", True)  # MacOS/Linux
-        except Exception:
-            pass
-        try:
-            self.hhe_root.state("zoomed")  # Windows
-        except Exception:
-            pass
+        width = self.hhe_root.winfo_screenwidth()
+        height = self.hhe_root.winfo_screenheight()
+        self.hhe_root.geometry(f"{width}x{height}+0+0")
+        self.hhe_root.focus_force()
 
-        # Log queue
         self.log_queue = []
         self.log_active = False
         self.log_delay_ms = int(DELAY * 1000)
 
-        # Bot decision queue
         self.bot_decision_queue = Queue()
         self.bot_thinking = False
 
@@ -8146,17 +8010,17 @@ class HarrogateHoldEm:
 
         self.styles = fetch_font_settings(self.hhe_root)
 
-        # Auto-generate bots if not supplied
+        # Auto-generate bots if not supplied.
         if bots is None:
             bot_count = settings.get("bot_count", 3)
-            difficulty = settings.get("bot_difficulty", 50)
-            roster = list(DEFAULT_BOT_ROSTER)
+            roster = list(DEFAULT_BOT_LIST)
             random.shuffle(roster)
             bots = [
-                [roster[index % len(roster)], difficulty] for index in range(bot_count)
+                [roster[index % len(roster)], random.randint(20, 60)]
+                for index in range(bot_count)
             ]
 
-        # Tournament setup
+        # Tournament setup.
         self.tournament_mode = settings.get("tournament_mode", False)
         if self.tournament_mode:
             self.tournament = TournamentManager(settings)
@@ -8167,12 +8031,12 @@ class HarrogateHoldEm:
             self.small_blind_value = settings.get("small_blind", 50)
             self.big_blind_value = settings.get("big_blind", 100)
 
-        # Build bot lookup
+        # Build bot lookup.
         self.bots = {}
         for index, bot in enumerate(bots[: settings.get("bot_count", len(bots))]):
             self.bots[index] = {"name": bot[0], "difficulty": bot[1]}
 
-        # Build player list
+        # Build player list.
         self.players = []
 
         player_model = None
@@ -8253,24 +8117,22 @@ class HarrogateHoldEm:
 
         self.action_buttons = []
 
-        # AFTER
         self.colour_scheme = {
-            # Left-hand panels
-            "top_left_bg": "#252525",
-            "bottom_left_bg": "#1e1e1e",
-            # Right-hand panels
+            "top_left_bg": "#ddd3bc",
+            "bottom_left_bg": "#e6dcc6",
+            # Right-hand panels.
             "top_right_bg": "#2e7d73",
             "middle_right_bg": "#286b62",
             "bottom_right_bg": "#5b2a3c",
-            # Widgets
+            # Interactive widgets.
             "widget_bg": "#6a2e4f",
-            "text_bg": "#1a1a1a",
-            "text_fg": "#e8e8e8",
-            "left_fg": "#e8e8e8",
-            # Log panel
+            "text_bg": "#141414",
+            "text_fg": "#f2f2f2",
+            "left_fg": "#1e1e1e",
+            # Log panel.
             "log_bg": "#1a1a1a",
             "log_fg": "#cfcfcf",
-            # Log entry
+            # Log entry.
             "start_bg": "#243b7a",
             "start_fg": "#ffffff",
             "win_bg": "#244d3a",
@@ -8288,15 +8150,11 @@ class HarrogateHoldEm:
         set_view(self, self.harrogate_hold_em_screen)
         self.check_bot_decision_queue()
 
-    # Public entry point
-
     def run(self):
         """
         Starts the tkinter main event loop for the Harrogate Hold 'Em window.
         """
         self.hhe_root.mainloop()
-
-    # Main screen layout
 
     def harrogate_hold_em_screen(self, frame):
         """
@@ -8320,7 +8178,6 @@ class HarrogateHoldEm:
         frame.rowconfigure(1, weight=1)
         frame.rowconfigure(2, weight=1)
 
-        # Top-left
         top_left = Frame(frame, bd=2, relief="sunken", bg=cs["top_left_bg"])
         top_left.grid(column=0, row=0, sticky="nsew", padx=5, pady=5)
 
@@ -8380,7 +8237,6 @@ class HarrogateHoldEm:
         if self.tournament_mode:
             self.tournament_label.pack(fill="x", padx=10, pady=4)
 
-        # Bottom-left
         bottom_left = Frame(frame, bd=2, relief="sunken", bg=cs["bottom_left_bg"])
         bottom_left.grid(column=0, row=1, rowspan=2, sticky="nsew", padx=5, pady=5)
 
@@ -8410,7 +8266,6 @@ class HarrogateHoldEm:
             ),
         )
 
-        # Top-right
         top_right = Frame(frame, bd=2, relief="sunken", bg=cs["top_right_bg"])
         top_right.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 
@@ -8461,7 +8316,6 @@ class HarrogateHoldEm:
         self.current_bet_label = cast(Label, labels[2])
         self.blinds_label = cast(Label, labels[3])
 
-        # Middle-right
         mid_right = Frame(frame, bd=2, relief="sunken", bg=cs["middle_right_bg"])
         mid_right.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
         mid_right.columnconfigure(0, weight=1)
@@ -8499,11 +8353,9 @@ class HarrogateHoldEm:
 
         self.build_players_panel()
 
-        # Bottom-right
         bot_right = Frame(frame, bd=2, relief="sunken", bg=cs["bottom_right_bg"])
         bot_right.grid(row=2, column=1, sticky="nsew", padx=5, pady=5)
 
-        # Functions for user bet adjustment
         def adjust_current_bet(amount):
             try:
                 value = int(self.bet_var.get())
@@ -8641,8 +8493,6 @@ class HarrogateHoldEm:
         self.update_labels()
         self.update_button_states()
 
-    # Players panel helper
-
     def build_players_panel(self):
         """
         Rebuilds the players list panel from scratch inside self.players_frame.
@@ -8760,8 +8610,6 @@ class HarrogateHoldEm:
                 fill="x", padx=8, pady=2
             )
 
-    # UI update helpers
-
     def update_ui(self):
         """
         Convenience wrapper that refreshes all three UI components —
@@ -8809,14 +8657,12 @@ class HarrogateHoldEm:
                 text="Harrogate Hold 'Em"
                 + ("  —  TOURNAMENT" if self.tournament_mode else "")
             )
-            if self.tournament_mode and self.tournament:
-                board_text = (
-                    f"Tournament Round "
-                    f"{self.tournament.current_round}/"
-                    f"{self.tournament.total_rounds}"
-                )
-            else:
-                board_text = "Casual mode."
+            board_text = (
+                f"Tournament Round {self.tournament.current_round}/{self.tournament.total_rounds}"
+                if self.tournament_mode and self.tournament
+                else "Casual mode."
+            )
+
             self.board_label.config(text=board_text)
             self.player_blinds_label.config(text="")
             self.pot_size_label.config(text="Waiting for round to commence…")
@@ -8912,8 +8758,6 @@ class HarrogateHoldEm:
         """
         self.build_players_panel()
 
-    # Player helpers
-
     def reset_players(self):
         """
         Prepares all players for a new round by clearing their hole cards,
@@ -8977,8 +8821,6 @@ class HarrogateHoldEm:
         self.player_turn = True
         self.update_ui()
 
-    # Admin helper
-
     def admin_modify_bet(self, frame):
         """
         Opens a modal Toplevel dialog that allows the administrator to set
@@ -8995,13 +8837,13 @@ class HarrogateHoldEm:
         balance_window.title("Set Starting Balance")
         balance_window.grab_set()
         balance_window.protocol("WM_DELETE_WINDOW", lambda: None)
-        balance_window.configure(bg=self.colour_scheme["left_bg"])
+        balance_window.configure(bg=self.colour_scheme["top_left_bg"])
         try:
-            balance_window.attributes("-zoomed", True)  # MacOS/Linux
+            balance_window.attributes("-zoomed", True)  # MacOS/Linux.
         except Exception:
             pass
         try:
-            balance_window.state("zoomed")  # Windows
+            balance_window.state("zoomed")  # Windows.
         except Exception:
             pass
 
@@ -9009,7 +8851,7 @@ class HarrogateHoldEm:
             balance_window,
             text="Enter starting balance (£):",
             font=self.styles["text"],
-            bg=self.colour_scheme["left_bg"],
+            bg=self.colour_scheme["top_left_bg"],
             fg=self.colour_scheme["text_fg"],
         ).pack(pady=8)
 
@@ -9073,8 +8915,6 @@ class HarrogateHoldEm:
             command=submit_balance,
         ).pack(pady=10)
 
-    # Logging
-
     def log_message(
         self,
         text,
@@ -9123,7 +8963,7 @@ class HarrogateHoldEm:
         self.log_active = True
         item = self.log_queue.pop(0)
 
-        # Accept both 6-tuple and 7-tuple entries
+        # Accept both 6-tuple and 7-tuple entries.
         if len(item) == 6:
             text, round_start, is_win, is_loss, tie, is_thinking = item
             is_tournament = False
@@ -9217,8 +9057,6 @@ class HarrogateHoldEm:
         self.hhe_root.update_idletasks()
         if getattr(self, "log_canvas", None) and self.log_canvas.winfo_exists():
             self.log_canvas.yview_moveto(1.0)
-
-    # Balance & database helpers
 
     def return_balance(self):
         """
@@ -9326,8 +9164,6 @@ class HarrogateHoldEm:
                     )
                 break
 
-    # Round management
-
     def check_round(self):
         """
         Initiates a new round. Clears any pending log entries, resets
@@ -9355,10 +9191,10 @@ class HarrogateHoldEm:
         adding the amounts to the pot, and setting current_bet to the
         big blind amount.
         """
-        # Advance dealer button each round for proper rotation
+        # Advance dealer button each round for rotation.
         self.initial_position = (self.initial_position + 1) % self.player_count
 
-        # Small blind: first active player after dealer
+        # Small blind.
         for attempt in range(self.player_count):
             index = (self.initial_position + 1 + attempt) % self.player_count
             if self.players[index]["status"] != "OUT":
@@ -9366,7 +9202,7 @@ class HarrogateHoldEm:
                 self.small_blind_player = self.players[index]
                 break
 
-        # Big blind: first active player after small blind
+        # Big blind.
         for attempt in range(self.player_count):
             index = (self.small_blind_position + 1 + attempt) % self.player_count
             if self.players[index]["status"] != "OUT":
@@ -9374,7 +9210,7 @@ class HarrogateHoldEm:
                 self.big_blind_player = self.players[index]
                 break
 
-        # Action starts: first active player after big blind
+        # Action starts.
         for attempt in range(self.player_count):
             index = (self.big_blind_position + 1 + attempt) % self.player_count
             if self.players[index]["status"] != "OUT":
@@ -9383,7 +9219,7 @@ class HarrogateHoldEm:
 
         self.action_position = self.current_position
 
-        # Post blinds
+        # Post blinds.
         for player, amount in (
             (self.small_blind_player, self.small_blind_value),
             (self.big_blind_player, self.big_blind_value),
@@ -9464,8 +9300,6 @@ class HarrogateHoldEm:
         self.street_sequence = ["preflop", "flop", "turn", "river", "showdown"]
         self.current_street_index = 0
         self.next_street()
-
-    # Betting & decision loop
 
     def decisions(self):
         """
@@ -9764,8 +9598,6 @@ class HarrogateHoldEm:
         )
         self.modify_player(player, status="OUT")
 
-    # Street management
-
     def next_street(self):
         """
         Advances to the next street in the street sequence (preflop →
@@ -9837,8 +9669,6 @@ class HarrogateHoldEm:
             return
 
         self.next_street()
-
-    # Showdown
 
     def showdown(self):
         """
@@ -9930,8 +9760,6 @@ class HarrogateHoldEm:
             else:
                 self.hhe_root.after(delay, lambda: self.end_round(win=True))
 
-    # Statistics
-
     def update_user_poker_data(self):
         """
         Aggregates the human player's in-round action log and updates
@@ -9972,8 +9800,6 @@ class HarrogateHoldEm:
                     player["user_id"], self.current_round_number
                 )
                 break
-
-    # End round & tournament progression
 
     def end_round(
         self, *, win=False, loss=False, tie=False, split_pot=False, split_count=1
@@ -10033,7 +9859,7 @@ class HarrogateHoldEm:
         self.current_round_number += 1
         self.actions_logged = []
 
-        # Tournament round evaluation
+        # Tournament round evaluation.
         if self.tournament_mode and self.tournament:
             round_won = self.tournament.evaluate_round_win(human, self.players)
             result = self.tournament.advance_round(round_won)
@@ -10047,11 +9873,11 @@ class HarrogateHoldEm:
                 )
                 return
 
-            # Update blinds for next round
+            # Update blinds for next round.
             self.small_blind_value = self.tournament.current_small_blind
             self.big_blind_value = self.tournament.current_big_blind
 
-        # Schedule teardown after log queue drains
+        # Schedule teardown after log queue drains.
         delay = self.log_delay_ms * (len(self.log_queue) + 1)
         self.hhe_root.after(delay, self.finish_end_round)
 
@@ -10163,8 +9989,6 @@ class HarrogateHoldEm:
             administrator=True if self.user_data.get("administrator") else False,
             user_data=self.user_data,
         )
-
-    # Human player action buttons
 
     def fold(self):
         """
@@ -10284,7 +10108,4 @@ class HarrogateHoldEm:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 if __name__ == "__main__":
-    if "--admin" in sys.argv:
-        Admin_Interface()
-    else:
-        User_Interface()
+    Admin_Interface() if "--admin" in sys.argv else User_Interface()

@@ -1,13 +1,14 @@
+import sys
 import os
-from tkinter import Tk, Label, Button, Frame, messagebox, filedialog
+from tkinter import Tk, messagebox, filedialog
 from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 from datetime import datetime
-from gui_helpers_V6 import set_view, fetch_font_settings
+from gui_helpers_V6 import  CS, create_window, preset_label, preset_button, set_view
 
 
-class Encryption_Software:
+class EncryptionSoftware:
     """
     GUI tool for hybrid RSA/AES file encryption and decryption. Used by
     administrators to secure database files or other data.
@@ -16,48 +17,52 @@ class Encryption_Software:
     def __init__(self):
         """
         Initialises the root window, applies GUI styles, logs the system access
-        event via DatabaseManagement, sets the AES key placeholder to None, and
+        event via DatabaseManagement, sets the AES key placeholder to None and
         starts the main interface.
         """
+        self.window_bg = CS["admin"]
         self.enc_soft_root = Tk()
-        self.enc_soft_root.title("One More Time Casino - Encryption Software")
-
-        self.styles = fetch_font_settings(self.enc_soft_root)
+        self.main_frame, self.styles = create_window(
+            self.enc_soft_root,
+            "One Less Time Casino - Encryption Software",
+            self.window_bg,
+            is_main_frame=True,
+        )
+        self.enc_soft_root.protocol(
+            "WM_DELETE_WINDOW", lambda: (self.enc_soft_root.quit(), sys.exit(0))
+        )
 
         try:
-            from database_management_and_logging_V6 import DatabaseManagement
-
-            self.dbm = DatabaseManagement()
+            from database_management_and_logging_V6 import DatabaseManagement, DB_PATH
+            
+            self.dbm = DatabaseManagement(DB_PATH)
             self.dbm.admin_accessed_system("Encryption Software")
-        except:
-            # In case that this software is not used with the casino software.
-            # However, it will still require 'gui_helpers_V6.py' to run, so it is not fully standalone.
+        except Exception:
             pass
 
         self.aes_key = None
 
-        self.main_frame = Frame(self.enc_soft_root)
-        self.main_frame.pack(expand=True, fill="both", padx=20, pady=20)
-
         self.current_section_frame = None
 
-        set_view(self, self.create_main_interface)
+        set_view(self, self.create_main_menu)
 
         self.enc_soft_root.mainloop()
 
-    def create_main_interface(self, frame):
+    def create_main_menu(self, frame):
         """
         Builds the main menu interface with buttons for all available
         operations: generating an RSA keypair, generating and encrypting an AES
         key, loading an encrypted AES key, encrypting a file, decrypting a
-        file, and exiting.
+        file and exiting.
 
         Args:
             frame (Frame): The parent frame to build the view into.
         """
-        Label(frame, text="Encryption Software", font=self.styles["heading"]).pack(
-            pady=10
-        )
+        preset_label(
+            frame,
+            text="Encryption Software",
+            font=self.styles["heading"],
+        ).pack(pady=10)
 
         buttons = [
             ("Generate RSA Keypair", self.generate_rsa_keys),
@@ -69,8 +74,11 @@ class Encryption_Software:
         ]
 
         for text, command in buttons:
-            Button(
-                frame, text=text, font=self.styles["button"], width=40, command=command
+            preset_button(
+                frame,
+                text=text,
+                width=40,
+                command=command,
             ).pack(pady=5)
 
     def generate_rsa_keys(self):
@@ -114,7 +122,7 @@ class Encryption_Software:
     def generate_encrypted_aes_key(self):
         """
         Generates a random 256-bit AES key, encrypts it using a user-selected
-        RSA public key via PKCS1-OAEP, and saves the encrypted result as a
+        RSA public key via PKCS1-OAEP and saves the encrypted result as a
         binary file to a user-selected directory. The filename includes a
         timestamp in DD-Month-YYYY format. Displays a success message with the
         saved file path, or an error message on failure.
@@ -160,7 +168,7 @@ class Encryption_Software:
     def load_rsa_aes_key(self):
         """
         Prompts the user to select an RSA private key file and an encrypted AES
-        key file, then decrypts the AES key using PKCS1-OAEP and stores it in
+        key file and then decrypts the AES key using PKCS1-OAEP and stores it in
         memory as self.aes_key. The loaded key is used for subsequent encrypt
         and decrypt operations. Displays a success message on completion, or an
         error message if decryption fails.
@@ -200,7 +208,7 @@ class Encryption_Software:
         """
         Encrypts a user-selected file using the currently loaded AES key in EAX
         mode. The encrypted output is saved to the same location with a .enc
-        extension appended. The file contains the nonce, authentication tag, and
+        extension appended. The file contains the nonce, authentication tag and
         ciphertext concatenated in that order. Displays a warning if no AES key
         is loaded, a success message with the output path on completion, or an
         error message on failure.
@@ -242,8 +250,8 @@ class Encryption_Software:
     def decrypt_file(self):
         """
         Decrypts a user-selected .enc file using the currently loaded AES key
-        in EAX mode. Reads the nonce, authentication tag, and ciphertext from
-        the file, verifies the authentication tag, and writes the decrypted
+        in EAX mode. Reads the nonce, authentication tag and ciphertext from
+        the file, verifies the authentication tag and writes the decrypted
         plaintext to disk. The output path is the input path with the .enc
         extension removed, or with .dec appended if the file does not end in
         .enc. Displays a warning if no AES key is loaded, a success message
@@ -288,4 +296,4 @@ class Encryption_Software:
 
 
 if __name__ == "__main__":
-    Encryption_Software()
+    EncryptionSoftware()

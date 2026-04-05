@@ -4,10 +4,10 @@ def linear_search(array, key, value):
     Checks every element from a starting index 0 until the target is found.
     Time complexity: O(n).
 
-    Arg:
+    Args:
         array (list): A list of dictionaries to search.
         key (str): The dictionary key to inspect.
-        value : The value to search for.
+        value (any): The value to search for.
 
     Returns:
         int: Index of the first matching element, or -1 if not found.
@@ -22,7 +22,7 @@ def bubble_sort(array, key, reverse):
     """
     Sorts a list of dictionaries by a given key using bubble sort.
     Compares adjacent pairs and swaps if out of order.
-    Time complexity: O(n^2)
+    Time complexity: O(n^2).
 
     Args:
         array (list): List of dictionaries to sort.
@@ -38,15 +38,15 @@ def bubble_sort(array, key, reverse):
         swapped = False
         for index in range(
             array_length - 1 - pass_num
-        ):  # Last 'pass_num' elements are already sorted
+        ):  # Last 'pass_num' elements are already sorted.
             value_a = array[index].get(key)
             value_b = array[index + 1].get(key)
             if (reverse and value_a < value_b) or (
                 not reverse and value_a > value_b
-            ):  # Compare based on sort order
+            ):  # Compare based on sort order.
                 array[index], array[index + 1] = array[index + 1], array[index]
                 swapped = True
-        if not swapped:  # No swaps means the array is already sorted
+        if not swapped:  # No swaps means the array is already sorted.
             break
     return array
 
@@ -68,7 +68,7 @@ def binary_search_by_id(array, target_id):
         mid = (low + high) // 2
         mid_id = array[mid].get("user_id", -1)
         if mid_id == target_id:
-            return mid  # Target founf
+            return mid  # Target found.
         elif mid_id < target_id:
             low = mid + 1  # Target is in the upper half.
         else:

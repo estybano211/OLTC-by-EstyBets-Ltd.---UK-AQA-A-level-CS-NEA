@@ -3,10 +3,10 @@ import hashlib
 import hmac
 import binascii
 from tkinter import Entry, Label, Button, Frame, Toplevel, messagebox
-from gui_helpers_V6 import fetch_font_settings
+from gui_helpers_V6 import fetch_text_styles, CS, create_window, preset_label, preset_entry, preset_button
 
-PBKDF2_ITERATIONS = 200_000  # Iterations for password hashing. (Password-Based Key Derivation Function 2)
-SALT_BYTES = 16  # Number of random bytes for salt
+PBKDF2_ITERATIONS = 200_000  # Iterations for password hashing (Password-Based Key Derivation Function 2).
+SALT_BYTES = 16  # Number of random bytes for salt.
 
 
 def hash_function(string):
@@ -28,15 +28,15 @@ def hash_function(string):
     if not isinstance(string, str):
         raise TypeError("Input must be a string.")
 
-    # Generate a random salt
+    # Generate a random salt.
     salt = os.urandom(SALT_BYTES)
 
-    # Derive the hash using PBKDF2-HMAC-SHA256
+    # Derive the hash using PBKDF2-HMAC-SHA256.
     derived_key = hashlib.pbkdf2_hmac(
         "sha256", string.encode("utf-8"), salt, PBKDF2_ITERATIONS
     )
 
-    # Return the salt and hash joined by a '$' character
+    # Return the salt and hash joined by a '$' character.
     return f"{binascii.hexlify(salt).decode()}${binascii.hexlify(derived_key).decode()}"
 
 
@@ -57,13 +57,13 @@ def verify_hash(stored_string, input_string):
     try:
         salt_hex, hash_hex = stored_string.split("$")
     except ValueError:
-        # The stored hash isn't in the expected format
+        # The stored hash isn't in the expected format.
         return False
 
     salt = binascii.unhexlify(salt_hex)
     stored_hash = binascii.unhexlify(hash_hex)
 
-    # Derive a hash using the same salt and parameters
+    # Derive a hash using the same salt and parameters.
     input_hash = hashlib.pbkdf2_hmac(
         "sha256", input_string.encode("utf-8"), salt, PBKDF2_ITERATIONS
     )
@@ -89,24 +89,33 @@ def passwords_confirmation(frame, root):
               - 'password' (str or None): The confirmed password string, or
                 None if the dialog was cancelled or passwords did not match.
     """
-    styles = fetch_font_settings(root)
+    styles = fetch_text_styles(root)
 
-    # Default return state
+    # Default return state.
     password = {"confirmed": False, "password": None}
 
     password_window = Toplevel(frame)
-    password_window.title("Confirm Password")
-
+    create_window(password_window, "Set New Password", CS["pwd_prompt"])
     password_window.protocol("WM_DELETE_WINDOW", lambda: None)
 
-    Label(password_window, text="Enter password:", font=styles["text"]).pack(pady=5)
+    preset_label(
+        password_window,
+        text="Enter password:",
+        font=styles["text"],
+        bg=CS["pwd_prompt"],
+    ).pack(pady=5)
 
-    password_entry_1 = Entry(password_window, show="*", width=30, font=styles["text"])
+    password_entry_1 = preset_entry(password_window, show="*", width=30)
     password_entry_1.pack(pady=5)
 
-    Label(password_window, text="Confirm password:", font=styles["text"]).pack(pady=5)
+    preset_label(
+        password_window,
+        text="Confirm password:",
+        font=styles["text"],
+        bg=CS["pwd_prompt"],
+    ).pack(pady=5)
 
-    password_entry_2 = Entry(password_window, show="*", width=30, font=styles["text"])
+    password_entry_2 = preset_entry(password_window, show="*", width=30)
     password_entry_2.pack(pady=5)
 
     def validate_passwords():
@@ -139,11 +148,11 @@ def passwords_confirmation(frame, root):
     button = Frame(password_window)
     button.pack(pady=10)
 
-    Button(
-        button, text="Submit", font=styles["button"], command=validate_passwords
-    ).pack(side="left", padx=5)
+    preset_button(button, text="Submit", command=validate_passwords).pack(
+        side="left", padx=5
+    )
 
-    Button(button, text="Cancel", font=styles["button"], command=cancel_password).pack(
+    preset_button(button, text="Cancel", command=cancel_password).pack(
         side="left", padx=5
     )
 

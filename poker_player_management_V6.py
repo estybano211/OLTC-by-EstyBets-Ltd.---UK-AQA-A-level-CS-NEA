@@ -2,98 +2,80 @@ from deck_management_V6 import CasinoDeckManager
 import random
 from itertools import combinations
 
-# Constants
-
-# Timeout check: exit Monte Carlo early if no results after this many iterations
+# Timeout check: exit decision making early if no results after this many iterations.
 TIME_OUT = 1000
 
-# Betting size thresholds by difficulty band
+# Betting size thresholds by difficulty band.
 MIN_RAISE_FACTOR_LOW_DIFF = 0.5
 MAX_RAISE_FACTOR_LOW_DIFF = 2.0
 MIN_RAISE_FACTOR_HIGH_DIFF = 0.75
 MAX_RAISE_FACTOR_HIGH_DIFF = 3.0
 
-# Minimum rounds before a player's stored range is used
+# Minimum rounds before a player's stored range is used.
 EXPERIENCE_THRESHOLD = 50
 
-# Default delta for range chart updates
+# Default delta for range chart updates.
 DEFAULT_DELTA = 0.05
 
-# Maximum outs considered when estimating drawing equity
+# Maximum outs considered when estimating drawing equity.
 MAX_OUTS = 20
 
-# Fold-bias constants
+# Difficulty levels (0 to 100) affect bot betting behavior. At difficulty 0, bot makes
+# looser plays (higher fold override bias). At difficulty 100, bot approaches optimal
+# strategy. Constants below control how much the bot deviates from optimal play.
 
-# At difficulty 0  a bot has a FOLD_BIAS_MAX chance each decision of
-# converting a marginal fold into a call.  At difficulty 100 the chance
-# drops to FOLD_BIAS_MIN, keeping high-difficulty bots close to optimal.
-FOLD_BIAS_MAX = 0.40  # 40% override at difficulty 0
-FOLD_BIAS_MIN = 0.04  # 4% override at difficulty 100
+# Fold-bias constants.
+""" At difficulty 0  a bot has a FOLD_BIAS_MAX chance each decision of
+converting a marginal fold into a call.  At difficulty 100 the chance
+drops to FOLD_BIAS_MIN, keeping high-difficulty bots close to optimal."""
+FOLD_BIAS_MAX = 0.40  # 40% override at difficulty 0.
+FOLD_BIAS_MIN = 0.04  # 4% override at difficulty 100.
 
 
-# PokerPlayer
+# POKER PLAYER MANAGEMENT
 
 
-class PokerPlayer:
+class HumanPokerPlayer:
     """
-    Represents a poker participant, either a human or a bot. Human players
-    load and persist statistics while bots generate tendencies procedurally
-    based on difficulty. Handles range charts and decision-making logic.
+    A human player backed by the database.
+
+    Loads real statistics and a persisted range chart on construction.
+    Inexperienced players (rounds_played <= EXPERIENCE_THRESHOLD) receive a
+    default range for gameplay while their stored range continues to be
+    updated in the database.
+
+    Attributes:
+        user_id (int): Database primary key for this player.
+        dbm (DatabaseManagement): Database manager instance.
+        record (dict): Raw record loaded from user_poker_data.
+        vpip (float): Voluntarily Put money In Pot percentage.
+        pfr (float): Pre-Flop Raise percentage.
+        aggression_factor (float): pfr / max(1.0, vpip).
+        fold_to_raise (float): Normalised fold-to-raise frequency.
+        call_when_weak (float): Normalised call-when-weak frequency.
+        statistics (dict): rounds_played and avg_bet_size.
+        base_range (dict): Range chart used as the session baseline.
+        stored_range (dict): Range chart that is persisted to the database.
+        active_range (dict): Session copy of base_range (modified in play).
     """
 
-    def __init__(self, *, user_id=None, is_bot=False, difficulty=None):
+    def __init__(self, *, user_id: int):
         """
-        Initialises a poker player instance, delegating to init_player() for
-        human players or init_bot() for AI bots. Sets active_range to a
-        copy of base_range after initialisation.
+        Initialises a human player by loading their poker data from the database.
 
         Args:
-            user_id: Database ID for human players.  Required if
-                     is_bot=False.
-            is_bot (bool): True for AI opponents, False for human players.
-                           Defaults to False.
-            difficulty (int, optional): Bot difficulty level 0–100.
-                                        Required if is_bot=True.
+            user_id (int): Database primary key for this player.
 
         Raises:
-            ValueError: If user_id is missing for a human player, or
-                        difficulty is missing for a bot.
+            ValueError: If poker data cannot be loaded from the database.
         """
-        self.user_id = user_id
-        self.is_bot = bool(is_bot)
-        self.difficulty = difficulty
-
-        # Deck manager used for hand evaluation utilities
-        self.dm = CasinoDeckManager(game_mode="poker")
-
-        if not self.is_bot:
-            self.init_player()
-        else:
-            self.init_bot()
-
-        # Active range starts as a session copy of base_range so temporary
-        # modifications do not corrupt the persisted range.
-        self.active_range = self.base_range.copy()
-
-    # Initialisation helpers
-
-    def init_player(self):
-        """
-        Initialises a human player by loading their poker data from the
-        database. Sets all statistical attributes from the loaded record.
-        Uses a default range for inexperienced players (<=50 rounds) while
-        preserving the stored range for future updates.
-
-        Raises:
-            ValueError: If user_id is not set or poker data cannot be
-                        loaded from the database.
-        """
-        if not self.user_id:
+        if not user_id:
             raise ValueError("user_id is required for human players.")
 
-        from database_management_and_logging_V6 import DatabaseManagement
-
-        self.dbm = DatabaseManagement()
+        self.user_id = user_id
+        
+        from database_management_and_logging_V6 import DatabaseManagement, DB_PATH
+        self.dbm = DatabaseManagement(DB_PATH)
 
         record = self.dbm.load_user_poker_data(self.user_id)
         if record is None:
@@ -106,84 +88,44 @@ class PokerPlayer:
         self.fold_to_raise = record["fold_to_raise"]
         self.call_when_weak = record["call_when_weak"]
 
-        self.stats = {
+        self.statistics = {
             "rounds_played": record["rounds_played"],
             "avg_bet_size": record["avg_bet_size"],
         }
 
         stored_range = record["player_range"]
 
-        if self.stats["rounds_played"] <= EXPERIENCE_THRESHOLD:
-            # Inexperienced: use a default range for gameplay but retain
-            # the stored range so it is updated correctly in the database.
+        if self.statistics["rounds_played"] <= EXPERIENCE_THRESHOLD:
+            # Inexperienced: use a default range for gameplay.
             self.base_range = generate_range_chart()
+            # Retain the stored range so it is updated correctly in the database.
             self.stored_range = stored_range if stored_range else generate_range_chart()
         else:
             self.base_range = stored_range if stored_range else generate_range_chart()
             self.stored_range = self.base_range
 
-        self.bot_characteristics = None
-
-    def init_bot(self):
-        """
-        Initialises an AI bot with synthetically generated tendencies scaled
-        by difficulty. Higher difficulty bots are tighter, more aggressive,
-        bluff more optimally, and use more Monte Carlo simulations. No
-        database interaction occurs.
-
-        Raises:
-            ValueError: If difficulty is not set.
-        """
-        if self.difficulty is None:
-            raise ValueError("difficulty is required for bot players.")
-
-        self.dbm = None
-        self.record = None
-
-        # Tendency parameters interpolated by difficulty
-        self.vpip = difficulty_curve(self.difficulty, 35, 18)
-        self.pfr = difficulty_curve(self.difficulty, 10, 20)
-        self.aggression_factor = self.pfr / max(1.0, self.vpip)
-        self.bluff_freq = difficulty_curve(self.difficulty, 0.15, 0.40)
-        self.fold_to_raise = difficulty_curve(self.difficulty, 0.60, 0.30)
-        self.call_when_weak = difficulty_curve(self.difficulty, 0.50, 0.20)
-
-        self.base_range = generate_bot_range(self.vpip, self.difficulty)
-
-        self.stats = {
-            "rounds_played": 0,
-            "avg_bet_size": 0,
-        }
-
-        self.bot_characteristics = BotCharacteristics(self.difficulty)
-
-    # Decision entry point
+        # Active range starts as a session copy of base_range.
+        self.active_range = self.base_range.copy()
 
     def decide(
         self, *, player_hand, community_cards, opponents, pot, to_call, balance, street
     ):
         """
-        Makes a poker decision for this player based on the current game
-        state by delegating to make_decision().
+        Makes a poker decision by delegating to make_decision().
 
         Args:
             player_hand (list[str]): The player's two hole cards.
             community_cards (list[str]): The current community cards (0–5).
-            opponents (list[PokerPlayer]): The active opponent players.
+            opponents (list[BasePokerPlayer]): The active opponent players.
             pot (float): The current pot size.
             to_call (float): The amount required to call.
             balance (float): The player's remaining chips.
-            street (str): The current betting round ('preflop', 'flop',
-            'turn', or 'river').
+            street (str): The current betting round ('preflop', 'flop', 'turn', 'river').
 
         Returns:
-            tuple: One of:
-                   - '("fold",)'
-                   - '("call",)'
-                   - '("raise", amount)'
+            tuple: One of ("fold",), ("call",), ("raise", amount).
         """
         opponent_ranges = [opp.active_range for opp in opponents]
-        opponent_count = len(opponents)
 
         return make_decision(
             player_hand=player_hand,
@@ -191,24 +133,20 @@ class PokerPlayer:
             community_cards=community_cards,
             opponent_ranges=opponent_ranges,
             opponents=opponents,
-            opponent_count=opponent_count,
             pot=pot,
             balance=balance,
             to_call=to_call,
-            bot=self.bot_characteristics,
+            bot=None,
             street=street,
         )
 
-    # State management
-
     def refresh_from_db(self):
         """
-        Reloads all player attributes from the database.  Useful when
+        Reloads all player attributes from the database. Useful when
         another process has updated the database since this instance was
-        initialised.  Does nothing for bots or if the database manager is
-        unavailable.
+        initialised.
         """
-        if self.is_bot or not self.dbm or self.user_id is None:
+        if not self.dbm or self.user_id is None:
             return
 
         record = self.dbm.load_user_poker_data(self.user_id)
@@ -222,7 +160,7 @@ class PokerPlayer:
         self.fold_to_raise = record["fold_to_raise"]
         self.call_when_weak = record["call_when_weak"]
 
-        self.stats.update(
+        self.statistics.update(
             {
                 "rounds_played": record["rounds_played"],
                 "avg_bet_size": record["avg_bet_size"],
@@ -238,54 +176,163 @@ class PokerPlayer:
     def reset_active_range(self):
         """
         Resets the active range to a fresh copy of the base range.
-        Should be called between hands to clear any temporary range
-        modifications made during a session.
         """
         self.active_range = self.base_range.copy()
 
-    # Introspection
-
     def fetch_player_info(self):
         """
-        Returns a summary dictionary of this player's characteristics and
-        statistics.
+        Returns a summary dictionary of this player's characteristics.
 
         Returns:
-            dict: Keys — user_id, is_bot, difficulty, vpip, pfr,
-                  aggression_factor, bluff_freq, fold_to_raise,
+            dict: Keys — user_id, vpip, pfr, aggression_factor, fold_to_raise,
                   call_when_weak, rounds_played, record.
         """
         return {
             "record": self.record,
             "user_id": self.user_id,
-            "is_bot": self.is_bot,
+            "vpip": self.vpip,
+            "pfr": self.pfr,
+            "aggression_factor": self.aggression_factor,
+            "fold_to_raise": self.fold_to_raise,
+            "call_when_weak": self.call_when_weak,
+            "rounds_played": self.statistics["rounds_played"],
+        }
+
+    def __repr__(self):
+        """
+        Returns a concise string representation of the human player.
+        """
+        return (
+            f"HumanPokerPlayer(user_id={self.user_id}, "
+            f"VPIP={self.vpip:.1f}%, PFR={self.pfr:.1f}%, "
+            f"Rounds Played={self.statistics['rounds_played']})"
+        )
+
+
+class BotPokerPlayer:
+    """
+    An AI bot player with synthetically generated tendencies.
+
+    All parameters are derived from the difficulty level using
+    difficulty_curve(). No database interaction occurs.
+
+    Attributes:
+        difficulty (int): Bot difficulty level 0–100.
+        bot_characteristics (BotCharacteristics): Full AI parameter set.
+        vpip (float): Voluntarily Put money In Pot percentage.
+        pfr (float): Pre-Flop Raise percentage.
+        aggression_factor (float): pfr / max(1.0, vpip).
+        bluff_freq (float): Base bluffing frequency.
+        fold_to_raise (float): Tendency to fold when facing a raise.
+        call_when_weak (float): Tendency to call with a weak hand.
+        statistics (dict): Placeholder statistics (always zeros for bots).
+        base_range (dict): Hand range generated from vpip and difficulty.
+        active_range (dict): Session copy of base_range.
+    """
+
+    def __init__(self, *, difficulty: int):
+        """
+        Initialises an AI bot with synthetically generated tendencies scaled by difficulty.
+
+        Args:
+            difficulty (int): Bot difficulty level 0–100.
+
+        Raises:
+            ValueError: If difficulty is not set.
+        """
+        if difficulty is None:
+            raise ValueError("difficulty is required for bot players.")
+
+        self.difficulty = difficulty
+        self.user_id = None
+        self.dbm = None
+        self.record = None
+
+        # Tendency parameters interpolated by difficulty.
+        self.vpip = difficulty_curve(self.difficulty, 35, 18)
+        self.pfr = difficulty_curve(self.difficulty, 10, 20)
+        self.aggression_factor = self.pfr / max(1.0, self.vpip)
+        self.bluff_freq = difficulty_curve(self.difficulty, 0.15, 0.40)
+        self.fold_to_raise = difficulty_curve(self.difficulty, 0.60, 0.30)
+        self.call_when_weak = difficulty_curve(self.difficulty, 0.50, 0.20)
+
+        self.base_range = generate_bot_range(self.vpip, self.difficulty)
+
+        self.statistics = {
+            "rounds_played": 0,
+            "avg_bet_size": 0,
+        }
+
+        self.bot_characteristics = BotCharacteristics(self.difficulty)
+        # Active range starts as a session copy of base_range.
+        self.active_range = self.base_range.copy()
+
+    def decide(
+        self, *, player_hand, community_cards, opponents, pot, to_call, balance, street
+    ):
+        """
+        Makes a poker decision using game-theory principles and opponent modelling.
+        Delegates to make_decision().
+
+        Args:
+            player_hand (list[str]): The player's two hole cards.
+            community_cards (list[str]): The current community cards (0–5).
+            opponents (list[BasePokerPlayer]): The active opponent players.
+            pot (float): The current pot size.
+            to_call (float): The amount required to call.
+            balance (float): The player's remaining chips.
+            street (str): The current betting round ('preflop', 'flop', 'turn', 'river').
+
+        Returns:
+            tuple: One of ("fold",), ("call",), ("raise", amount).
+        """
+        opponent_ranges = [opp.active_range for opp in opponents]
+
+        return make_decision(
+            player_hand=player_hand,
+            player_range=self.active_range,
+            community_cards=community_cards,
+            opponent_ranges=opponent_ranges,
+            opponents=opponents,
+            pot=pot,
+            balance=balance,
+            to_call=to_call,
+            bot=self.bot_characteristics,
+            street=street,
+        )
+
+    def reset_active_range(self):
+        """
+        Resets the active range to a fresh copy of the base range.
+        """
+        self.active_range = self.base_range.copy()
+
+    def fetch_player_info(self):
+        """
+        Returns a summary dictionary of this bot's characteristics.
+
+        Returns:
+            dict: Keys — difficulty, vpip, pfr, aggression_factor, fold_to_raise,
+                  call_when_weak, bluff_freq.
+        """
+        return {
             "difficulty": self.difficulty,
             "vpip": self.vpip,
             "pfr": self.pfr,
             "aggression_factor": self.aggression_factor,
             "fold_to_raise": self.fold_to_raise,
             "call_when_weak": self.call_when_weak,
-            "rounds_played": self.stats["rounds_played"],
+            "bluff_freq": self.bluff_freq,
         }
 
     def __repr__(self):
         """
-        Returns a concise string representation of the player including
-        type, identity, and key statistics.
+        Returns a concise string representation of the bot player.
         """
-        if self.is_bot:
-            return (
-                f"PokerPlayer(bot, difficulty={self.difficulty}, "
-                f"VPIP={self.vpip:.1f}%, PFR={self.pfr:.1f}%)"
-            )
         return (
-            f"PokerPlayer(user_id={self.user_id}, "
-            f"VPIP={self.vpip:.1f}%, PFR={self.pfr:.1f}%, "
-            f"Rounds Played={self.stats['rounds_played']})"
+            f"BotPokerPlayer(difficulty={self.difficulty}, "
+            f"VPIP={self.vpip:.1f}%, PFR={self.pfr:.1f}%)"
         )
-
-
-# BotCharacteristics
 
 
 class BotCharacteristics:
@@ -306,25 +353,25 @@ class BotCharacteristics:
         self.is_bot = True
         self.difficulty = difficulty
 
-        # Accuracy / simulation depth
+        # Accuracy / simulation depth.
         self.simulations = int(difficulty_curve(difficulty, 500, 15000))
 
-        # Decision noise (lower = sharper)
+        # Decision noise, lower value means sharper decisions.
         self.noise_level = difficulty_curve(difficulty, 0.30, 0.02)
 
-        # Bluffing
+        # Bluffing.
         self.bluff_multiplier = difficulty_curve(difficulty, 0.6, 1.6)
 
-        # Risk appetite
+        # Risk appetite.
         self.risk_tolerance = difficulty_curve(difficulty, 0.85, 1.5)
 
-        # Minimum Defence Frequency scaling
+        # Minimum Defence Frequency scaling.
         self.mdf_threshold = difficulty_curve(difficulty, 0.9, 0.3)
 
-        # Range discipline
+        # Range discipline.
         self.range_adherence = difficulty_curve(difficulty, 0.6, 0.95)
 
-        # Fold-bias: easy bots are reluctant to fold; hard bots are rational
+        # Fold-bias. easy bots are reluctant to fold and hard bots are more rational.
         self.fold_bias = difficulty_curve(difficulty, FOLD_BIAS_MAX, FOLD_BIAS_MIN)
 
     def __repr__(self):
@@ -342,9 +389,6 @@ class BotCharacteristics:
         )
 
 
-# Range chart utilities
-
-
 def generate_range_chart():
     """
     Generates a default poker range chart mapping all 169 distinct starting
@@ -358,12 +402,7 @@ def generate_range_chart():
     ranks = "23456789TJQKA"
     for i, r1 in enumerate(ranks[::-1]):
         for j, r2 in enumerate(ranks[::-1]):
-            if i < j:
-                hand = r1 + r2 + "s"
-            elif i > j:
-                hand = r2 + r1 + "o"
-            else:
-                hand = r1 + r2
+            hand = (r1 + r2 + "s") if i < j else (r2 + r1 + "o") if i > j else (r1 + r2)
             chart[hand] = 0.0
     return chart
 
@@ -411,7 +450,7 @@ def generate_bot_range(vpip_target, difficulty):
         reverse=True,
     )
     target = int(len(ordered) * vpip_target / 100)
-    return {h: 1.0 if i < target else 0.0 for i, h in enumerate(ordered)}
+    return {h: 1.0 if index < target else 0.0 for index, h in enumerate(ordered)}
 
 
 def validate_hand_notation(hand):
@@ -444,9 +483,9 @@ def validate_hand_notation(hand):
 
 def update_range(chart, action, hand, delta=DEFAULT_DELTA):
     """
-    Updates a range chart based on an observed action, then normalises the
+    Updates a range chart based on an observed action and then normalises the
     probabilities to sum to 1.0. Raising increases the hand's probability,
-    folding decreases it, and calling applies a smaller increase.
+    folding decreases it and calling applies a smaller increase.
 
     Args:
         chart (dict): Current range chart mapping hand notations to
@@ -479,9 +518,6 @@ def update_range(chart, action, hand, delta=DEFAULT_DELTA):
         updated = {h: v / total for h, v in updated.items()}
 
     return updated
-
-
-# Maths helpers
 
 
 def difficulty_curve(level, low, high):
@@ -537,12 +573,9 @@ def describe_hand(player_hand, community_cards):
     dm = CasinoDeckManager(game_mode="poker")
     try:
         return str(dm.evaluate_hand(player_hand, community_cards))
-    except Exception as exc:
-        print(exc)
+    except Exception as exception:
+        print(exception)
         return "Unknown"
-
-
-# Monte Carlo equity estimation
 
 
 def build_rank_index(available):
@@ -555,10 +588,10 @@ def build_rank_index(available):
     Returns:
         dict: Mapping of rank character to list of card strings.
     """
-    idx = {}
-    for c in available:
-        idx.setdefault(c[0], []).append(c)
-    return idx
+    index = {}
+    for card in available:
+        index.setdefault(card[0], []).append(card)
+    return index
 
 
 def hand_equity(player_hand, community_cards, opponent_range, bot=None):
@@ -598,8 +631,8 @@ def hand_equity(player_hand, community_cards, opponent_range, bot=None):
     player = [dm_base.str_to_treys(c) for c in player_hand]
     board_known = [dm_base.str_to_treys(c) for c in community_cards]
 
-    for c in player + board_known:
-        dm_base.remove_card(c)
+    for card in player + board_known:
+        dm_base.remove_card(card)
 
     valid_hands = [(h, p) for h, p in opponent_range.items() if p > 0]
     if not valid_hands:
@@ -609,8 +642,8 @@ def hand_equity(player_hand, community_cards, opponent_range, bot=None):
     wins = ties = total = 0
     cards_to_draw = 5 - len(board_known)
 
-    for i in range(sim_count):
-        if i > 0 and i % TIME_OUT == 0 and total == 0:
+    for index in range(sim_count):
+        if index > 0 and index % TIME_OUT == 0 and total == 0:
             return 0.5
 
         sim_dm = dm_base.copy()
@@ -683,10 +716,12 @@ def notation_to_cards_with_index(hand_notation, rank_index, dm):
     if not cards1 or not cards2:
         return None
 
-    if suitedness == "s":
-        combos = [(c1, c2) for c1 in cards1 for c2 in cards2 if c1[1] == c2[1]]
-    else:
-        combos = [(c1, c2) for c1 in cards1 for c2 in cards2 if c1[1] != c2[1]]
+    combos = [
+        (c1, c2)
+        for c1 in cards1
+        for c2 in cards2
+        if (c1[1] == c2[1]) == (suitedness == "s")
+    ]
 
     if not combos:
         return None
@@ -737,9 +772,7 @@ def calculate_simulation_count(street, difficulty):
     return base
 
 
-def collective_hand_equity(
-    player_hand, community_cards, opponent_ranges, opponent_count, bot=None
-):
+def collective_hand_equity(player_hand, community_cards, opponent_ranges, bot=None):
     """
     Estimates the player's joint equity against multiple opponents by
     multiplying individual equities together.
@@ -748,7 +781,6 @@ def collective_hand_equity(
         player_hand (list[str]): The player's two hole cards.
         community_cards (list[str]): Known community cards.
         opponent_ranges (list[dict]): One range chart per opponent.
-        opponent_count (int): Number of active opponents.
         bot (BotCharacteristics or None): Bot simulation parameters.
 
     Returns:
@@ -761,9 +793,6 @@ def collective_hand_equity(
     for opp_range in opponent_ranges:
         joint *= hand_equity(player_hand, community_cards, opp_range, bot)
     return joint
-
-
-# Pot-odds and expected value helpers
 
 
 def pot_odds(current_pot, call_amount):
@@ -805,7 +834,7 @@ def estimate_outs(player_hand, community_cards):
     """
     Estimates the number of outs available to improve the hand.
     Considers flush draws, open-ended straight draws, gutshot straight
-    draws, and overcards. Capped at MAX_OUTS.
+    draws and overcards. Capped at MAX_OUTS.
 
     Args:
         player_hand (list[str]): The player's two hole cards.
@@ -838,23 +867,23 @@ def estimate_outs(player_hand, community_cards):
     suits = [c[1] for c in all_cards]
     outs = 0
 
-    # Flush draw
+    # Flush draw.
     for s in set(suits):
         if suits.count(s) == 4:
             outs += 9
 
-    # Straight draws
+    # Straight draws.
     rank_nums = sorted(set(rank_value(r) for r in ranks))
     for combo in combinations(rank_nums, min(4, len(rank_nums))):
         if len(combo) < 4:
             continue
         low, high = min(combo), max(combo)
         if high - low == 3:
-            outs += 8  # Open-ended
+            outs += 8
         elif high - low == 4:
-            outs += 4  # Gutshot
+            outs += 4
 
-    # Overcards
+    # Overcards.
     community_ranks = [c[0] for c in community_cards]
     for card in player_hand:
         if card[0] not in community_ranks:
@@ -926,9 +955,6 @@ def optimal_bluff_ratio(pot, bet):
     return bet / (pot + bet)
 
 
-# Bluffing decisions
-
-
 def should_bluff_call(pot, to_call, equity, opponent_fold_to_raise, bot):
     """
     Determines whether the bot should call with the intention of bluffing
@@ -974,13 +1000,10 @@ def should_bluff_raise(pot, raise_amount, equity, opponent_fold_to_raise, bot):
     return random.random() < adjusted
 
 
-# Raise sizing
-
-
 def calculate_raise_amount(pot, equity, balance, bot):
     """
     Calculates an appropriate raise amount based on pot size, hand equity,
-    available balance, and bot difficulty. High-difficulty bots use larger
+    available balance and bot difficulty. High-difficulty bots use larger
     sizing. The result is rounded down to the nearest £5 and capped at
     the player's balance.
 
@@ -1003,9 +1026,6 @@ def calculate_raise_amount(pot, equity, balance, bot):
     max_raise = min(max_raise, balance)
     proposed = min_raise + (max_raise - min_raise) * equity
     return int(proposed / 5) * 5
-
-
-# Notation helper
 
 
 def cards_to_notation(player_hand):
@@ -1035,7 +1055,7 @@ def cards_to_notation(player_hand):
     return rank1 + rank2 + ("s" if suit1 == suit2 else "o")
 
 
-# Decision function
+# POKER DECISION ENGINE
 
 
 def make_decision(
@@ -1044,7 +1064,6 @@ def make_decision(
     community_cards,
     opponent_ranges,
     opponents,
-    opponent_count,
     pot,
     balance,
     to_call,
@@ -1068,7 +1087,7 @@ def make_decision(
     **Step 2 — Equity calculation**
         Joint equity against all active opponents is estimated via Monte
         Carlo simulation ('collective_hand_equity'). Noise scaled by
-        difficulty is applied, the range multiplier is factored in, and
+        difficulty is applied, the range multiplier is factored in and
         risk tolerance scales the result. Low-difficulty bots may further
         misestimate equity by a random factor.
 
@@ -1119,7 +1138,6 @@ def make_decision(
         community_cards (list[str]): Current community cards (0–5).
         opponent_ranges (list[dict]): One range chart per opponent.
         opponents (list[PokerPlayer]): Active opponent player objects.
-        opponent_count (int): Number of active opponents.
         pot (float): Current pot size.
         balance (float): Player's available chips.
         to_call (float): Amount required to call.
@@ -1133,17 +1151,21 @@ def make_decision(
                - '("call",)'
                - '("raise", amount)'
     """
+    # Human players pass bot=None; return a sensible default rather than crash.
+    if bot is None:
+        return ("call",) if to_call == 0 else ("fold",)
+
     error_prob = max(0.0, 1.0 - bot.difficulty / 100.0)
 
-    # Step 1: Preflop range check
+    # Preflop range check.
     if street == "preflop" and player_range is not None:
         hand_notation = cards_to_notation(player_hand)
         hand_strength_in_range = player_range.get(hand_notation, 0.0)
 
         if hand_strength_in_range == 0.0:
-            # Hand not in range — fold unless range deviation roll passes
+            # Hand not in range, fold unless range deviation roll passes.
             if random.random() > (1.0 - bot.range_adherence):
-                pass  # Deviate: play as a bluff
+                pass  # Deviate, play as a bluff.
             else:
                 return ("fold",) if to_call > 0 else ("call",)
 
@@ -1153,12 +1175,11 @@ def make_decision(
         hand_strength_in_range = 0.5
         range_multiplier = 1.0
 
-    # Step 2: Equity calculation
+    # Equity calculation.
     equity = collective_hand_equity(
         player_hand,
         community_cards,
         opponent_ranges,
-        opponent_count,
         bot,
     )
     equity = apply_noise(equity, bot)
@@ -1168,7 +1189,7 @@ def make_decision(
     if random.random() < error_prob:
         equity *= random.uniform(0.5, 0.9)
 
-    # Step 3: Premium river hands (high difficulty only)
+    # Premium river hands (high difficulty only).
     if street == "river":
         hand_type = describe_hand(player_hand, community_cards)
         if bot.difficulty >= 85 and bot.risk_tolerance >= 1.0:
@@ -1178,11 +1199,11 @@ def make_decision(
     else:
         hand_type = None
 
-    # Step 4: Pot-odds maths
+    # Pot-odds maths.
     pot_odds_required = pot_odds(pot, to_call)
     ev_call = expected_value_of_call(pot, to_call, equity)
 
-    # Step 5: Drawing logic (flop / turn only)
+    # Drawing logic (flop and turn only).
     if street in ("flop", "turn"):
         outs = estimate_outs(player_hand, community_cards)
         cards_remaining = 52 - len(player_hand) - len(community_cards)
@@ -1190,17 +1211,17 @@ def make_decision(
         draw_equity = probability_to_hit_by_river(outs, cards_remaining, cards_to_come)
         equity = max(equity, draw_equity)
 
-    # Step 6: Value raise with strong hands
+    # Value raise with strong hands.
     if equity > 0.65 and balance > 0:
         raise_amt = calculate_raise_amount(pot, equity, balance, bot)
         if 0 < raise_amt <= balance:
             return ("raise", raise_amt)
 
-    # Step 7: Clear positive-EV call
+    # Clear positive-EV call.
     if bot.difficulty >= 50 and ev_call > 0:
         return ("call",)
 
-    # Step 8: Minimum Defence Frequency
+    # Minimum Defence Frequency.
     mdf = minimum_defense_frequency(to_call, pot) * bot.mdf_threshold
     if equity >= pot_odds_required:
         mdf_check = mdf
@@ -1209,7 +1230,7 @@ def make_decision(
         if random.random() < mdf_check:
             return ("call",)
 
-    # Step 9: Bluffing logic
+    # Bluffing logic.
     if opponents:
         avg_fold_to_raise = sum(o.fold_to_raise for o in opponents) / len(opponents)
         avg_call_when_weak = sum(o.call_when_weak for o in opponents) / len(opponents)
@@ -1233,7 +1254,7 @@ def make_decision(
             should_attempt_bluff = True
             bluff_action = "call"
 
-    # Low-difficulty bots make random bluffing errors
+    # Low-difficulty bots make random bluffing errors.
     if random.random() < error_prob:
         should_attempt_bluff = random.choice([True, False])
         bluff_action = random.choice(["raise", "call"])
@@ -1245,19 +1266,14 @@ def make_decision(
         elif bluff_action == "call" and to_call <= balance:
             return ("call",)
 
-    # Step 10: Fold bias — difficulty-scaled anti-fold nudge
-    # All bots have a small tendency to call rather than fold in marginal
-    # spots. The bias is much stronger for easy bots (who play too loose)
-    # and diminishes toward the threshold FOLD_BIAS_MIN for hard bots.
-    # Only applied when the bot can actually afford the call.
+    # Fold bias
+    """ All bots have a small tendency to call rather than fold in marginal
+    spots. The bias is much stronger for easy bots
+    and diminishes toward the threshold FOLD_BIAS_MIN for hard bots.
+    Only applied when the bot can actually afford the call."""
     if to_call <= balance and random.random() < bot.fold_bias:
         return ("call",)
 
-    # Step 11: Default action — fold
+    # Default action — fold
     return ("fold",)
 
-
-if __name__ == "__main__":
-    from deck_management_V6 import CasinoDeckManager
-
-    deck = CasinoDeckManager(game_mode="poker")

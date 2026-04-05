@@ -9,16 +9,16 @@ VALUES = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
 
 class CasinoDeckManager:
     """
-    Central manager for deck handling, card format conversion, and game logic
+    Central manager for deck handling, card format conversion and game logic
     for both poker and blackjack. Wraps the treys library to provide a unified
-    interface for drawing cards, evaluating hands, and converting between
+    interface for drawing cards, evaluating hands and converting between
     string and integer card representations.
     """
 
     def __init__(self, shuffle=True, game_mode="poker"):
         """
         Initialises the deck manager with a fresh treys deck, a treys
-        Evaluator instance, and the specified game mode. Optionally shuffles
+        Evaluator instance and the specified game mode. Optionally shuffles
         the deck on creation.
 
         Args:
@@ -46,7 +46,6 @@ class CasinoDeckManager:
         Raises:
             ValueError: If mode is not 'poker' or 'blackjack'.
         """
-        # mode: 'poker' or 'blackjack'
         mode = mode.lower()
 
         if mode not in ("poker", "blackjack"):
@@ -84,10 +83,7 @@ class CasinoDeckManager:
         if self.remaining() < n:
             self.deck = TreysDeck()
             self.deck.shuffle()
-        if n != 1:
-            cards = self.deck.draw(n)
-        else:
-            cards = self.deck.draw(n)[0]
+        cards = self.deck.draw(n) if n != 1 else self.deck.draw(n)[0]
         return cards
 
     def str_draw(self, n=1):
@@ -149,7 +145,7 @@ class CasinoDeckManager:
 
     def copy(self):
         """
-        Creates an independent shallow copy of this deck manager instance.
+        Creates an independent copy of this deck manager instance.
         The copied deck shares the same Evaluator (which is stateless) but
         has its own independent card list. Used to ensure Monte Carlo
         simulations do not interfere with each other.
@@ -160,10 +156,10 @@ class CasinoDeckManager:
         """
         new_dm = CasinoDeckManager(shuffle=False, game_mode=self.game_mode)
 
-        # Copy deck state
+        # Copy deck state.
         new_dm.deck.cards = self.deck.cards.copy()
 
-        # Evaluator is stateless and safe to reuse
+        # Evaluator is stateless and safe to reuse.
         new_dm.evaluator = self.evaluator
 
         return new_dm
@@ -277,14 +273,14 @@ class CasinoDeckManager:
         for card in treys_hand:
             rank_int = TreysCard.get_rank_int(card)
 
-            # Ace
+            # Ace.
             if rank_int == 12:
                 total += 11
                 aces += 1
-            # T, J, Q, K
+            # T, J, Q, K.
             elif rank_int >= 8:
                 total += 10
-            # 2–9
+            # 2–9.
             else:
                 total += rank_int + 2
 

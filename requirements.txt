@@ -17,8 +17,8 @@ pycryptodome>=3.20.0
 # Database table display and data handling
 pandas>=2.0.0
 
-# Original Bot Roster
-DEFAULT_BOT_ROSTER = [
+# Original Bot List
+DEFAULT_BOT_LIST = [
     "Angus",
     "Angeban",
     "Grey",

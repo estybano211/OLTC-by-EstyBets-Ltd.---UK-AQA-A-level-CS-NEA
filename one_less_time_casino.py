@@ -1,35 +1,30 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# one_more_time_casino.py
+# one_less_time_casino.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-# This is a compilation of 15 separate programs:
-# 1. database_management_and_logging_V6.py ~ lines
-# 2. gui_helpers_V6.py ~ lines
-# 3. search_sort_algorithms_V6.py ~ lines
-# 4. encryption_software_V6.py ~ lines
-# 5. check_systems_V6.py ~ lines
-# 6. admin_interface_V6.py ~ lines
-# 7. admin_console_V6.py ~ lines
-# 8. terms_and_conditions_V6.py ~ lines
-# 9. user_interface_V6.py ~ lines
-# 10. casino_interface_V6.py ~ lines
-# 11. game_rules_V6.py ~ lines
-# 12. deck_management_V6.py ~ lines
-# 13. whitejoe_V6.py ~ lines
-# 14. poker_player_management_V6.py ~ lines
-# 15. harrogate_hold_em_V6.py ~ lines
+# This is a compilation of 10 separate programs:
+# 1. database_management_and_logging_V6.py
+# 2. gui_helpers_V6.py
+# 3. search_sort_algorithms_V6.py
+# 4. encryption_software_V6.py
+# 5. check_systems_V6.py
+# 6. system_interfaces_V6.py
+# 7. deck_management_V6.py
+# 8. whitejoe_V6.py
+# 9. poker_player_management_V6.py
+# 10. harrogate_hold_em_V6.py
 
 import sys
 import os
+from datetime import datetime
+from time import time, sleep
+from queue import Queue, Empty
+from threading import Thread, Event
+import logging
 import sqlite3
 import pandas as pd
 import csv
 import json
-from time import time, sleep
-from datetime import datetime
-import logging
-from queue import Queue, Empty
-from threading import Thread, Event
 from typing import cast
 from tkinter import (
     BOTH,
@@ -38,7 +33,6 @@ from tkinter import (
     Button,
     Canvas,
     Checkbutton,
-    DISABLED,
     END,
     Entry,
     Frame,
@@ -48,7 +42,6 @@ from tkinter import (
     IntVar,
     Label,
     messagebox,
-    NORMAL,
     Scale,
     Scrollbar,
     scrolledtext,
@@ -82,73 +75,69 @@ BASE_DIR = (
     if getattr(sys, "frozen", False)
     else os.path.dirname(os.path.abspath(__file__))
 )
-DB_FILE = os.path.join(BASE_DIR, "OMTC_database.db")
+DB_PATH = os.path.join(BASE_DIR, "OLTC_database.db")
 
 
-class DatabaseLogHandler(logging.Handler):
+# LOGGING HANDLERS
+
+
+class LogHandler(logging.Handler):
     """
-    Custom logging handler that writes custom log messages directly into the 'db_logs'
-    table. It uses a queue-based worker thread to prevent database locking issues
-    during concurrent operations. All log entries are processed asynchronously
-    to avoid blocking the main application thread.
+    Base class for log handlers.
+
+    Owns all queue, worker-thread, emit, processor and close logic.
+    Subclasses supply only the name of the table they write to via the
+    TABLE class attribute.
+
+    The worker thread runs as a daemon so it never prevents the process
+    from exiting. A stop_event is used to signal clean shutdown.
     """
+
+    # Subclasses must override this with their target table name.
+    TABLE = ""
 
     def __init__(self):
         """
-        Initialises the database log handler with a queue and worker thread.
-        Creates a daemon thread that continuously processes log entries from
-        the queue and writes them to the database one at a time.
+        Initialises the handler, starts the background worker thread.
         """
         super().__init__()
 
-        self.DB_FILE = DB_FILE
-
         self.queue = Queue()
-
         self.stop_event = Event()
-
         self.worker_thread = Thread(target=self.processor, daemon=True)
-
         self.worker_thread.start()
 
-    def emit(self, record: logging.LogRecord):
+    def emit(self, record):
         """
-        Captures a log record, formats it, and adds it to the processing queue.
-        Then extracts the log level and current timestamp, then queues the entry
-        to write to the database. If an error occurs during emit, it is then
-        handled to prevent program crashes.
+        Formats the log record and places it on the queue.
 
         Args:
-            record (logging.LogRecord): The log record object containing the
-                                        custom log message and metadata.
+            record (logging.LogRecord): The log record to process.
         """
         try:
             log_entry = self.format(record)
-
             level = record.levelname
-
             timestamp = datetime.now().strftime("%d-%m-%Y | %H:%M:%S")
-
             self.queue.put((timestamp, level, log_entry))
-
         except Exception:
             self.handleError(record)
 
     def processor(self):
         """
-        Worker thread that processes the queue and writes logs to the database
-        one at a time to avoid locking issues. Runs continuously until the
-        stop_event is set to prevent the thread from hanging indefinitely.
+        Worker thread: drains the queue and writes each entry to the
+        database one at a time to avoid locking contention.
+
+        Runs until stop_event is set. The 1-second get() timeout prevents
+        the thread from hanging indefinitely when the queue is empty.
         """
         while not self.stop_event.is_set():
             try:
-                # Wait for a log entry (timeout prevents thread from hanging forever).
                 timestamp, level, log_entry = self.queue.get(timeout=1)
 
-                with sqlite3.connect(self.DB_FILE, timeout=5) as conn:
+                with sqlite3.connect(DB_PATH, timeout=5) as conn:
                     conn.execute(
-                        """
-                        INSERT INTO db_logs(timestamp, level, log_entry)
+                        f"""
+                        INSERT INTO {self.TABLE}(timestamp, level, log_entry)
                         VALUES (?, ?, ?)
                         """,
                         (timestamp, level, log_entry),
@@ -156,163 +145,88 @@ class DatabaseLogHandler(logging.Handler):
                     conn.commit()
 
                 self.queue.task_done()
+
             except Exception:
                 pass
 
     def close(self):
         """
-        Stops the worker thread and closes the handler. Sets the stop event to
-        signal the worker thread to exit, then waits for it to finish before
-        calling the parent class's close method.
+        Signals the worker thread to stop, waits for it to finish and then
+        calls the parent close method.
         """
         self.stop_event.set()
         self.worker_thread.join()
         super().close()
 
 
-# Create a named logger for the database module.
-database_logger = logging.getLogger("omtc_db")
+class DatabaseLogHandler(LogHandler):
+    """
+    Writes log entries to the 'db_logs' table.
+    """
 
+    TABLE = "db_logs"
+
+
+class AdminLogHandler(LogHandler):
+    """
+    Writes log entries to the 'admin_logs' table.
+    """
+
+    TABLE = "admin_logs"
+
+
+# LOGGER SETUP
+
+
+database_logger = logging.getLogger("oltc_db")
 database_logger.setLevel(logging.DEBUG)
 
 if not database_logger.handlers:
     db_handler = DatabaseLogHandler()
-
     db_handler.setLevel(logging.DEBUG)
-
-    db_formatter = logging.Formatter("%(message)s")
-
-    db_handler.setFormatter(db_formatter)
+    db_handler.setFormatter(logging.Formatter("%(message)s"))
     database_logger.addHandler(db_handler)
 
 
-class AdminLogHandler(logging.Handler):
-    """
-    Custom logging handler that writes log messages directly into the
-    'admin_logs' table. Uses a queue-based worker thread to prevent database
-    locking issues during concurrent operations. All admin action entries are
-    processed asynchronously to avoid blocking the main application thread.
-    """
-
-    def __init__(self):
-        """
-        Initialises the admin log handler with a queue and worker thread.
-        Creates a daemon thread that continuously processes admin log entries
-        from the queue and writes them to the database one at a time.
-        """
-        super().__init__()
-
-        self.DB_FILE = DB_FILE
-
-        self.queue = Queue()
-
-        self.stop_event = Event()
-
-        self.worker_thread = Thread(target=self.processor, daemon=True)
-
-        self.worker_thread.start()
-
-    def emit(self, record: logging.LogRecord):
-        """
-        Captures an admin log record, formats it, and adds it to the processing
-        queue. Extracts the log level and current timestamp, then queues the
-        entry for database insertion. If an error occurs during emit, it is
-        handled gracefully to prevent program crashes.
-
-        Args:
-            record (logging.LogRecord): The log record object containing the
-                                        admin action message and metadata.
-        """
-        try:
-            log_entry = self.format(record)
-
-            level = record.levelname
-
-            timestamp = datetime.now().strftime("%d-%m-%Y | %H:%M:%S")
-
-            self.queue.put((timestamp, level, log_entry))
-
-        except Exception:
-            self.handleError(record)
-
-    def processor(self):
-        """
-        Worker thread that processes the queue and writes admin logs to the
-        database one at a time. Runs continuously until the stop_event is set
-        to prevent the thread from hanging indefinitely.
-        """
-        while not self.stop_event.is_set():
-            try:
-                timestamp, level, log_entry = self.queue.get(timeout=1)
-
-                with sqlite3.connect(self.DB_FILE, timeout=5) as conn:
-                    conn.execute(
-                        """
-                        INSERT INTO admin_logs(timestamp, level, log_entry)
-                        VALUES (?, ?, ?)""",
-                        (timestamp, level, log_entry),
-                    )
-                    conn.commit()
-
-                self.queue.task_done()
-
-            except Exception:
-                pass
-
-    def close(self):
-        """
-        Stops the worker thread and closes the handler. Sets the stop event to
-        signal the worker thread to exit, then waits for it to finish before
-        calling the parent class's close method.
-        """
-        self.stop_event.set()
-        self.worker_thread.join()
-        super().close()
-
-
-# Create a named logger for admin actions.
-admin_logger = logging.getLogger("omtc_admin")
-
+admin_logger = logging.getLogger("oltc_admin")
 admin_logger.setLevel(logging.DEBUG)
 
 if not admin_logger.handlers:
     admin_handler = AdminLogHandler()
     admin_handler.setLevel(logging.DEBUG)
-
-    admin_formatter = logging.Formatter("%(message)s")
-    admin_handler.setFormatter(admin_formatter)
-
+    admin_handler.setFormatter(logging.Formatter("%(message)s"))
     admin_logger.addHandler(admin_handler)
 
 
 class DatabaseManagement:
     """
-    Handles all database creation, connection, and data operations.
-    Manages user accounts, game statistics, logging tables, and
-    provides methods for querying, updating, and maintaining the SQLite
-    database.
+    Manages all database creation, connection and data operations.
+
+    Accepts a db_path at construction time and stores it as instance
+    state. Provides methods for creating and viewing the database, registering users, verifying
+    passwords, fetching user records, modifying user data.
+
+    Usage:
+        dbm = DatabaseManagement(DB_PATH)
+        dbm.create_database()
+        record = dbm.fetch_user_full_record(username="user1")
     """
 
-    def __init__(self):
+    def __init__(self, db_path):
         """
-        Initialises the DatabaseManagement class with the database file path.
-        """
-        self.DB_FILE = DB_FILE
+        Stores the database file path as instance state.
 
-    def check_database_exists(self):
+        Args:
+            db_path (str): Absolute path to the SQLite database file.
+                           All methods use this path when connecting.
         """
-        Checks if the database file exists in the same directory as the
-        program. Constructs the full database path and verifies file existence.
+        self.db_path = db_path
 
-        Returns:
-            bool: True if the database file exists, False otherwise.
-        """
-        return os.path.exists(self.DB_FILE)
+    # SQL DATABASE SCHEMA
 
-    # SQL Database Schema.
-    # Each dictionary value is a CREATE TABLE statement run during database creation.
+    # Defines all database tables and their structure.
     SCHEMA = {
-        # Logs for database access and amendments.
+        # Logs of all database access and modifications.
         "db_logs": """
         CREATE TABLE IF NOT EXISTS db_logs(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -321,7 +235,7 @@ class DatabaseManagement:
             log_entry TEXT
         )  
         """,
-        # Logs for administrative actions.
+        # Logs of administrative actions and system events.
         "admin_logs": """
         CREATE TABLE IF NOT EXISTS admin_logs(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -330,7 +244,7 @@ class DatabaseManagement:
             log_entry TEXT
         )
         """,
-        # Users account table.
+        # Player account information with balance tracking.
         "users": """
         CREATE TABLE IF NOT EXISTS users(
             user_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -338,10 +252,11 @@ class DatabaseManagement:
             password_hash TEXT,
             registered INTEGER,
             balance REAL DEFAULT 10000 CHECK (balance >= 0),
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            last_login TEXT
         )
         """,
-        # Poker data per user.
+        # Player statistics.
         "user_poker_data": """
         CREATE TABLE IF NOT EXISTS user_poker_data(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -355,13 +270,12 @@ class DatabaseManagement:
             total_bets INTEGER DEFAULT 0,
             fold_to_raise INTEGER DEFAULT 0,
             call_when_weak INTEGER DEFAULT 0,
-            gauntlet_max_rounds INTEGER DEFAULT 0,
             endless_high_score INTEGER DEFAULT 0,
             last_updated TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
         """,
-        # Logs of user poker actions during hands.
+        # Detailed action history for each poker round.
         "user_poker_actions": """
         CREATE TABLE IF NOT EXISTS user_poker_actions(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -380,40 +294,42 @@ class DatabaseManagement:
 
     def connect(self):
         """
-        Establishes a connection to the SQLite database. Enables row factory
-        for dictionary-like row access and enforces foreign key constraints.
+        Opens and returns a connection to self.db_path with row factory (for dictionary like access)
+        and foreign key constraints enabled.
 
         Returns:
-            sqlite3.Connection: Database connection object with Row factory and
-                                foreign keys enabled.
+            sqlite3.Connection: Configured connection object.
         """
-        conn = sqlite3.connect(DB_FILE)
-
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
-
-        # Enable foreign key constraints.
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
+    def check_database_exists(self):
+        """
+        Checks if the database file exists in the same directory as the
+        program. Constructs the full database path and verifies file existence.
+
+        Returns:
+            bool: True if the database file exists, False otherwise.
+        """
+        return os.path.exists(self.db_path)
+
     def create_database(self):
         """
-        Creates all tables defined in the SCHEMA dictionary if they do not
-        already exist. Iterates through each table definition, executes the
-        CREATE TABLE statement, then creates the default administrator account.
+        Creates all tables defined in SCHEMA (if they do not already
+        exist) and ensures the default Administrator account is present.
         """
         with self.connect() as conn:
             try:
-                for table, table in self.SCHEMA.items():
-                    conn.execute(table)
-
-                    database_logger.info(f"Table: '{table}' created.")
+                for name, statement in self.SCHEMA.items():
+                    conn.execute(statement)
+                    database_logger.info(f"Table: '{name}' created.")
 
                 conn.commit()
-
-                database_logger.info(f"File: '{DB_FILE}' created.")
+                database_logger.info(f"File: '{self.db_path}' created.")
 
                 self.admin_account()
-
                 database_logger.info("Administrator account added to 'users' table.")
 
             except sqlite3.Error as error:
@@ -421,670 +337,67 @@ class DatabaseManagement:
 
     def admin_account(self):
         """
-        Ensures that a default Administrator account exists in the database.
-        Creates the account with a predefined password if it does not already
+        Inserts the default Administrator account if it does not already
         exist.
         """
-        admin_password = "Password1"
 
-        hashed_password = hash_function(admin_password)
+        hashed_password = hash_function("Password1")
 
         with self.connect() as conn:
             try:
                 cursor = conn.execute(
-                    """
-                    SELECT 1 FROM users
-                    WHERE username = ?
-                    """,
+                    "SELECT 1 FROM users WHERE username = ?",
                     ("Administrator",),
                 )
 
                 if cursor.fetchone() is None:
                     conn.execute(
                         """
-                        INSERT INTO users
-                        (username, password_hash, registered, balance) 
+                        INSERT INTO users (username, password_hash, registered, balance)
                         VALUES (?, ?, ?, ?)
                         """,
-                        ("Administrator", (hashed_password), 1, 0.0),
+                        ("Administrator", hashed_password, 1, 0.0),
                     )
-
                     database_logger.info("Administrator account created.")
 
             except sqlite3.Error as error:
                 database_logger.exception(f"'admin_account' error. {error}")
 
+    # ADMIN LOGIN
+
     def admin_logged_in(self):
-        """
-        Creates a log entry in the admin_logs table recording that the
-        administrator has successfully logged in.
-        """
+        """Logs that the administrator has successfully authenticated."""
         admin_logger.info("Administrator logged in.")
 
     def admin_accessed_system(self, system):
         """
-        Creates a log entry recording when the administrator accesses a
-        specific system.
+        Logs that the administrator has accessed a named system.
 
         Args:
-            system (str): The name of the system accessed by the administrator.
+            system (str): The name of the accessed system.
         """
         admin_logger.info(f"Administrator accessed system: '{system}'.")
 
-    def change_admin_password(self, new_password):
-        """
-        Changes the administrator password to a new hashed value. Hashes the
-        new password before storing it in the database.
-
-        Args:
-            new_password (str): The new plaintext password to be hashed and
-                                stored.
-        """
-        with self.connect() as conn:
-            try:
-                admin_logger.info("Request to change Admin Password.")
-
-                database_logger.info("Request to change Administrator password.")
-
-                password_hash = hash_function(new_password)
-
-                conn.execute(
-                    """
-                    UPDATE users 
-                    SET password_hash = ? 
-                    WHERE username = ?
-                    """,
-                    (password_hash, "Administrator"),
-                )
-
-                database_logger.info("Administrator password changed.")
-
-                admin_logger.info("Administrator password change request successful.")
-
-            except sqlite3.Error as error:
-                admin_logger.error("Administrator password change request failed.")
-
-                database_logger.exception(f"'change_admin_password' error. {error}")
-
-    def view_database(self, table):
-        """
-        Returns a DataFrame of all rows in the requested table for
-        viewing.
-
-        Args:
-            table (str): The name of the database table to view.
-
-        Returns:
-            pd.DataFrame: DataFrame containing all rows from the specified
-                          table, or an empty DataFrame on error or if no table
-                          is provided.
-        """
-        if not table:
-            database_logger.error("No table provided for admin_view_database().")
-            return pd.DataFrame()
-
-        with self.connect() as conn:
-            try:
-                admin_logger.info(f"Request to view Table: '{table}'")
-
-                database_logger.info(f"Attempting to read data from Table: '{table}'.")
-
-                dataframe = pd.read_sql_query(f"SELECT * FROM {table}", conn)
-
-                database_logger.info(f"Data from Table: '{table}' read successfully.")
-
-                admin_logger.info("View table request successful.")
-
-                return dataframe
-
-            except sqlite3.Error as error:
-                admin_logger.error("View table request failed.")
-
-                database_logger.exception(f"'view_database' error. {error}")
-                return pd.DataFrame()
-
-    def change_user_record(
-        self,
-        *,
-        user_id,
-        new_username=None,
-        new_password=None,
-        new_account_type=None,
-        new_balance=None,
-    ):
-        """
-        Updates one or more fields on a user record by delegating to the
-        relevant individual change methods for each non-None argument. Fields
-        that are passed as None are left unchanged.
-
-        Args:
-            user_id (int): The user ID of the record to modify.
-            new_username (str, optional): New username to assign.
-            new_password (str, optional): New plaintext password and will be
-                                          hashed before storage.
-            new_account_type (int, optional): New registered status (0 or 1).
-            new_balance (float, optional): New balance value.
-        """
-
-        if new_username is not None:
-            self.change_user_username(user_id, new_username)
-
-        if new_password is not None:
-            self.change_user_password(user_id, new_password)
-
-        if new_account_type is not None:
-            self.change_user_account_type(user_id, new_account_type)
-
-        if new_balance is not None:
-            self.change_user_balance(user_id, new_balance)
-
-    def change_user_username(self, user_id, new_username):
-        """
-        Changes a user's username to the given value.
-
-        Args:
-            user_id (int): The user ID whose username will be changed.
-            new_username (str): The new username to assign.
-        """
-        with self.connect() as conn:
-            try:
-                admin_logger.info(f"Request to change User ID: '{user_id}' username.")
-
-                database_logger.info(
-                    f"Request to change User ID: '{user_id}' username."
-                )
-
-                conn.execute(
-                    """
-                    UPDATE users
-                    SET username = ?
-                    WHERE user_id = ?
-                    """,
-                    (new_username, user_id),
-                )
-
-                admin_logger.info("Change username request successful.")
-
-                database_logger.info("User username changed.")
-
-            except sqlite3.Error as error:
-                admin_logger.error("Change username request failed.")
-
-                database_logger.exception(f"'change_user_username' error. {error}")
-
-    def change_user_password(self, user_id, new_password):
-        """
-        Changes a user's password to a new hashed value. Hashes the new
-        password before storing it in the database.
-
-        Args:
-            user_id (int): The user ID whose password will be changed.
-            new_password (str): The new plaintext password to be hashed and
-                                stored.
-        """
-        with self.connect() as conn:
-            try:
-                admin_logger.info(f"Request to change User: '{user_id}' password.")
-
-                database_logger.info(f"Request to change User: '{user_id}' password.")
-
-                password_hash = hash_function(new_password)
-
-                conn.execute(
-                    """
-                    UPDATE users
-                    SET password_hash = ?
-                    WHERE user_id = ?
-                    """,
-                    (password_hash, user_id),
-                )
-
-                admin_logger.info("Change user password request successful.")
-
-                database_logger.info("User password changed.")
-
-            except sqlite3.Error as error:
-                admin_logger.error("Change user password request failed.")
-
-                database_logger.exception(f"'change_user_password' error. {error}")
-
-    def change_user_account_type(self, user_id, registered):
-        """
-        Changes a user's account type (registered status).
-
-        Args:
-            user_id (int): The user ID whose account type will be changed.
-            registered (int): The new registered status (0 for guest,
-                              1 for registered).
-        """
-        with self.connect() as conn:
-            try:
-                admin_logger.info(
-                    f"Request to change User ID: '{user_id}' account type."
-                )
-
-                database_logger.info(
-                    f"Request to change User ID: '{user_id}' account type."
-                )
-
-                conn.execute(
-                    """
-                    UPDATE users 
-                    SET registered = ? 
-                    WHERE user_id = ?
-                    """,
-                    (registered, user_id),
-                )
-
-                admin_logger.info("Change user account type request successful.")
-
-                database_logger.info(f"User account type changed.")
-
-            except sqlite3.Error as error:
-                admin_logger.error("Change user account type request failed.")
-
-                database_logger.exception(f"'change_user_account_type' error. {error}")
-
-    def change_user_balance(self, user_id, new_balance):
-        """
-        Changes a user's account balance to the specified value.
-
-        Args:
-            user_id (int): The user ID whose balance will be changed.
-            new_balance (float): The new balance to assign.
-        """
-        with self.connect() as conn:
-            try:
-                admin_logger.info(f"Request to change User ID: '{user_id}' balance.")
-
-                database_logger.info(f"Request to change User ID: '{user_id}' balance.")
-
-                conn.execute(
-                    """
-                    UPDATE users 
-                    SET balance = ? 
-                    WHERE user_id = ?
-                    """,
-                    (float(new_balance), user_id),
-                )
-
-                admin_logger.info("Change user balance request successful.")
-
-                database_logger.info("User balance changed.")
-
-            except sqlite3.Error as error:
-                admin_logger.error("Change user balance request failed.")
-
-                database_logger.exception(f"'change_user_balance' error. {error}")
-
-    def delete_user_record(self, user_id):
-        """
-        Permanently deletes a user record from the users table by user ID.
-
-        Args:
-            user_id (int): The user ID to delete from the database.
-        """
-        with self.connect() as conn:
-            try:
-                admin_logger.info(f"Request to delete User ID: '{user_id}' record.")
-
-                database_logger.info(f"Request to delete User ID: '{user_id}' record.")
-
-                conn.execute("DELETE FROM users WHERE user_id=?", (user_id,))
-
-                admin_logger.info("Delete user record request successful.")
-
-                database_logger.info("User record deleted.")
-
-            except sqlite3.Error as error:
-                admin_logger.error("Delete user record request failed.")
-
-                database_logger.exception(f"'delete_user_record' error. {error}")
-
-    def fetch_user_full_record(self, *, user_id=None, username=None):
-        """
-        Fetches the complete user record for a given user_id or username.
-        Returns all columns from the users table as a dictionary.
-
-        Args:
-            user_id (int, optional): The user ID to search for.
-            username (str, optional): The username to search for.
-
-        Returns:
-            dict: Dictionary containing all user fields, or None if the user
-                  was not found or an error occurred.
-
-        Raises:
-            ValueError: If neither user_id nor username is provided.
-        """
-        if user_id is None and username is None:
-            raise ValueError("Either user_id or username must be provided")
-
-        with self.connect() as conn:
-            try:
-                if user_id is not None:
-                    cursor = conn.execute(
-                        "SELECT * FROM users WHERE user_id = ?", (user_id,)
-                    )
-                else:
-                    cursor = conn.execute(
-                        "SELECT * FROM users WHERE username = ?", (username,)
-                    )
-
-                row = cursor.fetchone()
-                return dict(row) if row else None
-
-            except sqlite3.Error as error:
-                database_logger.exception(f"'fetch_user_full_record' error. {error}")
-                return None
-
-    def fetch_user_presence(self, username=None):
-        """
-        Checks whether a user with the given username exists in the database.
-
-        Args:
-            username (str, optional): The username to search for.
-
-        Returns:
-            dict: A dictionary with a single key 'found' (bool), True if the
-                  user exists, False otherwise.
-        """
-        with self.connect() as conn:
-            try:
-                database_logger.info(f"Searching for User: '{username}'.")
-
-                cursor = conn.execute(
-                    """
-                    SELECT 1 
-                    FROM users 
-                    WHERE username = ?
-                    """,
-                    (username,),
-                )
-
-                row = cursor.fetchone()
-                found = row is not None
-
-                database_logger.info(
-                    f"User '{username}' {'found' if found else 'not found'}."
-                )
-
-                return {"found": found}
-
-            except sqlite3.Error as error:
-                database_logger.exception(f"'fetch_user_presence' error. {error}")
-                return {"found": False}
-
-    def sign_in_user(self, username, password, registered):
-        """
-        Registers a new user in the database with a hashed password, registered
-        status, and an initial balance of £10,000. Guest accounts may be created
-        with a None password.
-
-        Args:
-            username (str): The username for the new account (must be unique).
-            password (str or None): The plaintext password to hash and store.
-                                    Pass None for guest accounts.
-            registered (int): Registration status (0 for guest, 1 for
-                               registered).
-
-        Returns:
-            str: The username of the created account.
-
-        Raises:
-            ValueError: If username is not a non-empty string.
-            sqlite3.IntegrityError: If the username already exists.
-            sqlite3.Error: For other database errors.
-        """
-        if not username or not isinstance(username, str):
-            raise ValueError("'username' must be a non-empty string")
-
-        if username.strip().lower() == "administrator":
-            raise ValueError("The username 'Administrator' cannot be used.")
-
-        password_hash = hash_function(password) if password else None
-
-        INIT_BALANCE = 10000.0
-
-        with self.connect() as conn:
-            try:
-                database_logger.info(
-                    f"Request to make an account for User: '{username}'."
-                )
-
-                conn.execute(
-                    """
-                    INSERT INTO users
-                    (username, password_hash, registered, balance) 
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (
-                        username,
-                        password_hash,
-                        int(float(registered)),
-                        float(INIT_BALANCE),
-                    ),
-                )
-
-                database_logger.info(f"Created User: '{username}' record.")
-
-                return username
-
-            except sqlite3.IntegrityError:
-                database_logger.warning(f"User: '{username}' record already exists.")
-                raise
-
-            except sqlite3.Error as error:
-                database_logger.exception(f"'sign_in_user' error. {error}")
-                raise
-
-    def verify_user_password(self, username, password):
-        """
-        Verifies whether a provided plaintext password matches the stored hash
-        for the given username.
-
-        Args:
-            username (str): The username whose password will be verified.
-            password (str): The plaintext password to verify.
-
-        Returns:
-            dict: Dictionary with 'found' (bool) and 'verified' (bool) keys.
-        """
-        with self.connect() as conn:
-            try:
-                database_logger.info(
-                    f"Request to search for User: '{username}' 'password_hash'."
-                )
-
-                cursor = conn.execute(
-                    """
-                    SELECT password_hash 
-                    FROM users 
-                    WHERE username = ?
-                    """,
-                    (username,),
-                )
-
-                row = cursor.fetchone()
-
-            except sqlite3.Error as error:
-                database_logger.exception(f"'verify_user_password' error. {error}")
-                return {"found": False, "verified": False}
-
-        if not row or not row["password_hash"]:
-            database_logger.info(f"'password_hash' for User: '{username}' not found.")
-            return {"found": False, "verified": False}
-
-        verified = verify_hash(row["password_hash"], password)
-
-        database_logger.info(
-            "Password verification successful."
-            if verified
-            else "Failed password attempt."
-        )
-
-        return {"found": True, "verified": verified}
-
-    def fetch_user_id(self, username):
-        """
-        Retrieves the user ID for the given username.
-
-        Args:
-            username (str): The username to look up.
-
-        Returns:
-            dict: Dictionary with 'found' (bool) and 'user_id' (int or None)
-                  keys.
-        """
-        with self.connect() as conn:
-            try:
-                database_logger.info(f"Request to fetch User: '{username}' user_id.")
-
-                cursor = conn.execute(
-                    """
-                    SELECT user_id 
-                    FROM users 
-                    WHERE username = ?
-                    """,
-                    (username,),
-                )
-                row = cursor.fetchone()
-
-                if row:
-                    database_logger.info("User 'user_id' found.")
-                    return {"found": True, "user_id": row["user_id"]}
-                else:
-                    database_logger.info("User 'user_id' not found.")
-                    return {"found": False, "user_id": None}
-
-            except sqlite3.Error as error:
-                database_logger.exception(f"'fetch_user_id' error. {error}")
-                return {"found": False, "user_id": None}
-
-    def fetch_username(self, user_id):
-        """
-        Retrieves the username for the given user ID.
-
-        Args:
-            user_id (int): The user ID to look up.
-
-        Returns:
-            dict: Dictionary with 'found' (bool) and 'username' (str or None)
-                  keys.
-        """
-        with self.connect() as conn:
-            try:
-                database_logger.info(f"Request to fetch User ID: '{user_id}' username.")
-
-                cursor = conn.execute(
-                    """
-                    SELECT username 
-                    FROM users 
-                    WHERE user_id = ?
-                    """,
-                    (user_id,),
-                )
-                row = cursor.fetchone()
-
-                if row:
-                    database_logger.info("User 'username' found.")
-                    return {"found": True, "username": row["username"]}
-                else:
-                    database_logger.info("User 'username' not found.")
-                    return {"found": False, "username": None}
-
-            except sqlite3.Error as error:
-                database_logger.exception(f"'fetch_username' error. {error}")
-                return {"found": False, "username": None}
-
-    def fetch_user_balance(self, username):
-        """
-        Retrieves the account balance for the given username.
-
-        Args:
-            username (str): The username whose balance will be retrieved.
-
-        Returns:
-            dict: Dictionary with 'found' (bool) and 'balance' (float) keys.
-                  Balance defaults to 0.0 if the user is not found or an error
-                  occurs.
-        """
-        with self.connect() as conn:
-            try:
-                database_logger.info(f"Request to fetch User: '{username}' balance.")
-
-                cursor = conn.execute(
-                    """
-                    SELECT balance 
-                    FROM users 
-                    WHERE username = ?
-                    """,
-                    (username,),
-                )
-                row = cursor.fetchone()
-
-                if row:
-                    database_logger.info("User 'balance' found.")
-                    return {"found": True, "balance": float(row["balance"])}
-                else:
-                    database_logger.info("User 'balance' not found.")
-                    return {"found": False, "balance": 0.0}
-
-            except sqlite3.Error as error:
-                database_logger.exception(f"'fetch_user_balance' error. {error}")
-                return {"found": False, "balance": 0.0}
-
-    def modify_user_balance(self, username, new_balance):
-        """
-        Updates a user's account balance to the specified value.
-
-        Args:
-            username (str): The username whose balance will be modified.
-            new_balance (float): The new balance to assign.
-        """
-        with self.connect() as conn:
-            try:
-                database_logger.info(f"Request to modify User: '{username}' balance.")
-
-                conn.execute(
-                    """
-                    UPDATE users 
-                    SET balance = ? 
-                    WHERE username = ?
-                    """,
-                    (float(new_balance), username),
-                )
-
-                database_logger.info("User balance modified.")
-                return
-
-            except sqlite3.Error as error:
-                database_logger.exception(f"'modify_user_balance' error. {error}")
+    # ADMIN PASSWORD MANAGEMENT
 
     def admin_password_check(self, password):
         """
-        Verifies a provided password against the stored administrator password
-        hash.
+        Verifies a plaintext password against the stored Administrator hash.
 
         Args:
             password (str): The plaintext password to verify.
 
         Returns:
-            dict: Dictionary with 'found' (bool) and 'verified' (bool) keys.
+            dict: {'found': bool, 'verified': bool}
         """
         with self.connect() as conn:
             try:
                 database_logger.info("Request for Administrator password_hash.")
 
                 cursor = conn.execute(
-                    """
-                    SELECT password_hash
-                    FROM users 
-                    WHERE username = ?
-                    """,
+                    "SELECT password_hash FROM users WHERE username = ?",
                     ("Administrator",),
                 )
-
                 row = cursor.fetchone()
 
             except sqlite3.Error as error:
@@ -1105,15 +418,596 @@ class DatabaseManagement:
 
         return {"found": True, "verified": verified}
 
-    def check_user_poker_data_exists(self, user_id):
+    def change_admin_password(self, new_password):
         """
-        Checks whether a poker data record exists for the given user ID.
+        Replaces the Administrator password hash with a newly hashed value.
 
         Args:
-            user_id (int): The user ID to check.
+            new_password (str): The new plaintext password to hash and store.
+        """
+        with self.connect() as conn:
+            try:
+                admin_logger.info("Request to change Admin Password.")
+                database_logger.info("Request to change Administrator password.")
+
+                password_hash = hash_function(new_password)
+
+                conn.execute(
+                    "UPDATE users SET password_hash = ? WHERE username = ?",
+                    (password_hash, "Administrator"),
+                )
+
+                database_logger.info("Administrator password changed.")
+                admin_logger.info("Administrator password change request successful.")
+
+            except sqlite3.Error as error:
+                admin_logger.error("Administrator password change request failed.")
+                database_logger.exception(f"'change_admin_password' error. {error}")
+
+    # DATABASE VIEW AND EXPORT OPERATIONS
+
+    def view_database(self, table):
+        """
+        Returns all rows from the requested table as a DataFrame.
+
+        Args:
+            table (str): The table name to read.
 
         Returns:
-            bool: True if a record exists, False otherwise or on error.
+            pd.DataFrame: All rows, or an empty DataFrame on error.
+        """
+        if not table:
+            database_logger.error("No table provided for view_database().")
+            return pd.DataFrame()
+
+        with self.connect() as conn:
+            try:
+                admin_logger.info(f"Request to view Table: '{table}'")
+                database_logger.info(f"Attempting to read data from Table: '{table}'.")
+
+                dataframe = pd.read_sql_query(f"SELECT * FROM {table}", conn)
+
+                database_logger.info(f"Data from Table: '{table}' read successfully.")
+                admin_logger.info("View table request successful.")
+
+                return dataframe
+
+            except sqlite3.Error as error:
+                admin_logger.error("View table request failed.")
+                database_logger.exception(f"'view_database' error. {error}")
+                return pd.DataFrame()
+
+    def export_table_to_csv(self, table, file_path):
+        """
+        Exports all rows from a table to a CSV file.
+
+        Args:
+            table (str): The table to export.
+            file_path (str): Destination file path.
+
+        Returns:
+            bool: True on success, False on error.
+        """
+        try:
+            with self.connect() as conn:
+                database_logger.info(
+                    f"Exporting table '{table}' to CSV at '{file_path}'."
+                )
+
+                rows = conn.execute(f"SELECT * FROM {table}").fetchall()
+
+                if not rows:
+                    database_logger.warning(f"Table '{table}' is empty.")
+                    return False
+
+                headers = list(rows[0].keys())
+
+                with open(file_path, "w", newline="") as file:
+                    writer = csv.writer(file)
+                    writer.writerow(headers)
+                    writer.writerows(rows)
+
+                database_logger.info(
+                    f"Successfully exported table '{table}' to '{file_path}'."
+                )
+                return True
+
+        except Exception as error:
+            database_logger.exception(f"'export_table_to_csv' error. {error}")
+            return False
+
+    def import_from_csv(self, file_path):
+        """
+        Reads a CSV file and returns its contents as a list of dicts.
+
+        Args:
+            file_path (str): Path to the CSV file.
+
+        Returns:
+            list: List of row dictionaries.
+        """
+        records = []
+        try:
+            with open(file_path, "r") as file:
+                headers = file.readline().strip().split(",")
+                for line in file:
+                    values = line.strip().split(",")
+                    records.append(dict(zip(headers, values)))
+
+            database_logger.info(
+                f"Successfully imported data from CSV at '{file_path}'."
+            )
+        except Exception as error:
+            database_logger.exception(f"'import_from_csv' error. {error}")
+
+        return records
+
+    # USER RECORD OPERATIONS
+
+    def change_user_record(
+        self,
+        *,
+        user_id,
+        new_username=None,
+        new_password=None,
+        new_account_type=None,
+        new_balance=None,
+    ):
+        """
+        Updates one or more fields on a user record. Only non-None
+        arguments are applied.
+
+        Args:
+            user_id (int): The user ID to modify.
+            new_username (str, optional): New username.
+            new_password (str, optional): New plaintext password
+                                          (hashed before storage).
+            new_account_type (int, optional): New registered status
+                                              (0 or 1).
+            new_balance (float, optional): New balance value.
+        """
+        if new_username is not None:
+            self.change_user_username(user_id, new_username)
+        if new_password is not None:
+            self.change_user_password(user_id, new_password)
+        if new_account_type is not None:
+            self.change_user_account_type(user_id, new_account_type)
+        if new_balance is not None:
+            self.change_user_balance(user_id, new_balance)
+
+    def change_user_username(self, user_id, new_username):
+        """
+        Changes a user's username.
+
+        Args:
+            user_id (int): Target user ID.
+            new_username (str): The new username to assign.
+        """
+        with self.connect() as conn:
+            try:
+                admin_logger.info(f"Request to change User ID: '{user_id}' username.")
+                database_logger.info(
+                    f"Request to change User ID: '{user_id}' username."
+                )
+
+                conn.execute(
+                    "UPDATE users SET username = ? WHERE user_id = ?",
+                    (new_username, user_id),
+                )
+
+                admin_logger.info("Change username request successful.")
+                database_logger.info("User username changed.")
+
+            except sqlite3.Error as error:
+                admin_logger.error("Change username request failed.")
+                database_logger.exception(f"'change_user_username' error. {error}")
+
+    def change_user_password(self, user_id, new_password):
+        """
+        Changes a user's password. Hashes the plaintext before storing.
+
+        Args:
+            user_id (int): Target user ID.
+            new_password (str): New plaintext password.
+        """
+        with self.connect() as conn:
+            try:
+                admin_logger.info(f"Request to change User: '{user_id}' password.")
+                database_logger.info(f"Request to change User: '{user_id}' password.")
+
+                conn.execute(
+                    "UPDATE users SET password_hash = ? WHERE user_id = ?",
+                    (hash_function(new_password), user_id),
+                )
+
+                admin_logger.info("Change user password request successful.")
+                database_logger.info("User password changed.")
+
+            except sqlite3.Error as error:
+                admin_logger.error("Change user password request failed.")
+                database_logger.exception(f"'change_user_password' error. {error}")
+
+    def change_user_account_type(self, user_id, registered):
+        """
+        Changes a user's registered status.
+
+        Args:
+            user_id (int): Target user ID.
+            registered (int): New status (0 = guest, 1 = registered).
+        """
+        with self.connect() as conn:
+            try:
+                admin_logger.info(
+                    f"Request to change User ID: '{user_id}' account type."
+                )
+                database_logger.info(
+                    f"Request to change User ID: '{user_id}' account type."
+                )
+
+                conn.execute(
+                    "UPDATE users SET registered = ? WHERE user_id = ?",
+                    (registered, user_id),
+                )
+
+                admin_logger.info("Change user account type request successful.")
+                database_logger.info("User account type changed.")
+
+            except sqlite3.Error as error:
+                admin_logger.error("Change user account type request failed.")
+                database_logger.exception(f"'change_user_account_type' error. {error}")
+
+    def change_user_balance(self, user_id, new_balance):
+        """
+        Sets a user's balance to the given value.
+
+        Args:
+            user_id (int): Target user ID.
+            new_balance (float): New balance.
+        """
+        with self.connect() as conn:
+            try:
+                admin_logger.info(f"Request to change User ID: '{user_id}' balance.")
+                database_logger.info(f"Request to change User ID: '{user_id}' balance.")
+
+                conn.execute(
+                    "UPDATE users SET balance = ? WHERE user_id = ?",
+                    (float(new_balance), user_id),
+                )
+
+                admin_logger.info("Change user balance request successful.")
+                database_logger.info("User balance changed.")
+
+            except sqlite3.Error as error:
+                admin_logger.error("Change user balance request failed.")
+                database_logger.exception(f"'change_user_balance' error. {error}")
+
+    def delete_user_record(self, user_id):
+        """
+        Permanently deletes a user record.
+
+        Args:
+            user_id (int): The user ID to delete.
+        """
+        with self.connect() as conn:
+            try:
+                admin_logger.info(f"Request to delete User ID: '{user_id}' record.")
+                database_logger.info(f"Request to delete User ID: '{user_id}' record.")
+
+                conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+
+                admin_logger.info("Delete user record request successful.")
+                database_logger.info("User record deleted.")
+
+            except sqlite3.Error as error:
+                admin_logger.error("Delete user record request failed.")
+                database_logger.exception(f"'delete_user_record' error. {error}")
+
+    # USER LOOKUP AND AUTHENTICATION
+
+    def fetch_user_full_record(self, *, user_id=None, username=None):
+        """
+        Returns all columns from the users table for the specified user.
+
+        Args:
+            user_id (int, optional): User ID to search by.
+            username (str, optional): Username to search by.
+
+        Returns:
+            dict: All user fields, or None if not found.
+
+        Raises:
+            ValueError: If neither user_id nor username is provided.
+        """
+        if user_id is None and username is None:
+            raise ValueError("Either user_id or username must be provided.")
+
+        with self.connect() as conn:
+            try:
+                if user_id is not None:
+                    row = conn.execute(
+                        "SELECT * FROM users WHERE user_id = ?", (user_id,)
+                    ).fetchone()
+                else:
+                    row = conn.execute(
+                        "SELECT * FROM users WHERE username = ?", (username,)
+                    ).fetchone()
+
+                return dict(row) if row else None
+
+            except sqlite3.Error as error:
+                database_logger.exception(f"'fetch_user_full_record' error. {error}")
+                return None
+
+    def fetch_user_presence(self, username):
+        """
+        Checks whether a username exists in the database.
+
+        Args:
+            username (str): The username to search for.
+
+        Returns:
+            dict: {'found': bool}
+        """
+        with self.connect() as conn:
+            try:
+                database_logger.info(f"Searching for User: '{username}'.")
+
+                row = conn.execute(
+                    "SELECT 1 FROM users WHERE username = ?", (username,)
+                ).fetchone()
+
+                found = row is not None
+                database_logger.info(
+                    f"User '{username}' {'found' if found else 'not found'}."
+                )
+
+                return {"found": found}
+
+            except sqlite3.Error as error:
+                database_logger.exception(f"'fetch_user_presence' error. {error}")
+                return {"found": False}
+
+    def register_user(self, username, password, registered):
+        """
+        Inserts a new user with a hashed password and £10,000 starting
+        balance. Guest accounts may pass None for password.
+
+        Args:
+            username (str): Unique username (must not be 'Administrator').
+            password (str or None): Plaintext password, or None for guests.
+            registered (int): 0 for guest, 1 for registered.
+
+        Returns:
+            str: The created username.
+
+        Raises:
+            ValueError: If the username is invalid or reserved.
+            sqlite3.IntegrityError: If the username already exists.
+            sqlite3.Error: For other database errors.
+        """
+        if not username or not isinstance(username, str):
+            raise ValueError("'username' must be a non-empty string.")
+
+        if username.strip().lower() == "administrator":
+            raise ValueError("The username 'Administrator' cannot be used.")
+
+        password_hash = hash_function(password) if password else None
+
+        with self.connect() as conn:
+            try:
+                database_logger.info(
+                    f"Request to make an account for User: '{username}'."
+                )
+
+                conn.execute(
+                    """
+                    INSERT INTO users (username, password_hash, registered, balance)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (username, password_hash, int(float(registered)), 10000.0),
+                )
+
+                database_logger.info(f"Created User: '{username}' record.")
+                return username
+
+            except sqlite3.IntegrityError:
+                database_logger.warning(f"User: '{username}' record already exists.")
+                raise
+
+            except sqlite3.Error as error:
+                database_logger.exception(f"'register_user' error. {error}")
+                raise
+
+    def verify_user_password(self, username, password):
+        """
+        Verifies a plaintext password against the stored hash.
+
+        Args:
+            username (str): The username to verify.
+            password (str): The plaintext password to check.
+
+        Returns:
+            dict: {'found': bool, 'verified': bool}
+        """
+        with self.connect() as conn:
+            try:
+                database_logger.info(
+                    f"Request to search for User: '{username}' 'password_hash'."
+                )
+
+                row = conn.execute(
+                    "SELECT password_hash FROM users WHERE username = ?",
+                    (username,),
+                ).fetchone()
+
+            except sqlite3.Error as error:
+                database_logger.exception(f"'verify_user_password' error. {error}")
+                return {"found": False, "verified": False}
+
+        if not row or not row["password_hash"]:
+            database_logger.info(f"'password_hash' for User: '{username}' not found.")
+            return {"found": False, "verified": False}
+
+        verified = verify_hash(row["password_hash"], password)
+
+        database_logger.info(
+            "Password verification successful."
+            if verified
+            else "Failed password attempt."
+        )
+
+        return {"found": True, "verified": verified}
+
+    def record_user_login(self, username):
+        """
+        Records a user login event.
+
+        Args:
+            username (str): The username of the user who logged in.
+        """
+        with self.connect() as conn:
+            try:
+                current_time = datetime.now().strftime("%d-%m-%Y | %H:%M:%S")
+                conn.execute(
+                    "UPDATE users SET last_login = ? WHERE username = ?",
+                    (current_time, username),
+                )
+                database_logger.info(
+                    f"Recorded login for User: '{username}' at {current_time}."
+                )
+            except sqlite3.Error as error:
+                database_logger.exception(f"'record_user_login' error. {error}")
+                raise
+
+    # Checks if its been 24 hours since a guest accounts creation not last login and deletes if so. Should be called at startup to clean up expired guest accounts.
+    def check_expired_guest_account(self):
+        try:
+            with self.connect() as conn:
+                database_logger.info("Checking for expired guest accounts.")
+                current_time = datetime.now()
+                conn.execute(
+                    "DELETE FROM users WHERE registered = 0 AND "
+                    "strftime('%s', 'now') - strftime('%s', created_at) > ?",
+                    (24 * 3600,),
+                )
+                database_logger.info("Expired guest accounts deleted.")
+        except sqlite3.Error as error:
+            database_logger.exception(f"'startup_checks' error. {error}")
+
+    def fetch_user_id(self, username):
+        """
+        Retrieves the user ID for a given username.
+
+        Args:
+            username (str): The username to look up.
+
+        Returns:
+            dict: {'found': bool, 'user_id': int or None}
+        """
+        with self.connect() as conn:
+            try:
+                database_logger.info(f"Request to fetch User: '{username}' user_id.")
+
+                row = conn.execute(
+                    "SELECT user_id FROM users WHERE username = ?", (username,)
+                ).fetchone()
+
+                if row:
+                    database_logger.info("User 'user_id' found.")
+                    return {"found": True, "user_id": row["user_id"]}
+                else:
+                    database_logger.info("User 'user_id' not found.")
+                    return {"found": False, "user_id": None}
+
+            except sqlite3.Error as error:
+                database_logger.exception(f"'fetch_user_id' error. {error}")
+                return {"found": False, "user_id": None}
+
+    def fetch_username(self, user_id):
+        """
+        Retrieves the username for a given user ID.
+
+        Args:
+            user_id (int): The user ID to look up.
+
+        Returns:
+            dict: {'found': bool, 'username': str or None}
+        """
+        with self.connect() as conn:
+            try:
+                database_logger.info(f"Request to fetch User ID: '{user_id}' username.")
+
+                row = conn.execute(
+                    "SELECT username FROM users WHERE user_id = ?", (user_id,)
+                ).fetchone()
+
+                if row:
+                    database_logger.info("User 'username' found.")
+                    return {"found": True, "username": row["username"]}
+                else:
+                    database_logger.info("User 'username' not found.")
+                    return {"found": False, "username": None}
+
+            except sqlite3.Error as error:
+                database_logger.exception(f"'fetch_username' error. {error}")
+                return {"found": False, "username": None}
+
+    def fetch_user_balance(self, username):
+        """
+        Retrieves the account balance for a username.
+
+        Args:
+            username (str): The username to query.
+
+        Returns:
+            dict: {'found': bool, 'balance': float}
+        """
+        with self.connect() as conn:
+            try:
+                database_logger.info(f"Request to fetch User: '{username}' balance.")
+
+                row = conn.execute(
+                    "SELECT balance FROM users WHERE username = ?", (username,)
+                ).fetchone()
+
+                if row:
+                    database_logger.info("User 'balance' found.")
+                    return {"found": True, "balance": float(row["balance"])}
+                else:
+                    database_logger.info("User 'balance' not found.")
+                    return {"found": False, "balance": 0.0}
+
+            except sqlite3.Error as error:
+                database_logger.exception(f"'fetch_user_balance' error. {error}")
+                return {"found": False, "balance": 0.0}
+
+    def modify_user_balance(self, username, new_balance):
+        """
+        Sets a user's balance to the specified value.
+
+        Args:
+            username (str): The username to update.
+            new_balance (float): The new balance.
+        """
+        with self.connect() as conn:
+            try:
+                database_logger.info(f"Request to modify User: '{username}' balance.")
+
+                conn.execute(
+                    "UPDATE users SET balance = ? WHERE username = ?",
+                    (float(new_balance), username),
+                )
+
+                database_logger.info("User balance modified.")
+
+            except sqlite3.Error as error:
+                database_logger.exception(f"'modify_user_balance' error. {error}")
+
+    # POKER STATISTICS AND ACTION HISTORY
+
+    def check_user_poker_data_exists(self, user_id):
+        """
+        Returns True if a poker data record exists for the given user ID.
         """
         with self.connect() as conn:
             try:
@@ -1122,14 +1016,11 @@ class DatabaseManagement:
                 )
 
                 exists = conn.execute(
-                    """
-                    SELECT 1 FROM user_poker_data WHERE user_id = ?
-                    """,
-                    (user_id,),
+                    "SELECT 1 FROM user_poker_data WHERE user_id = ?", (user_id,)
                 ).fetchone()
 
                 database_logger.info(
-                    f"Poker data existence for User: {'found' if exists else 'not found'}."
+                    f"Poker data for User: {'found' if exists else 'not found'}."
                 )
 
                 return exists is not None
@@ -1142,16 +1033,14 @@ class DatabaseManagement:
 
     def initialise_user_poker_data(self, user_id):
         """
-        Creates a new poker data record for the given user with default values
-        and a new base range chart. If a record already exists then no changes
-        are made.
+        Creates a poker data record for the user with default values and a
+        base range chart. Does nothing if a record already exists.
 
         Args:
-            user_id (int): The user ID to initialise poker data for.
+            user_id (int): The user ID to initialise.
 
         Returns:
-            bool: True if initialisation was successful or data already exists,
-                  False on error.
+            bool: True if successful or already initialised, False on error.
         """
         with self.connect() as conn:
             try:
@@ -1160,31 +1049,19 @@ class DatabaseManagement:
                 )
 
                 exists = conn.execute(
-                    """
-                    SELECT 1 FROM user_poker_data WHERE user_id = ?
-                    """,
-                    (user_id,),
+                    "SELECT 1 FROM user_poker_data WHERE user_id = ?", (user_id,)
                 ).fetchone()
 
                 if exists:
-                    database_logger.info("User poker data already exists")
+                    database_logger.info("User poker data already exists.")
                     return True
 
                 conn.execute(
-                    """
-                    INSERT INTO user_poker_data (user_id)
-                    VALUES (?)
-                    """,
-                    (user_id,),
+                    "INSERT INTO user_poker_data (user_id) VALUES (?)", (user_id,)
                 )
 
-                # Create a base range chart.
                 conn.execute(
-                    """
-                    UPDATE user_poker_data
-                    SET player_range = ?
-                    WHERE user_id = ?
-                    """,
+                    "UPDATE user_poker_data SET player_range = ? WHERE user_id = ?",
                     (json.dumps(generate_range_chart()), user_id),
                 )
 
@@ -1199,24 +1076,19 @@ class DatabaseManagement:
 
     def load_user_poker_data(self, user_id):
         """
-        Loads the complete poker data record for a user.  Retrieves all stored
-        statistics, calculates derived values (avg_bet_size), and normalises
-        fold_to_raise and call_when_weak to a 0.0–1.0 range.
+        Loads the complete poker data record for a user, including derived
+        statistics and a deserialised range chart.
 
         Args:
-            user_id (int): The user ID to load data for.
+            user_id (int): The user ID to load.
 
         Returns:
-            dict: Dictionary containing all poker data fields plus derived
-                  statistics (avg_bet_size), with player_range
-                  deserialised from JSON. Returns None if the user is not found
-                  or an error occurs.
+            dict: All poker data fields plus avg_bet_size, or None on error.
         """
         with self.connect() as conn:
             try:
                 database_logger.info(f"Loading poker data for User ID: '{user_id}'.")
 
-                # Get user data with poker statistics.
                 row = conn.execute(
                     """
                     SELECT
@@ -1238,37 +1110,25 @@ class DatabaseManagement:
                 ).fetchone()
 
                 if not row:
-                    database_logger.warning("User not found in poker data")
+                    database_logger.warning("User not found in poker data.")
                     return None
 
-                # Convert to dictionary.
                 record = dict(row)
 
-                # Parse player_range JSON.
                 record["player_range"] = (
                     json.loads(record["player_range"])
                     if record.get("player_range")
                     else None
                 )
 
-                # Calculate derived statistics.
                 rounds = max(1, record["rounds_played"])
                 record["avg_bet_size"] = record["total_bets"] / rounds
 
-                # Normalise fold_to_raise and call_when_weak to 0.0-1.0.
-                # These are stored as counts, convert to frequencies.
-                total_pressure_situations = (
-                    record["fold_to_raise"] + record["call_when_weak"]
-                )
-                if total_pressure_situations > 0:
-                    record["fold_to_raise"] = (
-                        record["fold_to_raise"] / total_pressure_situations
-                    )
-                    record["call_when_weak"] = (
-                        record["call_when_weak"] / total_pressure_situations
-                    )
+                total = record["fold_to_raise"] + record["call_when_weak"]
+                if total > 0:
+                    record["fold_to_raise"] = record["fold_to_raise"] / total
+                    record["call_when_weak"] = record["call_when_weak"] / total
                 else:
-                    # Default values if no data.
                     record["fold_to_raise"] = 0.5
                     record["call_when_weak"] = 0.5
 
@@ -1278,44 +1138,35 @@ class DatabaseManagement:
 
                 return record
 
-            except sqlite3.Error as error:
-                database_logger.exception(f"'load_user_poker_data' error. {error}")
-                return None
-            except json.JSONDecodeError as error:
+            except (sqlite3.Error, json.JSONDecodeError) as error:
                 database_logger.exception(f"'load_user_poker_data' error. {error}")
                 return None
 
     def update_player_range(self, user_id, player_range):
         """
-        Serialises and stores a player's range chart in the database, updating
-        the last_updated timestamp.
+        Serialises and stores a player's range chart.
 
         Args:
-            user_id (int): The user ID whose range will be updated.
-            player_range (dict): The range dictionary to store.
+            user_id (int): Target user ID.
+            player_range (dict): The range chart to store.
 
         Returns:
-            bool: True if successful, False on error.
+            bool: True on success, False on error.
         """
         with self.connect() as conn:
             try:
                 database_logger.info(f"Updating player range for User ID: '{user_id}'.")
 
-                range_json = json.dumps(player_range)
-
                 conn.execute(
                     """
                     UPDATE user_poker_data
-                    SET 
-                        player_range = ?,
-                        last_updated = CURRENT_TIMESTAMP
+                    SET player_range = ?, last_updated = CURRENT_TIMESTAMP
                     WHERE user_id = ?
                     """,
-                    (range_json, user_id),
+                    (json.dumps(player_range), user_id),
                 )
 
                 database_logger.info("User player range updated.")
-
                 return True
 
             except (sqlite3.Error, json.JSONDecodeError) as error:
@@ -1323,22 +1174,28 @@ class DatabaseManagement:
                 return False
 
     def log_player_action(
-        self, *, user_id, round_number, street, action, bet_size, pot_size
+        self,
+        *,
+        user_id,
+        round_number,
+        street,
+        action,
+        bet_size,
+        pot_size,
     ):
         """
-        Logs a player action to the user_poker_actions table.
+        Inserts a player action record into user_poker_actions.
 
         Args:
-            user_id (int): The user ID performing the action.
-            round_number (int): The unique hand/round identifier.
-            street (str): The current betting round ('preflop', 'flop',
-                          'turn', 'river').
-            action (str): The action taken ('fold', 'call', 'raise').
-            bet_size (float): The amount bet or raised.
-            pot_size (float): The total pot size at the time of the action.
+            user_id (int): The acting user's ID.
+            round_number (int): The hand/round identifier.
+            street (str): 'preflop', 'flop', 'turn', or 'river'.
+            action (str): 'fold', 'call', or 'raise'.
+            bet_size (float): Amount bet or raised.
+            pot_size (float): Total pot at the time of the action.
 
         Returns:
-            bool: True if successful, False on error.
+            bool: True on success, False on error.
         """
         with self.connect() as conn:
             try:
@@ -1346,28 +1203,14 @@ class DatabaseManagement:
 
                 conn.execute(
                     """
-                    INSERT INTO user_poker_actions(
-                        user_id,
-                        round_number,
-                        street,
-                        action,
-                        bet_size,
-                        pot_size
-                    )
+                    INSERT INTO user_poker_actions
+                        (user_id, round_number, street, action, bet_size, pot_size)
                     VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (
-                        user_id,
-                        round_number,
-                        street,
-                        action,
-                        bet_size,
-                        pot_size,
-                    ),
+                    (user_id, round_number, street, action, bet_size, pot_size),
                 )
 
                 database_logger.info("Action logged for User.")
-
                 return True
 
             except sqlite3.Error as error:
@@ -1376,15 +1219,14 @@ class DatabaseManagement:
 
     def resolve_player_actions(self, user_id, round_number):
         """
-        Marks all actions for a specific round as resolved by setting the
-        resolved flag to 1.
+        Marks all actions for a specific round as resolved.
 
         Args:
-            user_id (int): The user ID whose actions will be resolved.
-            round_number (int): The round number to mark as resolved.
+            user_id (int): Target user ID.
+            round_number (int): The round to resolve.
 
         Returns:
-            bool: True if successful, False on error.
+            bool: True on success, False on error.
         """
         with self.connect() as conn:
             try:
@@ -1394,14 +1236,12 @@ class DatabaseManagement:
                     """
                     UPDATE user_poker_actions
                     SET resolved = 1
-                    WHERE user_id = ?
-                    AND round_number = ?
+                    WHERE user_id = ? AND round_number = ?
                     """,
                     (user_id, round_number),
                 )
 
                 database_logger.info("User actions resolved.")
-
                 return True
 
             except sqlite3.Error as error:
@@ -1419,22 +1259,20 @@ class DatabaseManagement:
         faced_raise,
     ):
         """
-        Updates all aggregate poker statistics for a user after a hand
-        completes. Increments counters and recalculates VPIP/PFR.
+        Increments aggregate poker statistics after a hand and
+        recalculates VPIP/PFR percentages.
 
         Args:
             user_id (int): The user ID to update.
-            action (str): The final action taken ('fold', 'call', 'raise').
-            bet_size (float): The amount bet during the hand.
-            voluntarily_entered (bool): Whether the player voluntarily put
-                                        money in the pot (contributes to VPIP).
-            preflop_raised (bool): Whether the player raised preflop
-                                   (contributes to PFR).
-            faced_raise (bool): Whether the player faced a raise during the
-                                hand.
+            action (str): Final action taken ('fold', 'call', 'raise').
+            bet_size (float): Amount bet during the hand.
+            voluntarily_entered (bool): True if the player voluntarily
+                                        put money in the pot.
+            preflop_raised (bool): True if the player raised preflop.
+            faced_raise (bool): True if the player faced a raise.
 
         Returns:
-            bool: True if successful, False on error.
+            bool: True on success, False on error.
         """
         with self.connect() as conn:
             try:
@@ -1446,31 +1284,28 @@ class DatabaseManagement:
                     """
                     UPDATE user_poker_data
                     SET
-                        rounds_played = rounds_played + 1,
-                        total_hands_played = total_hands_played + ?,
-                        total_hands_raised = total_hands_raised + ?,
-                        total_bets = total_bets + ?,
-                        pot_size = pot_size + ?,
-                        fold_to_raise = fold_to_raise + ?,
-                        call_when_weak = call_when_weak + ?,
-                        last_updated = CURRENT_TIMESTAMP
+                        rounds_played       = rounds_played + 1,
+                        total_hands_played  = total_hands_played + ?,
+                        total_hands_raised  = total_hands_raised + ?,
+                        total_bets          = total_bets + ?,
+                        fold_to_raise       = fold_to_raise + ?,
+                        call_when_weak      = call_when_weak + ?,
+                        last_updated        = CURRENT_TIMESTAMP
                     WHERE user_id = ?
                     """,
                     (
-                        int(voluntarily_entered),  # VPIP counter.
-                        int(preflop_raised),  # PFR counter.
-                        bet_size,  # Total bets.
-                        int(faced_raise and action == "fold"),  # Fold to raise.
-                        int(faced_raise and action == "call"),  # Call when weak.
+                        int(voluntarily_entered),
+                        int(preflop_raised),
+                        bet_size,
+                        int(faced_raise and action == "fold"),
+                        int(faced_raise and action == "call"),
                         user_id,
                     ),
                 )
 
-                # Recalculate VPIP and PFR percentages.
                 self.recalculate_frequencies(conn, user_id)
 
                 database_logger.info("User hand statistics updated.")
-
                 return True
 
             except sqlite3.Error as error:
@@ -1479,22 +1314,19 @@ class DatabaseManagement:
 
     def recalculate_frequencies(self, conn, user_id):
         """
-        Recalculates and updates VPIP and PFR percentage values based on the
-        current aggregate counters.
+        Recalculates and stores VPIP and PFR percentages from the raw
+        counters. Called internally after updating hand statistics.
 
         Args:
-            conn (sqlite3.Connection): An active database connection to use.
-            user_id (int): The user ID whose frequencies will be recalculated.
+            conn (sqlite3.Connection): Active connection to reuse.
+            user_id (int): The user ID to recalculate for.
         """
         try:
             database_logger.info(f"Recalculating frequencies for User ID: '{user_id}'.")
 
             row = conn.execute(
                 """
-                SELECT
-                    rounds_played,
-                    total_hands_played,
-                    total_hands_raised
+                SELECT rounds_played, total_hands_played, total_hands_raised
                 FROM user_poker_data
                 WHERE user_id = ?
                 """,
@@ -1509,11 +1341,7 @@ class DatabaseManagement:
             pfr = (row["total_hands_raised"] / rounds) * 100.0
 
             conn.execute(
-                """
-                UPDATE user_poker_data
-                SET vpip = ?, pfr = ?
-                WHERE user_id = ?
-                """,
+                "UPDATE user_poker_data SET vpip = ?, pfr = ? WHERE user_id = ?",
                 (vpip, pfr, user_id),
             )
 
@@ -1524,14 +1352,13 @@ class DatabaseManagement:
 
     def fetch_player_statistics(self, user_id):
         """
-        Retrieves a summary poker statistics for a player.
+        Returns a summary of poker statistics for a player.
 
         Args:
             user_id (int): The user ID to retrieve statistics for.
 
         Returns:
-            dict: Dictionary of statistics, or None if the user is not found
-                  or an error occurs.
+            dict: Statistics dictionary, or None if not found.
         """
         with self.connect() as conn:
             try:
@@ -1542,16 +1369,11 @@ class DatabaseManagement:
                 row = conn.execute(
                     """
                     SELECT
-                        user_id,
-                        rounds_played,
-                        vpip,
-                        pfr,
-                        total_bets,
-                        fold_to_raise,
-                        call_when_weak
+                        user_id, rounds_played, vpip, pfr,
+                        total_bets, fold_to_raise, call_when_weak
                     FROM user_poker_data
                     WHERE user_id = ?
-                """,
+                    """,
                     (user_id,),
                 ).fetchone()
 
@@ -1559,13 +1381,10 @@ class DatabaseManagement:
                     return None
 
                 statistics = dict(row)
-
-                # Calculate derived statistics.
                 rounds = max(1, statistics["rounds_played"])
                 statistics["avg_bet_size"] = statistics["total_bets"] / rounds
 
                 database_logger.info("User player statistics fetched.")
-
                 return statistics
 
             except sqlite3.Error as error:
@@ -1574,24 +1393,18 @@ class DatabaseManagement:
 
     def fetch_all_players_data(self):
         """
-        Retrieves poker data for all players who have played at least one
-        round.
+        Returns poker data for all players with at least one round played,
+        ordered by rounds played descending.
 
         Returns:
-            list: A list of player data dictionaries ordered by rounds played
-                  descending, or an empty list on error.
+            list: List of player data dictionaries, or empty list on error.
         """
         with self.connect() as conn:
             try:
                 database_logger.info("Fetching poker data for all players.")
 
                 rows = conn.execute("""
-                    SELECT
-                        user_id,
-                        rounds_played,
-                        vpip,
-                        pfr,
-                        total_bets
+                    SELECT user_id, rounds_played, vpip, pfr, total_bets
                     FROM user_poker_data
                     WHERE rounds_played > 0
                     ORDER BY rounds_played DESC
@@ -1605,77 +1418,11 @@ class DatabaseManagement:
                     players.append(player)
 
                 database_logger.info(f"Fetched data for {len(players)} players.")
-
                 return players
 
             except sqlite3.Error as error:
                 database_logger.exception(f"'fetch_all_players_data' error. {error}")
                 return []
-
-    def export_to_csv(self, table, file_path):
-        """
-        Exports a database table to a CSV text file.
-        This provides non-SQL table access - the data is written as
-        comma-separated text with a header row.
-
-        Args:
-            table (str): The SQLite table to export.
-            file_path (str): The path to the CSV text file.
-
-        Returns:
-            bool: True on success, False on error.
-        """
-        try:
-            with self.connect() as conn:
-                database_logger.info(
-                    f"Exporting table '{table}' to a CSV text file at '{file_path}'."
-                )
-
-                rows = conn.execute(f"SELECT * FROM {table}").fetchall()
-                if not rows:
-                    database_logger.warning(f"Table '{table}' is empty.")
-                    return False
-
-                headers = list(rows[0].keys())  # Get column names from the first row.
-
-                with open(file_path, "w") as file:
-                    writer = csv.writer(file)
-                    writer.writerow(headers)
-                    writer.writerows(rows)
-
-                database_logger.info(
-                    f"Successfully exported table '{table}' to a CSV text file at '{file_path}'."
-                )
-                return True
-
-        except Exception as error:
-            database_logger.exception(f"'export_to_csv' error. {error}")
-            return False
-
-    def import_from_csv(self, file_path):
-        """
-        Reads a CSV text file and returns its contents as a list of dictionaries.
-
-        Args:
-            file_path (str): The path to the CSV text file.
-
-        Returns:
-            list: A list of dictionaries representing the CSV rows.
-        """
-        records = []
-        try:
-            with open(file_path, "r") as file:
-                headers = file.readline().strip().split(",")  # Read header line.
-                for line in file:
-                    values = line.strip().split(",")
-                    record = dict(zip(headers, values))
-                    records.append(record)
-            database_logger.info(
-                f"Successfully imported data from CSV text file at '{file_path}'."
-            )
-        except Exception as error:
-            database_logger.exception(f"'import_from_csv' error. {error}")
-            return records
 
     def reset_player_statistics(self, user_id, keep_range=True):
         """
@@ -1683,55 +1430,39 @@ class DatabaseManagement:
 
         Args:
             user_id (int): The user ID to reset.
-            keep_range (bool): If True, the player_range is preserved.
+            keep_range (bool): If True, preserves the player_range.
                                Defaults to True.
 
         Returns:
-            bool: True if successful, False on error.
+            bool: True on success, False on error.
         """
+        range_clause = "" if keep_range else "player_range = NULL,"
+
         with self.connect() as conn:
             try:
                 database_logger.info(
-                    f"Resetting player statistics for User ID: '{user_id}'. Keep range: {keep_range}"
+                    f"Resetting player statistics for User ID: '{user_id}'. "
+                    f"Keep range: {keep_range}"
                 )
 
-                if keep_range:
-                    conn.execute(
-                        """
-                        UPDATE user_poker_data
-                        SET
-                            rounds_played = 0,
-                            vpip = 0,
-                            pfr = 0,
-                            total_hands_played = 0,
-                            total_hands_raised = 0,
-                            total_bets = 0,
-                            fold_to_raise = 0,
-                            call_when_weak = 0,
-                            last_updated = CURRENT_TIMESTAMP
-                        WHERE user_id = ?
-                        """,
-                        (user_id,),
-                    )
-                else:
-                    conn.execute(
-                        """
-                        UPDATE user_poker_data
-                        SET
-                            rounds_played = 0,
-                            player_range = NULL,
-                            vpip = 0,
-                            pfr = 0,
-                            total_hands_played = 0,
-                            total_hands_raised = 0,
-                            total_bets = 0,
-                            fold_to_raise = 0,
-                            call_when_weak = 0,
-                            last_updated = CURRENT_TIMESTAMP
-                        WHERE user_id = ?
-                        """,
-                        (user_id,),
-                    )
+                conn.execute(
+                    f"""
+                    UPDATE user_poker_data
+                    SET
+                        {range_clause}
+                        rounds_played = 0,
+                        vpip = 0,
+                        pfr = 0,
+                        total_hands_played = 0,
+                        total_hands_raised = 0,
+                        total_bets = 0,
+                        fold_to_raise = 0,
+                        call_when_weak = 0,
+                        last_updated = CURRENT_TIMESTAMP
+                    WHERE user_id = ?
+                    """,
+                    (user_id,),
+                )
 
                 database_logger.info("User statistics reset.")
                 return True
@@ -1740,17 +1471,17 @@ class DatabaseManagement:
                 database_logger.exception(f"'reset_player_statistics' error. {error}")
                 return False
 
+    # SPECIAL GAME MODE SCORES
+
     def fetch_special_mode_scores(self, user_id):
         """
-        Retrieves the Gauntlet and Endless personal-best scores for a user.
+        Retrieves the Endless mode personal-best score for a user.
 
         Args:
             user_id (int): The user ID to query.
 
         Returns:
-            dict: Dictionary with keys 'gauntlet_max_rounds' (int) and
-                'endless_high_score' (int), or None if the user is not
-                found or an error occurs.
+            dict: {'endless_high_score': int}, or None if not found.
         """
         with self.connect() as conn:
             try:
@@ -1759,11 +1490,7 @@ class DatabaseManagement:
                 )
 
                 row = conn.execute(
-                    """
-                    SELECT gauntlet_max_rounds, endless_high_score
-                    FROM   user_poker_data
-                    WHERE  user_id = ?
-                    """,
+                    "SELECT endless_high_score FROM user_poker_data WHERE user_id = ?",
                     (user_id,),
                 ).fetchone()
 
@@ -1774,11 +1501,7 @@ class DatabaseManagement:
                     return None
 
                 database_logger.info("User special-mode scores fetched.")
-
-                return {
-                    "gauntlet_max_rounds": int(row["gauntlet_max_rounds"] or 0),
-                    "endless_high_score": int(row["endless_high_score"] or 0),
-                }
+                return {"endless_high_score": int(row["endless_high_score"] or 0)}
 
             except sqlite3.Error as error:
                 database_logger.exception(f"'fetch_special_mode_scores' error. {error}")
@@ -1786,35 +1509,29 @@ class DatabaseManagement:
 
     def update_special_mode_score(self, user_id, column, new_score):
         """
-        Updates a special-mode personal best only if 'new_score' exceeds
-        the currently stored value. Uses a conditional UPDATE so the record
-        is never downgraded (e.g. after a short run following a long one).
+        Updates a special-mode personal best only if new_score is higher
+        than the currently stored value.
 
         Args:
-            user_id  (int): The user ID to update.
-            column   (str): Either 'gauntlet_max_rounds' or
-                            'endless_high_score'.
-            new_score (int): The candidate new personal best.
+            user_id (int): The user ID to update.
+            column (str): Column name.
+            new_score (int): Candidate new personal best.
 
         Returns:
-            bool: True if the update executed without error, False otherwise.
-
-        Raises:
-            ValueError: If 'column' is not one of the two allowed values.
+            bool: True on success, False on error.
         """
         with self.connect() as conn:
             try:
                 conn.execute(
                     f"""
                     UPDATE user_poker_data
-                    SET {column} = ?,
-                    last_updated = CURRENT_TIMESTAMP
-                    WHERE user_id = ?
-                    AND {column} < ?
+                    SET {column} = ?, last_updated = CURRENT_TIMESTAMP
+                    WHERE user_id = ? AND {column} < ?
                     """,
                     (new_score, user_id, new_score),
                 )
-                database_logger.info(f"Updated {column} to {new_score}")
+
+                database_logger.info(f"Updated {column} to {new_score}.")
                 return True
 
             except sqlite3.Error as error:
@@ -1827,7 +1544,7 @@ class DatabaseManagement:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-def fetch_font_settings(root):
+def fetch_text_styles(root):
     """
     Creates and returns a dictionary of named tkinter Font objects for consistent
     styling across the project.
@@ -1839,38 +1556,216 @@ def fetch_font_settings(root):
         dict: A dictionary mapping style names (e.g. 'heading', 'text') to
               tkinter Font instances.
     """
-    styles = {
+    text_styles = {
         "title": font.Font(
-            root=root, family="Times New Roman", size=35, weight="bold", underline=True
+            root=root, family="Times New Roman", size=45, weight="bold", underline=True
         ),
         "heading": font.Font(
-            root=root, family="Arial", size=28, weight="bold", underline=True
+            root=root,
+            family="Bodoni 72 Smallcaps",
+            size=36,
+            weight="bold",
+            underline=True,
         ),
-        "subheading": font.Font(root=root, family="Helvetica", size=24, weight="bold"),
-        "text": font.Font(root=root, family="Verdana", size=20),
-        "button": font.Font(root=root, family="Tahoma", size=18, weight="bold"),
+        "subheading": font.Font(
+            root=root, family="Bodoni 72 Smallcaps", size=30, weight="bold"
+        ),
+        "text": font.Font(root=root, family="Verdana", size=26),
+        "button": font.Font(root=root, family="Tahoma", size=22, weight="bold"),
+        "label": font.Font(root=root, family="Didot", size=20),
         "terms_and_conditions": font.Font(
-            root=root, family="Helvetica", size=20, weight="bold"
-        ),
+            root=root, family="American Typewriter", size=26
+        ),  # or Snell Roundhand
         "emphasis": font.Font(
-            root=root, family="Georgia", size=12, weight="bold", slant="italic"
+            root=root, family="Georgia", size=16, weight="bold", slant="italic"
+        ),
+        "casino_style": font.Font(
+            root=root, family="Zapfino", size=28, weight="bold", slant="italic"
         ),
     }
-    return styles
+    return text_styles
 
+
+# Colour scheme.
+CS = {
+    # Windows.
+    "pwd_prompt": "#BB8C64",
+    "admin": "#BB756D",
+    "casino": "#1F6053",
+    "rules": "#000000",
+    # Tables
+    "table_even": "#9627C5",
+    "table_odd": "#D7BDE2",
+    # Label, entry and button backgrounds.
+    "label_bg": "#D7CBB4",
+    "label_text": "#000000",
+    "entry_bg": "#FDFEFE",
+    "entry_text": "#000000",
+    "button_bg": "#F1C40F",
+    "button_text": "#000000",
+    # Frames backgrounds.
+    "top_left": "#D79393",
+    "middle_left": "#A3E4D7",
+    "bottom_left": "#E59866",
+    "top_right": "#2E7D73",
+    "middle_right": "#BCC88B",
+    "bottom_right": "#5B2A3C",
+    # Widgets.
+    "round_label_bg": "#1A5276",
+    "widget_bg": "#A50B5E",
+    "widget_fg": "#000000",
+    # Text.
+    "text_fg": "#FFFFFF",
+    "text_bg": "#1A1A1A",
+    # Log panel.
+    "log_bg": "#000000",
+    "log_fg": "#FFFFFF",
+    # Log entry.
+    "start_bg": "#243B7A",
+    "start_fg": "#FFFFFF",
+    "win_bg": "#244D3A",
+    "win_fg": "#A8E6C1",
+    "loss_bg": "#AE1E1E",
+    "loss_fg": "#F2A3A3",
+    "tie_bg": "#5C4A10",
+    "tie_fg": "#F0d898",
+    "thinking_bg": "#3C2A4A",
+    "thinking_fg": "#D4B8E8",
+    "tournament_bg": "#4A1E38",
+    "tournament_fg": "#E8B8D0",
+    "endless_bg": "#E74C3C",
+    "endless_fg": "#31A3AD",
+    "separator": "#888888",
+    "frame_fg": "#000000",
+}
 
 # Default delay for message logging in seconds.
 DELAY = 1.5
 
 
+# GUI WIDGET FACTORY FUNCTIONS
+
+
+def create_window(root, title, bg_color, is_main_frame=False):
+    """
+    Creates and configures a standardised Tkinter window with consistent
+    styling.
+
+    Args:
+        root (Tk or Toplevel): The Tkinter root window to configure.
+        title (str): The title to display in the window title bar.
+        bg_color (str): Hex colour string for the window background.
+        is_main_frame (bool): If True, creates and returns a packed main
+                              Frame alongside the styles dict. If False,
+                              returns only the styles dict. Defaults to
+                              False.
+
+    Returns:
+        tuple[Frame, dict] or dict: When is_main_frame is True, returns
+        (main_frame, styles). When False, returns only styles.
+    """
+    root.configure(bg=bg_color)
+    root.title(title)
+    width = root.winfo_screenwidth()
+    height = root.winfo_screenheight()
+    root.geometry(f"{width}x{height}+0+0")
+    root.focus_force()
+
+    styles = fetch_text_styles(root)
+
+    if is_main_frame:
+        main_frame = Frame(root, bg=bg_color)
+        main_frame.pack(expand=True, fill="both", padx=20, pady=20)
+        return main_frame, styles
+    else:
+        return styles
+
+
+def preset_label(
+    parent, text="", bg=None, fg=None, font=None, relief="raised", bd=2, **kwargs
+):
+    """
+    Create a Label with default styling from CS and raised relief border.
+
+    Args:
+        parent (Widget): Parent widget
+        text (str): Label text
+        bg (str): Override background colour (default: CS["label_bg"])
+        fg (str): Override foreground colour (default: CS["label_text"])
+        font (Font): Override font (default: fetched from styles)
+        relief (str): Border relief style (default: "raised")
+        bd (int): Border width (default: 2)
+        **kwargs: Additional Label parameters (font, padx, pady, etc.)
+
+    Returns:
+        Label widget with styling applied
+    """
+    bg = bg or CS["label_bg"]
+    fg = fg or CS["label_text"]
+    style = fetch_text_styles(parent)
+    font = font or style["label"]
+    return Label(
+        parent, text=text, bg=bg, fg=fg, font=font, relief=relief, bd=bd, **kwargs
+    )
+
+
+def preset_button(
+    parent, text="", bg=None, fg=None, font=None, relief="raised", bd=2, **kwargs
+):
+    """
+    Create a Button with default styling from CS and raised relief border.
+
+    Args:
+        parent (Widget): Parent widget
+        text (str): Button text
+        bg (str): Override background colour (default: CS["button_bg"])
+        fg (str): Override foreground colour (default: CS["button_text"])
+        font (Font): Override font (default: fetched from styles)
+        relief (str): Border relief style (default: "raised")
+        bd (int): Border width (default: 2)
+        **kwargs: Additional Button parameters (command, font, width, etc.)
+
+    Returns:
+        Button widget with styling applied
+    """
+    bg = bg or CS["button_bg"]
+    fg = fg or CS["button_text"]
+    style = fetch_text_styles(parent)
+    font = font or style["button"]
+    return Button(
+        parent, text=text, bg=bg, fg=fg, font=font, relief=relief, bd=bd, **kwargs
+    )
+
+
+def preset_entry(parent, bg=None, fg=None, font=None, **kwargs):
+    """
+    Create an Entry with default styling from CS.
+
+    Args:
+        parent (Widget): Parent widget
+        bg (str): Override background colour (default: CS["entry_bg"])
+        fg (str): Override foreground colour (default: CS["entry_text"])
+        font (Font): Override font (default: fetched from styles)
+        **kwargs: Additional Entry parameters (show, width, font, etc.)
+
+    Returns:
+        Entry widget with styling applied
+    """
+    bg = bg or CS["entry_bg"]
+    fg = fg or CS["entry_text"]
+    style = fetch_text_styles(parent)
+    font = font or style["text"]
+    return Entry(parent, bg=bg, fg=fg, font=font, **kwargs)
+
+
 def clear_current_section(self):
     """
-    Destroys the currently active section frame if one exists, and resets the
+    Destroys the currently active section frame if one exists and resets the
     reference to None.
 
     Args:
-        self: The parent interface object that holds a 'current_section_frame'
-              attribute.
+        self (object): The parent interface object that holds a 'current_section_frame'
+                       attribute.
     """
     if getattr(self, "current_section_frame", None) is not None:
         self.current_section_frame.destroy()
@@ -1883,15 +1778,23 @@ def set_view(self, view_builder):
     view builder function. The new frame is packed into the main frame and
     passed to the view builder.
 
+    If the view_builder needs a parameter, lambda can be used to wrap it, e.g.:
+    set_view(self, lambda f: self.function(f, param1, param2))
+    this allows the view builder to receive the new frame as an argument while also
+    passing additional parameters.
+
     Args:
-        self: The parent interface object that holds 'main_frame' and
-              'current_section_frame' attributes.
+        self (object): The parent interface object that holds 'main_frame' and
+                       'current_section_frame' attributes.
         view_builder (callable): A function that accepts a Frame as its sole
                                  argument and populates it with widgets.
     """
     clear_current_section(self)
 
-    self.current_section_frame = Frame(self.main_frame)
+    background = getattr(self, "window_bg", None)
+    self.current_section_frame = Frame(
+        self.main_frame, bg=background if background else self.main_frame.cget("bg")
+    )
     self.current_section_frame.pack(expand=True, fill="both")
 
     view_builder(self.current_section_frame)
@@ -1901,17 +1804,16 @@ def set_view(self, view_builder):
 # search_sort_algorithms_V6.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
 def linear_search(array, key, value):
     """
     Performs a linear search through a list of dictionaries.
     Checks every element from a starting index 0 until the target is found.
     Time complexity: O(n).
 
-    Arg:
+    Args:
         array (list): A list of dictionaries to search.
         key (str): The dictionary key to inspect.
-        value : The value to search for.
+        value (any): The value to search for.
 
     Returns:
         int: Index of the first matching element, or -1 if not found.
@@ -1926,7 +1828,7 @@ def bubble_sort(array, key, reverse):
     """
     Sorts a list of dictionaries by a given key using bubble sort.
     Compares adjacent pairs and swaps if out of order.
-    Time complexity: O(n^2)
+    Time complexity: O(n^2).
 
     Args:
         array (list): List of dictionaries to sort.
@@ -1985,7 +1887,7 @@ def binary_search_by_id(array, target_id):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-class Encryption_Software:
+class EncryptionSoftware:
     """
     GUI tool for hybrid RSA/AES file encryption and decryption. Used by
     administrators to secure database files or other data.
@@ -1994,48 +1896,50 @@ class Encryption_Software:
     def __init__(self):
         """
         Initialises the root window, applies GUI styles, logs the system access
-        event via DatabaseManagement, sets the AES key placeholder to None, and
+        event via DatabaseManagement, sets the AES key placeholder to None and
         starts the main interface.
         """
+        self.window_bg = CS["admin"]
         self.enc_soft_root = Tk()
-        self.enc_soft_root.title("One More Time Casino - Encryption Software")
-        width = self.enc_soft_root.winfo_screenwidth()
-        height = self.enc_soft_root.winfo_screenheight()
-        self.enc_soft_root.geometry(f"{width}x{height}+0+0")
-        self.enc_soft_root.focus_force()
-
-        self.styles = fetch_font_settings(self.enc_soft_root)
+        self.main_frame, self.styles = create_window(
+            self.enc_soft_root,
+            "One Less Time Casino - Encryption Software",
+            self.window_bg,
+            is_main_frame=True,
+        )
+        self.enc_soft_root.protocol(
+            "WM_DELETE_WINDOW", lambda: (self.enc_soft_root.quit(), sys.exit(0))
+        )
 
         try:
-            self.dbm = DatabaseManagement()
+            self.dbm = DatabaseManagement(DB_PATH)
             self.dbm.admin_accessed_system("Encryption Software")
-        except:
+        except Exception:
             pass
 
         self.aes_key = None
 
-        self.main_frame = Frame(self.enc_soft_root)
-        self.main_frame.pack(expand=True, fill="both", padx=20, pady=20)
-
         self.current_section_frame = None
 
-        set_view(self, self.create_main_interface)
+        set_view(self, self.create_main_menu)
 
         self.enc_soft_root.mainloop()
 
-    def create_main_interface(self, frame):
+    def create_main_menu(self, frame):
         """
         Builds the main menu interface with buttons for all available
         operations: generating an RSA keypair, generating and encrypting an AES
         key, loading an encrypted AES key, encrypting a file, decrypting a
-        file, and exiting.
+        file and exiting.
 
         Args:
             frame (Frame): The parent frame to build the view into.
         """
-        Label(frame, text="Encryption Software", font=self.styles["heading"]).pack(
-            pady=10
-        )
+        preset_label(
+            frame,
+            text="Encryption Software",
+            font=self.styles["heading"],
+        ).pack(pady=10)
 
         buttons = [
             ("Generate RSA Keypair", self.generate_rsa_keys),
@@ -2047,8 +1951,11 @@ class Encryption_Software:
         ]
 
         for text, command in buttons:
-            Button(
-                frame, text=text, font=self.styles["button"], width=40, command=command
+            preset_button(
+                frame,
+                text=text,
+                width=40,
+                command=command,
             ).pack(pady=5)
 
     def generate_rsa_keys(self):
@@ -2092,7 +1999,7 @@ class Encryption_Software:
     def generate_encrypted_aes_key(self):
         """
         Generates a random 256-bit AES key, encrypts it using a user-selected
-        RSA public key via PKCS1-OAEP, and saves the encrypted result as a
+        RSA public key via PKCS1-OAEP and saves the encrypted result as a
         binary file to a user-selected directory. The filename includes a
         timestamp in DD-Month-YYYY format. Displays a success message with the
         saved file path, or an error message on failure.
@@ -2138,7 +2045,7 @@ class Encryption_Software:
     def load_rsa_aes_key(self):
         """
         Prompts the user to select an RSA private key file and an encrypted AES
-        key file, then decrypts the AES key using PKCS1-OAEP and stores it in
+        key file and then decrypts the AES key using PKCS1-OAEP and stores it in
         memory as self.aes_key. The loaded key is used for subsequent encrypt
         and decrypt operations. Displays a success message on completion, or an
         error message if decryption fails.
@@ -2178,7 +2085,7 @@ class Encryption_Software:
         """
         Encrypts a user-selected file using the currently loaded AES key in EAX
         mode. The encrypted output is saved to the same location with a .enc
-        extension appended. The file contains the nonce, authentication tag, and
+        extension appended. The file contains the nonce, authentication tag and
         ciphertext concatenated in that order. Displays a warning if no AES key
         is loaded, a success message with the output path on completion, or an
         error message on failure.
@@ -2220,8 +2127,8 @@ class Encryption_Software:
     def decrypt_file(self):
         """
         Decrypts a user-selected .enc file using the currently loaded AES key
-        in EAX mode. Reads the nonce, authentication tag, and ciphertext from
-        the file, verifies the authentication tag, and writes the decrypted
+        in EAX mode. Reads the nonce, authentication tag and ciphertext from
+        the file, verifies the authentication tag and writes the decrypted
         plaintext to disk. The output path is the input path with the .enc
         extension removed, or with .dec appended if the file does not end in
         .enc. Displays a warning if no AES key is loaded, a success message
@@ -2354,23 +2261,33 @@ def passwords_confirmation(frame, root):
               - 'password' (str or None): The confirmed password string, or
                 None if the dialog was cancelled or passwords did not match.
     """
-    styles = fetch_font_settings(root)
+    styles = fetch_text_styles(root)
 
     # Default return state.
     password = {"confirmed": False, "password": None}
 
     password_window = Toplevel(frame)
-    password_window.title("Confirm Password")
+    create_window(password_window, "Set New Password", CS["pwd_prompt"])
     password_window.protocol("WM_DELETE_WINDOW", lambda: None)
 
-    Label(password_window, text="Enter password:", font=styles["text"]).pack(pady=5)
+    preset_label(
+        password_window,
+        text="Enter password:",
+        font=styles["text"],
+        bg=CS["pwd_prompt"],
+    ).pack(pady=5)
 
-    password_entry_1 = Entry(password_window, show="*", width=30, font=styles["text"])
+    password_entry_1 = preset_entry(password_window, show="*", width=30)
     password_entry_1.pack(pady=5)
 
-    Label(password_window, text="Confirm password:", font=styles["text"]).pack(pady=5)
+    preset_label(
+        password_window,
+        text="Confirm password:",
+        font=styles["text"],
+        bg=CS["pwd_prompt"],
+    ).pack(pady=5)
 
-    password_entry_2 = Entry(password_window, show="*", width=30, font=styles["text"])
+    password_entry_2 = preset_entry(password_window, show="*", width=30)
     password_entry_2.pack(pady=5)
 
     def validate_passwords():
@@ -2387,7 +2304,6 @@ def passwords_confirmation(frame, root):
             password["password"] = password_1
             password_window.destroy()
         else:
-            # Show an error message if passwords do not match or are empty, then clear the entry fields for another attempt.
             messagebox.showerror(
                 "Error",
                 "Passwords do not match or are empty. Please try again.",
@@ -2404,11 +2320,11 @@ def passwords_confirmation(frame, root):
     button = Frame(password_window)
     button.pack(pady=10)
 
-    Button(
-        button, text="Submit", font=styles["button"], command=validate_passwords
-    ).pack(side="left", padx=5)
+    preset_button(button, text="Submit", command=validate_passwords).pack(
+        side="left", padx=5
+    )
 
-    Button(button, text="Cancel", font=styles["button"], command=cancel_password).pack(
+    preset_button(button, text="Cancel", command=cancel_password).pack(
         side="left", padx=5
     )
 
@@ -2418,16 +2334,104 @@ def passwords_confirmation(frame, root):
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# admin_interface_V6.py
+# system_interfaces_V6.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-class Admin_Interface:
+class BaseInterface:
     """
-    Provides the administrator login screen and top-level navigation interface,
-    giving access to the Admin Console and Casino Interface.
-    Automatically creates the database if it does not already exist.
+    Base class for all top-level Tkinter interface windows.
+    Handles common setup tasks and defines the contract for subclasses.
+      - Creates and configures the Tk root window.
+      - Stores self.window_bg, self.styles, self.main_frame.
+      - Instantiates self.dbm (DatabaseManagement).
+      - Checks for and creates the database if absent.
+      - Initialises self.current_section_frame to None.
+      - Binds WM_DELETE_WINDOW to a safe quit handler.
+      - Navigates to the first view via startup().
+      - Starts the Tk mainloop.
+
+    Subclasses must define:
+      WINDOW_TITLE  (str or property) — the window title bar text.
+      WINDOW_BG_KEY (str) — a key from the CS colour scheme dict.
+      startup() — returns the view method to show on startup.
+
+    Subclasses may override on_close() to customise the window-close
+    behaviour (default: quit the mainloop and exit the process).
     """
+
+    WINDOW_TITLE = ""
+    WINDOW_BG_KEY = ""
+
+    def startup(self):
+        """
+        Returns the view method that should be shown immediately after
+        the window opens. Subclasses should override this method.
+
+        Returns:
+            callable: A bound method that accepts a Frame argument, or None if not overridden.
+        """
+        return None
+
+    def __init__(self):
+        """
+        Builds the window, sets up shared state, navigates to the first
+        view and starts the mainloop.
+
+        Subclasses that need additional setup (e.g. CasinoInterface
+        accepting constructor arguments) should do that work before
+        calling super().__init__(), or override __init__ and call
+        super().__init__() at the end once their own state is ready.
+        """
+        self.window_bg = CS[self.WINDOW_BG_KEY]
+
+        self.interface_root = Tk()
+
+        window_title = self.WINDOW_TITLE
+
+        self.main_frame, self.styles = create_window(
+            self.interface_root,
+            window_title,
+            self.window_bg,
+            is_main_frame=True,
+        )
+
+        self.interface_root.protocol("WM_DELETE_WINDOW", self.on_close)
+
+        self.dbm = DatabaseManagement(DB_PATH)
+
+        if not self.dbm.check_database_exists():
+            self.dbm.create_database()
+
+        self.current_section_frame = None
+
+        set_view(self, self.startup())
+
+        self.interface_root.mainloop()
+
+    def on_close(self):
+        """
+        Default window-close handler: stops the mainloop and exits the
+        process. Subclasses may override this for custom behaviour.
+        """
+        self.interface_root.quit()
+        sys.exit(0)
+
+
+class AdminInterface(BaseInterface):
+    """
+    Administrator login screen and top-level navigation interface.
+    Gives access to the Admin Console and the Casino Interface.
+
+    Starts at the password check screen. On successful authentication,
+    the administrator may open the console or access the casino.
+    """
+
+    WINDOW_TITLE = "One Less Time Casino - Administrator Interface"
+    WINDOW_BG_KEY = "admin"
+
+    def startup(self):
+        return self.administrative_check
 
     def __init__(self):
         """
@@ -2435,29 +2439,7 @@ class Admin_Interface:
         password check or the main admin menu depending on whether the
         administrator is already authenticated.
         """
-        self.interface_root = Tk()
-        self.interface_root.title("One More Time Casino - Administrator Interface")
-        width = self.interface_root.winfo_screenwidth()
-        height = self.interface_root.winfo_screenheight()
-        self.interface_root.geometry(f"{width}x{height}+0+0")
-        self.interface_root.focus_force()
-
-        self.dbm = DatabaseManagement()
-        self.DB_FILE = DB_FILE
-
-        if not self.dbm.check_database_exists():
-            self.dbm.create_database()
-
-        self.styles = fetch_font_settings(self.interface_root)
-
-        self.main_frame = Frame(self.interface_root)
-        self.main_frame.pack(expand=True, fill="both", padx=20, pady=20)
-
-        self.current_section_frame = None
-
-        set_view(self, self.administrative_check)
-
-        self.interface_root.mainloop()
+        super().__init__()
 
     def administrative_check(self, frame):
         """
@@ -2468,11 +2450,9 @@ class Admin_Interface:
         Args:
             frame (Frame): The parent frame to build the view into.
         """
-        Label(
-            frame, text="Enter Administrator Password:", font=self.styles["text"]
-        ).pack(pady=5)
+        preset_label(frame, text="Enter Administrator Password:").pack(pady=5)
 
-        password_entry = Entry(frame, show="*", font=self.styles["text"])
+        password_entry = preset_entry(frame, show="*")
         password_entry.pack(pady=5)
 
         def submit():
@@ -2485,16 +2465,16 @@ class Admin_Interface:
             result = self.dbm.admin_password_check(password)
 
             if result.get("found") and result.get("verified"):
-                set_view(self, self.interface_init)
+                set_view(self, self.interface_menu)
             else:
-                messagebox.showerror("Error", "Incorrect password")
+                messagebox.showerror(
+                    "Error", "Incorrect password", parent=self.interface_root
+                )
                 password_entry.delete(0, "end")
 
-        Button(frame, text="Submit", font=self.styles["button"], command=submit).pack(
-            pady=10
-        )
+        preset_button(frame, text="Submit", command=submit).pack(pady=10)
 
-    def interface_init(self, frame):
+    def interface_menu(self, frame):
         """
         Renders the main administrator navigation menu with options to access
         the Admin Console, the Casino Interface, or exit the application.
@@ -2503,9 +2483,9 @@ class Admin_Interface:
         Args:
             frame (Frame): The parent frame to build the view into.
         """
-        Label(frame, text="Welcome Administrator", font=self.styles["heading"]).pack(
-            pady=20
-        )
+        preset_label(
+            frame, text="Welcome Administrator", font=self.styles["heading"]
+        ).pack(pady=20)
 
         self.dbm.admin_logged_in()
 
@@ -2516,68 +2496,46 @@ class Admin_Interface:
         ]
 
         for text, command in buttons:
-            Button(
-                frame, text=text, font=self.styles["button"], width=30, command=command
-            ).pack(pady=3)
+            preset_button(frame, text=text, width=30, command=command).pack(pady=3)
 
     def admin_console(self):
         """
-        Opens the Admin Console window by instantiating the Admin_Console class
-        from admin_console_V6.
+        Opens the Admin Console window by instantiating the AdminConsole class.
         """
 
-        Admin_Console()
+        AdminConsole()
 
     def access_casino(self):
         """
         Opens the Casino Interface in administrator mode by instantiating
-        Casino_Interface with administrator=True from casino_interface_V6.
+        CasinoInterface with administrator=True.
         """
 
         self.interface_root.destroy()
 
-        Casino_Interface(True)
+        CasinoInterface(True)
 
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# admin_console_V6.py
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-
-class Admin_Console:
+class AdminConsole(BaseInterface):
     """
-    Provides the administrator console interface, giving access to password
-    management, the encryption software, database management, and user
-    management. Sensitive operations are protected by a master password.
+    Administrator console providing access to password management,
+    encryption software, database management and user management.
+    Sensitive operations are gated behind a master password.
     """
+
+    WINDOW_TITLE = "One Less Time Casino - Administrative Console"
+    WINDOW_BG_KEY = "admin"
+    MASTER_PASSWORD = "Master_Password"
+
+    def startup(self):
+        return self.show_console_menu
 
     def __init__(self):
         """
-        Initialises the Admin Console window, loads the database manager and
-        font styles, and starts at the main console menu.
+        Initialises the Admin Console window with the master password
+        constant and then delegates to BaseInterface for standard setup.
         """
-        self.adm_console_root = Tk()
-        self.adm_console_root.title("One More Time Casino - Administrator Console")
-        width = self.adm_console_root.winfo_screenwidth()
-        height = self.adm_console_root.winfo_screenheight()
-        self.adm_console_root.geometry(f"{width}x{height}+0+0")
-        self.adm_console_root.focus_force()
-
-        self.dbm = DatabaseManagement()
-        self.DB_FILE = DB_FILE
-
-        self.MASTER_PASSWORD = "Master_Password"
-
-        self.styles = fetch_font_settings(self.adm_console_root)
-
-        self.main_frame = Frame(self.adm_console_root)
-        self.main_frame.pack(expand=True, fill="both", padx=20, pady=20)
-
-        self.current_section_frame = None
-
-        set_view(self, self.show_console_menu)
-
-        self.adm_console_root.mainloop()
+        super().__init__()
 
     def show_console_menu(self, frame):
         """
@@ -2587,7 +2545,7 @@ class Admin_Console:
         Args:
             frame (Frame): The parent frame to build the view into.
         """
-        Label(
+        preset_label(
             frame,
             text="Administrative Console",
             font=self.styles["heading"],
@@ -2604,18 +2562,16 @@ class Admin_Console:
                 lambda: set_view(self, self.show_database_management),
             ),
             ("User Management", lambda: set_view(self, self.show_user_management)),
-            ("Exit", self.adm_console_root.destroy),
+            ("Exit", self.interface_root.destroy),
         ]
 
         for text, command in buttons:
-            Button(
-                frame, text=text, font=self.styles["button"], width=30, command=command
-            ).pack(pady=5)
+            preset_button(frame, text=text, width=30, command=command).pack(pady=5)
 
     def change_admin_password(self, frame):
         """
         Renders the admin password change flow. Requires master password
-        verification before prompting for the current admin password, then
+        verification before prompting for the current admin password and then
         uses passwords_confirmation to set a new one. Displays appropriate
         error or success dialogs at each stage and returns to the main menu
         on completion or cancellation.
@@ -2624,33 +2580,36 @@ class Admin_Console:
             frame (Frame): The parent frame to build the view into.
         """
         if not self.dbm.check_database_exists():
-            messagebox.showwarning("Warning", f"'{self.DB_FILE}' does not exist.")
+            messagebox.showwarning(
+                "Warning", f"'{DB_PATH}' does not exist.", parent=self.interface_root
+            )
             return
         if messagebox.askyesno(
             "Confirm password change",
             "Are you sure you want to change the administrative password to the system?",
+            parent=self.interface_root,
         ):
             try:
                 password = simpledialog.askstring(
                     "Verification",
                     "Please enter Master Password to continue:",
                     show="*",
-                    parent=self.adm_console_root,
+                    parent=self.interface_root,
                 )
 
                 if password == self.MASTER_PASSWORD:
-                    Label(
+                    preset_label(
                         frame,
                         text="Enter Old Administrator Password:",
                         font=self.styles["heading"],
                     ).pack(pady=20)
 
-                    password_entry = Entry(frame, show="*", font=self.styles["text"])
+                    password_entry = preset_entry(frame, show="*")
                     password_entry.pack(pady=5)
 
                     def submit():
                         """
-                        Verifies the current admin password, then launches the
+                        Verifies the current admin password and then launches the
                         password confirmation dialog to capture and store the
                         new password. Returns to the main menu on success.
                         """
@@ -2658,12 +2617,16 @@ class Admin_Console:
                         result = self.dbm.admin_password_check(old_password)
 
                         if not (result.get("found") and result.get("verified")):
-                            messagebox.showerror("Error", "Incorrect password")
+                            messagebox.showerror(
+                                "Error",
+                                "Incorrect password",
+                                parent=self.interface_root,
+                            )
                             password_entry.delete(0, "end")
                             return
 
                         password_state = passwords_confirmation(
-                            frame, self.adm_console_root
+                            frame, self.interface_root
                         )
                         if not password_state["confirmed"]:
                             return
@@ -2672,46 +2635,50 @@ class Admin_Console:
                         self.dbm.change_admin_password(new_password)
 
                         messagebox.showinfo(
-                            "Success", "Administrator password updated successfully!"
+                            "Success",
+                            "Administrator password updated successfully!",
+                            parent=self.interface_root,
                         )
 
                         set_view(self, self.show_console_menu)
 
-                    Button(
+                    preset_button(
                         frame,
                         text="next",
-                        font=self.styles["button"],
                         width=25,
                         command=submit,
                     ).pack(pady=10)
 
-                    Button(
+                    preset_button(
                         frame,
                         text="Back",
-                        font=self.styles["button"],
                         width=25,
                         command=lambda: set_view(self, self.show_console_menu),
                     ).pack(pady=10)
 
                 else:
                     messagebox.showerror(
-                        "Error", "Incorrect password. Operation cancelled."
+                        "Error",
+                        "Incorrect password. Operation cancelled.",
+                        parent=self.interface_root,
                     )
                     set_view(self, self.show_console_menu)
 
             except Exception as error:
-                messagebox.showerror("Error", f": {error}")
+                messagebox.showerror("Error", f": {error}", parent=self.interface_root)
         else:
-            messagebox.showinfo("Cancelled", "Password change cancelled.")
+            messagebox.showinfo(
+                "Cancelled", "Password change cancelled.", parent=self.interface_root
+            )
             set_view(self, self.show_console_menu)
 
     def encryption_software_access(self):
         """
         Opens the Encryption Software window by instantiating the
-        Encryption_Software class from encryption_software_V6.
+        EncryptionSoftware class from encryption_software_V6.
         """
 
-        Encryption_Software()
+        EncryptionSoftware()
 
     def show_database_management(self, frame):
         """
@@ -2721,9 +2688,9 @@ class Admin_Console:
         Args:
             frame (Frame): The parent frame to build the view into.
         """
-        Label(frame, text="Database Management", font=self.styles["heading"]).pack(
-            pady=10
-        )
+        preset_label(
+            frame, text="Database Management", font=self.styles["heading"]
+        ).pack(pady=10)
 
         buttons = [
             ("Create Database", self.create_database),
@@ -2734,9 +2701,7 @@ class Admin_Console:
         ]
 
         for text, command in buttons:
-            Button(
-                frame, text=text, font=self.styles["button"], width=30, command=command
-            ).pack(pady=5)
+            preset_button(frame, text=text, width=30, command=command).pack(pady=5)
 
     def create_database(self):
         """
@@ -2747,57 +2712,61 @@ class Admin_Console:
         """
         if messagebox.askyesno(
             "Confirm Creation",
-            f"Are you sure you want to create '{self.DB_FILE}'?\n Note: Nothing will change if the database is already present.",
+            f"Are you sure you want to create '{DB_PATH}'?\n Note: Nothing will change if the database is already present.",
         ):
             try:
                 password = simpledialog.askstring(
                     "Verification",
                     "Please enter Master Password to continue:",
                     show="*",
-                    parent=self.adm_console_root,
+                    parent=self.interface_root,
                 )
 
                 if password == self.MASTER_PASSWORD:
                     self.dbm.create_database()
                     messagebox.showinfo(
-                        "Success", f"'{self.DB_FILE}' created successfully."
+                        "Success",
+                        f"'{DB_PATH}' created successfully.",
+                        parent=self.interface_root,
                     )
 
                 else:
                     messagebox.showerror(
-                        "Error", "Incorrect password. Operation cancelled."
+                        "Error",
+                        "Incorrect password. Operation cancelled.",
+                        parent=self.interface_root,
                     )
 
             except Exception as error:
-                messagebox.showerror(
-                    "Error", f"Failed to create '{self.DB_FILE}': {error}"
-                )
+                messagebox.showerror("Error", f"Failed to create '{DB_PATH}': {error}")
 
     def delete_database(self):
         """
-        Checks the database exists, then prompts for confirmation and master
+        Checks the database exists and then prompts for confirmation and master
         password verification before permanently deleting the database file.
         Displays a success or error message on completion.
         """
         if not self.dbm.check_database_exists():
-            messagebox.showwarning("Warning", f"'{self.DB_FILE}' does not exist.")
+            messagebox.showwarning("Warning", f"'{DB_PATH}' does not exist.")
             return
 
         if messagebox.askyesno(
-            "Confirm Delete", f"Are you sure you want to delete '{self.DB_FILE}'?"
+            "Confirm Delete", f"Are you sure you want to delete '{DB_PATH}'?"
         ):
             try:
                 password = simpledialog.askstring(
                     "Verification",
                     "Please enter Master Password to continue:",
                     show="*",
-                    parent=self.adm_console_root,
+                    parent=self.interface_root,
                 )
 
                 if password == self.MASTER_PASSWORD:
-                    os.remove(self.DB_FILE)
+                    os.remove(DB_PATH)
                     messagebox.showinfo(
-                        "Success", f"'{self.DB_FILE}' deleted successfully."
+                        "Success",
+                        f"'{DB_PATH}' deleted successfully.",
+                        parent=self.interface_root,
                     )
 
                 else:
@@ -2806,9 +2775,7 @@ class Admin_Console:
                     )
 
             except Exception as error:
-                messagebox.showerror(
-                    "Error", f"Failed to delete '{self.DB_FILE}': {error}"
-                )
+                messagebox.showerror("Error", f"Failed to delete '{DB_PATH}': {error}")
 
     def show_view_database(self, frame):
         """
@@ -2821,12 +2788,12 @@ class Admin_Console:
             frame (Frame): The parent frame to build the view into.
         """
         if not self.dbm.check_database_exists():
-            messagebox.showwarning("Warning", f"'{self.DB_FILE}' does not exist.")
+            messagebox.showwarning("Warning", f"'{DB_PATH}' does not exist.")
             return
 
-        Label(frame, text="Select Table to View", font=self.styles["heading"]).pack(
-            pady=10
-        )
+        preset_label(
+            frame, text="Select Table to View", font=self.styles["heading"]
+        ).pack(pady=10)
 
         tables = [
             "db_logs",
@@ -2844,7 +2811,7 @@ class Admin_Console:
         def view_table():
             """
             Reads the selected table name from the dropdown, queries it via
-            the database manager, and navigates to the table display view.
+            the database manager and navigates to the table display view.
             Shows an error if no table is selected or the result is empty.
             """
             selected_table = dropdown.get().strip()
@@ -2855,23 +2822,25 @@ class Admin_Console:
             dataframe = self.dbm.view_database(selected_table)
 
             if dataframe.empty:
-                messagebox.showinfo("Info", f"No data found in '{selected_table}'.")
+                messagebox.showinfo(
+                    "Info",
+                    f"No data found in '{selected_table}'.",
+                    parent=self.interface_root,
+                )
                 return
 
             set_view(self, lambda f: self.display_table(f, dataframe, selected_table))
 
-        Button(
+        preset_button(
             frame,
             text="View Table",
-            font=self.styles["button"],
             width=25,
             command=view_table,
         ).pack(pady=5)
 
-        Button(
+        preset_button(
             frame,
             text="Back",
-            font=self.styles["button"],
             width=25,
             command=lambda: set_view(self, self.show_database_management),
         ).pack(pady=5)
@@ -2887,7 +2856,9 @@ class Admin_Console:
             dataframe (pd.DataFrame): The table data to display.
             table (str): The name of the table, shown in the heading.
         """
-        Label(frame, text=f"'{table}' Table", font=self.styles["heading"]).pack(pady=10)
+        preset_label(frame, text=f"'{table}' Table", font=self.styles["heading"]).pack(
+            pady=10
+        )
 
         # Frame to hold Treeview.
         inner_frame = Frame(frame)
@@ -2918,17 +2889,17 @@ class Admin_Console:
             )
             tree.column(column, width=max_width, anchor="w")
 
-        # Insert rows with alternating tags for styling, the '_' character is used to prevent issues with special characters in the data interfering with tag assignment.
+        # Insert rows with alternating tags for styling, '_' is used to prevent
+        # issues with special characters in the data interfering with tag assignment.
         for count, (_, row) in enumerate(dataframe.iterrows()):
             tag = "evenrow" if count % 2 == 0 else "oddrow"
             tree.insert("", "end", values=list(row), tags=(tag,))
-        tree.tag_configure("evenrow", background="#a50b5e")
-        tree.tag_configure("oddrow", background="#feb29c")
+        tree.tag_configure("evenrow", background=CS["table_even"])
+        tree.tag_configure("oddrow", background=CS["table_odd"])
 
-        Button(
+        preset_button(
             frame,
             text="Back",
-            font=self.styles["button"],
             width=25,
             command=lambda: set_view(self, self.show_view_database),
         ).pack(pady=5)
@@ -2938,10 +2909,18 @@ class Admin_Console:
         Prompts the user to select a database table and a save location,
         then exports the selected table's contents to a CSV text file.
         """
+        tables = [
+            "db_logs",
+            "admin_logs",
+            "users",
+            "user_poker_data",
+            "user_poker_actions",
+        ]
+
         table = simpledialog.askstring(
-            "Export Table",
-            "Enter the name of the table to export:",
-            parent=self.adm_console_root,
+            "Export Table to CSV",
+            "Enter the name of the table to export:\nOptions: " + ", ".join(tables),
+            parent=self.interface_root,
         )
 
         if not table:
@@ -2960,9 +2939,17 @@ class Admin_Console:
 
         try:
             self.dbm.export_table_to_csv(table, save_path)
-            messagebox.showinfo("Success", f"'{table}' exported to:\n{save_path}")
+            messagebox.showinfo(
+                "Success",
+                f"'{table}' exported to:\n{save_path}",
+                parent=self.interface_root,
+            )
         except Exception as error:
-            messagebox.showerror("Error", f"Failed to export '{table}': {error}")
+            messagebox.showerror(
+                "Error",
+                f"Failed to export '{table}': {error}",
+                parent=self.interface_root,
+            )
 
     def show_user_management(self, frame):
         """
@@ -2973,10 +2960,12 @@ class Admin_Console:
             frame (Frame): The parent frame to build the view into.
         """
         if not self.dbm.check_database_exists():
-            messagebox.showwarning("Warning", f"'{self.DB_FILE}' does not exist.")
+            messagebox.showwarning("Warning", f"'{DB_PATH}' does not exist.")
             return
 
-        Label(frame, text="User Management", font=self.styles["heading"]).pack(pady=10)
+        preset_label(frame, text="User Management", font=self.styles["heading"]).pack(
+            pady=10
+        )
 
         buttons = [
             ("Return User Information", lambda: set_view(self, self.fetch_user_record)),
@@ -2987,9 +2976,7 @@ class Admin_Console:
         ]
 
         for text, command in buttons:
-            Button(
-                frame, text=text, font=self.styles["button"], width=30, command=command
-            ).pack(pady=5)
+            preset_button(frame, text=text, width=30, command=command).pack(pady=5)
 
     def fetch_user_record(self, frame):
         """
@@ -3001,18 +2988,23 @@ class Admin_Console:
         Args:
             frame (Frame): The parent frame to build the view into.
         """
-        Label(frame, text="Enter User ID", font=self.styles["heading"]).pack(pady=10)
-        user_id_entry = Entry(frame)
+        preset_label(frame, text="Enter User ID", font=self.styles["heading"]).pack(
+            pady=10
+        )
+
+        user_id_entry = preset_entry(frame)
         user_id_entry.pack(pady=5)
 
-        Label(frame, text="Enter Username", font=self.styles["heading"]).pack(pady=10)
-        username_entry = Entry(frame)
+        preset_label(frame, text="Enter Username", font=self.styles["heading"]).pack(
+            pady=10
+        )
+        username_entry = preset_entry(frame)
         username_entry.pack(pady=5)
 
         def lookup_user():
             """
             Resolves the entered user ID and/or username to a full user record.
-            Validates cross-referencing when both are provided, then navigates
+            Validates cross-referencing when both are provided and then navigates
             to the record display view. Shows appropriate errors for mismatches,
             non-numeric IDs, or missing users.
             """
@@ -3062,18 +3054,16 @@ class Admin_Console:
                 messagebox.showerror("Error", "No input provided.")
                 return
 
-        Button(
+        preset_button(
             frame,
             text="Search",
-            font=self.styles["button"],
             width=25,
             command=lookup_user,
         ).pack(pady=10)
 
-        Button(
+        preset_button(
             frame,
             text="Back",
-            font=self.styles["button"],
             width=25,
             command=lambda: set_view(self, self.show_user_management),
         ).pack(pady=5)
@@ -3081,7 +3071,7 @@ class Admin_Console:
     def display_user_record(self, frame, record):
         """
         Renders a read-only view of a user's full record, including username,
-        password hash, account type, balance, creation timestamp, and
+        password hash, account type, balance, creation timestamp and
         termination status with details if applicable.
 
         Args:
@@ -3089,7 +3079,7 @@ class Admin_Console:
             record (dict): The user record dictionary as returned by
                            fetch_user_full_record().
         """
-        Label(
+        preset_label(
             frame,
             text=f"User Information: {record.get('username')}",
             font=self.styles["heading"],
@@ -3102,14 +3092,13 @@ class Admin_Console:
             ("Balance", record["balance"]),
             ("Creation Time", record["created_at"]),
         ]:
-            Label(
-                frame, text=f"{key}: {value}", font=self.styles["text"], anchor="w"
-            ).pack(fill="x", padx=20, pady=2)
+            preset_label(frame, text=f"{key}: {value}", anchor="w").pack(
+                fill="x", padx=20, pady=2
+            )
 
-        Button(
+        preset_button(
             frame,
             text="Back",
-            font=self.styles["button"],
             width=25,
             command=lambda: set_view(self, self.show_user_management),
         ).pack(pady=10)
@@ -3123,9 +3112,11 @@ class Admin_Console:
         Args:
             frame (Frame): The parent frame to build the view into.
         """
-        Label(frame, text="Enter Username", font=self.styles["heading"]).pack(pady=10)
+        preset_label(frame, text="Enter Username", font=self.styles["heading"]).pack(
+            pady=10
+        )
 
-        username_entry = Entry(frame)
+        username_entry = preset_entry(frame)
         username_entry.pack(pady=5)
 
         def next():
@@ -3146,14 +3137,11 @@ class Admin_Console:
 
             set_view(self, lambda f: self.choose_account_type(f, username))
 
-        Button(
-            frame, text="Next", font=self.styles["button"], width=25, command=next
-        ).pack(pady=10)
+        preset_button(frame, text="Next", width=25, command=next).pack(pady=10)
 
-        Button(
+        preset_button(
             frame,
             text="Back",
-            font=self.styles["button"],
             width=25,
             command=lambda: set_view(self, self.show_user_management),
         ).pack(pady=5)
@@ -3169,7 +3157,9 @@ class Admin_Console:
             frame (Frame): The parent frame to build the view into.
             username (str): The username for the account being created.
         """
-        Label(frame, text="Account Type", font=self.styles["heading"]).pack(pady=10)
+        preset_label(frame, text="Account Type", font=self.styles["heading"]).pack(
+            pady=10
+        )
 
         def register():
             """Navigates to the password creation view for a registered account."""
@@ -3180,7 +3170,7 @@ class Admin_Console:
             Creates a temporary guest account with no password and navigates
             back to the user management menu.
             """
-            self.dbm.sign_in_user(username, None, False)
+            self.dbm.register_user(username, None, False)
 
             messagebox.showinfo(
                 "Success", f"Temporary guest account '{username}' created successfully!"
@@ -3188,26 +3178,23 @@ class Admin_Console:
 
             set_view(self, self.show_user_management)
 
-        Button(
+        preset_button(
             frame,
             text="Register Account",
-            font=self.styles["button"],
             width=25,
             command=register,
         ).pack(pady=5)
 
-        Button(
+        preset_button(
             frame,
             text="Temporary Guest Account",
-            font=self.styles["button"],
             width=25,
             command=guest,
         ).pack(pady=5)
 
-        Button(
+        preset_button(
             frame,
             text="Back",
-            font=self.styles["button"],
             width=25,
             command=lambda: set_view(self, self.show_user_management),
         ).pack(pady=5)
@@ -3215,7 +3202,7 @@ class Admin_Console:
     def create_password(self, frame, username):
         """
         Launches the password confirmation dialog in a loop until a valid
-        confirmed password is provided, then creates the registered user
+        confirmed password is provided and then creates the registered user
         account and returns to the user management menu.
 
         Args:
@@ -3224,9 +3211,9 @@ class Admin_Console:
         """
 
         while True:
-            password_state = passwords_confirmation(frame, self.adm_console_root)
+            password_state = passwords_confirmation(frame, self.interface_root)
             if password_state["confirmed"]:
-                self.dbm.sign_in_user(username, password_state["password"], True)
+                self.dbm.register_user(username, password_state["password"], True)
 
                 messagebox.showinfo(
                     "Success", f"Account for '{username}' created successfully!"
@@ -3244,20 +3231,24 @@ class Admin_Console:
         Args:
             frame (Frame): The parent frame to build the view into.
         """
-        Label(frame, text="Enter User ID:", font=self.styles["heading"]).pack(pady=10)
+        preset_label(frame, text="Enter User ID:", font=self.styles["heading"]).pack(
+            pady=10
+        )
 
-        user_id_entry = Entry(frame)
+        user_id_entry = preset_entry(frame)
         user_id_entry.pack(pady=5)
 
-        Label(frame, text="Enter Username:", font=self.styles["heading"]).pack(pady=10)
+        preset_label(frame, text="Enter Username:", font=self.styles["heading"]).pack(
+            pady=10
+        )
 
-        username_entry = Entry(frame)
+        username_entry = preset_entry(frame)
         username_entry.pack(pady=5)
 
         def next():
             """
             Resolves the entered user ID and/or username to a full user record,
-            cross-validating when both are provided, then navigates to the edit
+            cross-validating when both are provided and then navigates to the edit
             form. Shows appropriate errors for mismatches, non-numeric IDs, or
             missing users.
             """
@@ -3319,14 +3310,11 @@ class Admin_Console:
                 messagebox.showerror("Error", "No input provided.")
                 return
 
-        Button(
-            frame, text="Next", font=self.styles["button"], width=25, command=next
-        ).pack(pady=10)
+        preset_button(frame, text="Next", width=25, command=next).pack(pady=10)
 
-        Button(
+        preset_button(
             frame,
             text="Back",
-            font=self.styles["button"],
             width=25,
             command=lambda: set_view(self, self.show_user_management),
         ).pack(pady=5)
@@ -3334,7 +3322,7 @@ class Admin_Console:
     def show_edit_form(self, frame, record):
         """
         Renders an editable form pre-populated with the current user record.
-        Allows changing username, password, account type, balance, and
+        Allows changing username, password, account type, balance and
         termination status. Calls change_user_record with only the fields
         that have been filled in.
 
@@ -3342,27 +3330,27 @@ class Admin_Console:
             frame (Frame): The parent frame to build the view into.
             record (dict): The current user record dictionary.
         """
-        Label(
+        preset_label(
             frame,
             text=f"Edit User:\n{record['user_id']} | {record['username']}",
             font=self.styles["heading"],
         ).pack(pady=10)
 
-        Label(frame, text="New Username:").pack()
-        username_entry = Entry(frame)
+        preset_label(frame, text="New Username:").pack()
+        username_entry = preset_entry(frame)
         username_entry.pack()
 
-        Label(frame, text="New Password:").pack()
-        password_entry = Entry(frame, show="*")
+        preset_label(frame, text="New Password:").pack()
+        password_entry = preset_entry(frame, show="*")
         password_entry.pack()
 
-        Label(frame, text="New Account Type:").pack()
+        preset_label(frame, text="New Account Type:").pack()
         type_box = Combobox(frame, values=["Registered", "Temporary"], state="readonly")
         type_box.set("Registered" if not record.get("temporary") else "Temporary")
         type_box.pack()
 
-        Label(frame, text="New Balance:").pack()
-        balance_entry = Entry(frame)
+        preset_label(frame, text="New Balance:").pack()
+        balance_entry = preset_entry(frame)
         balance_entry.insert(0, str(record.get("balance", 0)))
         balance_entry.pack()
 
@@ -3393,18 +3381,16 @@ class Admin_Console:
             messagebox.showinfo("Success", "User updated successfully.")
             set_view(self, self.show_user_management)
 
-        Button(
+        preset_button(
             frame,
             text="Save Changes",
-            font=self.styles["button"],
             width=25,
             command=save,
         ).pack(pady=10)
 
-        Button(
+        preset_button(
             frame,
             text="Back",
-            font=self.styles["button"],
             width=25,
             command=lambda: set_view(self, self.show_user_management),
         ).pack(pady=5)
@@ -3418,17 +3404,17 @@ class Admin_Console:
         Args:
             frame (Frame): The parent frame to build the view into.
         """
-        Label(frame, text="Enter Username to Delete", font=self.styles["heading"]).pack(
-            pady=10
-        )
+        preset_label(
+            frame, text="Enter Username to Delete", font=self.styles["heading"]
+        ).pack(pady=10)
 
-        username_entry = Entry(frame)
+        username_entry = preset_entry(frame)
         username_entry.pack(pady=5)
 
         def next():
             """
             Validates the entered username exists and is not the Administrator
-            account, confirms deletion with the user, then resolves the
+            account, confirms deletion with the user and then resolves the
             username to a user ID and calls delete_user_record.
             """
             username = username_entry.get().strip()
@@ -3450,371 +3436,19 @@ class Admin_Console:
                 messagebox.showinfo("Success", f"User '{username}' deleted.")
                 set_view(self, self.show_user_management)
 
-        Button(
-            frame, text="Delete", font=self.styles["button"], width=25, command=next
-        ).pack(pady=10)
+        preset_button(frame, text="Delete", width=25, command=next).pack(pady=10)
 
-        Button(
+        preset_button(
             frame,
             text="Back",
-            font=self.styles["button"],
             width=25,
             command=lambda: set_view(self, self.show_user_management),
         ).pack(pady=5)
 
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# terms_and_conditions_V6.py
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-
-def terms_and_conditions():
-    return """
-    ---
-
-    **Terms and Conditions for One More Time Casino Ltd**
-
-    ---
-
-    ### © Belongs to ~~~ The composition of this code is original and not to be sold commercially unless stated otherwise by the owner.
-
-    ### Last Updated: 12/09/2025 22:14:55 GMT
-
-    ---
-
-    **INTRODUCTION**
-
-    Welcome to One More Time Casino Ltd (“we,” “us,” or “the Casino”). By accessing or using the services provided by One More Time Casino Ltd (the “Services”) through our future website, future mobile application, or other platforms (collectively referred to as the “Platform”), you agree to comply with and be bound by these Terms and Conditions (“Terms”). These Terms constitute a legally binding agreement between you (“the Player,” “User,” or “you”) and One More Time Casino Ltd. If you do not agree with these Terms, you should refrain from using the Platform or any Services provided by the Casino.
-
-    Please read these Terms carefully before proceeding, as they outline your rights, obligations, and limitations as a Player on One More Time Casino Ltd.
-
-    ---
-
-    ### 1. GENERAL TERMS
-
-    #### 1.1 Eligibility
-
-    1.1.1 Players must be at least 2 months old to access and use the Services of the Casino. By creating an account, you confirm that you meet the minimum requirements and accept all responsibility.
-    1.1.2 The Casino reserves the right to request proof of age and may suspend or terminate your account if appropriate verification is not provided. All funds shall be donated to the CEO's gaming funds.
-
-    #### 1.2 Account Registration
-
-    1.2.1 To access the data servers and hold the right to withdraw any money earned, Players must create a personal account (“Account”). The Player agrees to provide accurate, current, and complete information during the registration process and to update such information as necessary. If an account isn’t created, any money earned during the usage of a temporary account will return to the Casino.
-    1.2.2 Each Player may only create and maintain one account. Multiple accounts for the same Player are prohibited, and the Casino reserves the right to suspend or terminate any duplicate accounts. Please consult Section 9 for further information.
-    1.2.3 Players are responsible for maintaining the confidentiality of their login details. Any activities performed through your account, whether authorised or unauthorised, are your responsibility. You agree to notify the Casino immediately if you suspect any unauthorised use of your Account.
-
-    ---
-
-    ### 2. USE OF THE SERVICES
-
-    #### 2.1 License to Use the Platform
-
-    2.1.1 Upon successful registration, the Casino grants you a limited, non-transferable, and revocable license to use the Platform for personal entertainment purposes only.
-    2.1.2 You agree not to:
-
-    * Use the Platform for any unlawful or fraudulent activity.
-    * Engage in any behaviour that disrupts or negatively impacts the Casino’s reputation, operations or services.
-    * Reverse engineer, modify, or alter any part of the Platform or its software. If caught doing so, punishment Level 3 will be instigated.
-
-    #### 2.2 Prohibited Activities
-
-    2.2.1 Players must refrain from engaging in any activity that violates applicable laws, regulations, or Casino rules. This includes, but is not limited to:
-
-    * Attempting to manipulate or interfere with the proper functioning of the Platform; any damages caused to the database must be paid in full.
-    * Collusion or cheating, including any unauthorised use of software or bots to gain an unfair advantage.
-    * Money laundering or using the Platform as a conduit for illegal financial transactions.
-    * Anything the CEO perceives as unfavourable or detrimental.
-    * Causing emotional distress to the CEO.
-
-    ---
-
-    ### 3. FINANCIAL TRANSACTIONS
-
-    #### 3.1 Deposits
-
-    3.1.1 Players may deposit funds into their Casino Account using payment methods made available by the Casino. The Casino reserves the right to determine which payment methods are accepted, and some methods may only be available based on the Player’s location.
-    3.1.2 All deposits must be made in the Player’s name. Deposits by third parties may be deemed invalid, and the Casino reserves the right to refund or freeze such transactions and use them for the purchase of Pokémon cards.
-    3.1.3 Players are responsible for ensuring that their deposit funds are legitimate. The Casino will not be liable for deposit delays or failures caused by external banking institutions or third-party providers.
-
-    #### 3.2 Withdrawals
-
-    3.2.1 Players may request withdrawals of available funds by following the procedures set out in the Platform. Withdrawals are subject to minimum and maximum limits outlined by the Casino.
-    3.2.2 The Casino may require Players to verify their identity before processing withdrawal requests. Verification may include providing documents such as proof of identity, address, and payment method used. Most of the time a password will suffice.
-    3.2.3 The Casino reserves the right to withhold or delay withdrawals if fraudulent activity is suspected or if wagering requirements tied to bonuses have not been fulfilled.
-    3.2.4 Withdrawals will be processed using the same method as the deposit, where possible, or by an alternative method approved by the Casino.
-    3.2.5 Withdrawals may be received between the next 5 minutes and G years, where G = g64: g1 = 3↑↑↑↑3, gn = 3↑gn−13.
-
-    ---
-
-    ### 4. BONUSES AND PROMOTIONS
-
-    #### 4.1 General Terms for Bonuses
-
-    4.1.1 The Casino may offer bonuses, promotions, or loyalty rewards to Players. Each bonus is subject to specific terms provided at the time of the offer. By accepting a bonus, the Player agrees to comply with its terms.
-    4.1.2 Bonus offers are limited to one per person, household, email address, or IP address unless otherwise stated. Abuse may lead to Section 9, 9.4.
-
-    #### 4.2 Wagering Requirements
-
-    4.2.1 All bonuses are subject to wagering requirements before withdrawal. Wagering requirements refer to the amount a Player must bet before being eligible to withdraw bonus-related winnings.
-    4.2.2 Certain games may contribute differently to fulfilment of wagering requirements. For example, slot games may contribute 100%, while table games like WhiteJoe may contribute a smaller percentage or none at all.
-
-    #### 4.3 Bonus Abuse
-
-    4.3.1 Bonus abuse includes using multiple accounts, colluding to exploit bonuses, or violating specific promotion terms.
-    4.3.2 If detected, the Casino reserves the right to void any bonuses and associated winnings and may suspend the Player or instigate punishment levels.
-
-    ---
-
-    ### 5. RESPONSIBLE GAMBLING
-
-    #### 5.1 Commitment to Responsible Gambling
-
-    5.1.1 The Casino promotes responsible gambling and provides tools to help Players manage behaviour.
-    5.1.2 Players may set limits on deposits, losses, wagering, and time spent on the Platform. Players may also request temporary or permanent self-exclusion by contacting the CEO.
-
-    #### 5.2 Self-Exclusion
-
-    5.2.1 Players may voluntarily opt for self-exclusion if developing problematic gambling behaviour. During self-exclusion, the Player will not be allowed to access their account or use services; the account will be suspended until the CEO consents to changes.
-    5.2.2 The Casino will make reasonable efforts to enforce self-exclusion but is not liable if circumvention occurs.
-
-    ---
-
-    ### 6. ANTI-MONEY LAUNDERING (AML) AND FRAUD PREVENTION
-
-    6.1 AML Compliance
-    6.1.1 The Casino complies with international AML regulations and monitors suspicious activities.
-    6.1.2 Players may be required to verify identity. The Casino may suspend or close accounts and freeze funds if AML concerns arise.
-
-    6.2 Fraud Detection
-    6.2.1 Attempts to defraud the Casino via identity theft, unauthorized credit card use, or system manipulation may result in immediate account termination, forfeiture of winnings, and punishment Level 3.
-    6.2.2 The Casino may cooperate with law enforcement to investigate fraud.
-
-    ---
-
-    ### 7. PRIVACY AND DATA PROTECTION
-
-    7.1 Collection of Personal Data
-    7.1.1 By using the Platform, the Player consents to collection, processing, and storage of personal data in accordance with the Casino’s Privacy Policy.
-    7.1.2 Collected data may include (but not limited to) name, address, date of birth, email, and payment information.
-
-    7.2 Use of Personal Data
-    7.2.1 Data may be used to provide and improve services, verify identities, conduct AML checks, marketing purposes, for profits by selling to the highest bidder, employee training, or AI training.
-
-    7.3 Data Security
-    7.3.1 The Casino uses advanced encryption technology but cannot guarantee absolute security and will not be liable for unauthorised access beyond its control.
-
-    ---
-
-    ### 8. DISPUTE RESOLUTION
-
-    8.1 Internal Complaint Handling
-    8.1.1 Complaints may be submitted to customer support. Resolution may take up to a millennia.
-    8.1.2 Complaints must be submitted within 0-1 Planck second of the incident.
-
-    8.2 Arbitration
-    8.2.1 Disputes not resolved internally shall be settled via binding arbitration.
-    8.2.2 Arbitration decisions are final and binding.
-
-    ---
-
-    ### 9. ENFORCEMENT OF PUNISHMENT
-
-    9.1 Violation Level 1 → Player will have their screen time controlled until R\\$1,000,000 is paid to the CEO’s offshore bank account.
-    9.2 Violation Level 2 → Player will have to play in League of Legend championships until 77,777 Lei is paid to the CEO’s Swiss bank.
-    9.3 Violation Level 3 → Immediate deportation from home country; identity erased; all belongings and bank accounts repossessed. Exceptions: a Blu-ray LOTR collection, PS3 Uncharted case (no disk), and a Braille edition of *Dune Trilogy*.
-
-    ---
-
-    ### 10. LIMITATION OF LIABILITY
-
-    10.1 The Casino is not liable for damages arising from use or inability to use the Platform, including indirect or consequential damages.
-    10.2 Not liable for interruptions due to acts of God, internet outages, or technical failures.
-    10.3 The Player agrees to indemnify the Casino for claims arising from use, violation of Terms, or infringement of third-party rights.
-    10.4 The Casino is not liable for any health (including mental) related issues such as (in alphabetical order): Abdominal aortic aneurysm, Achilles tendinopathy, Acne, Acute cholecystitis, Acute pancreatitis, Addison’s disease, Adenomyosis, Alcohol-related liver disease, Allergic rhinitis, Allergies, Alzheimer’s disease, Anaphylaxis, Angina, Angioedema, Ankle sprain, Ankylosing spondylitis, Anorexia nervosa, Anxiety, Anxiety disorders, Appendicitis, Arterial thrombosis, Arthritis, Asbestosis, Asthma, Ataxia, Atopic eczema, Atrial fibrillation, Attention deficit hyperactivity disorder (ADHD), Autistic spectrum disorder (ASD), Benign prostate enlargement, Binge eating, Bipolar disorder, Blood poisoning (sepsis), Bowel incontinence, Bowel polyps, Brain stem death, Bronchiectasis, Bronchitis, Bulimia, Bunion, Cardiovascular disease, Carpal tunnel syndrome, Catarrh, Cellulitis, Cerebral palsy, Cervical spondylosis, Chest and rib injury, Chest infection, Chickenpox, Chilblains, Chlamydia, Chronic fatigue syndrome, Chronic kidney disease, Chronic obstructive pulmonary disease (COPD), Chronic pain, Chronic pancreatitis, Cirrhosis, Clostridium difficile, Coeliac disease, Cold sore, Coma, Common cold, Congenital heart disease, Conjunctivitis, Constipation, Coronary heart disease, Costochondritis, Cough, Crohn’s disease, Croup, Cystic fibrosis, Cystitis, Deaf blindness, Deep vein thrombosis, Dehydration, Delirium, Dementia, Dental abscess, Depression, Dermatitis herpetiformis, Diabetes, Diabetic retinopathy, Diarrhoea, Discoid eczema, Diverticular disease and diverticulitis, Dizziness, Down’s syndrome, Dry mouth, Dysphagia, Dystonia, Earache, Earwax build-up, Ebola virus disease, Ectopic pregnancy, Edwards’ syndrome, Endometriosis, Epilepsy, Erectile dysfunction, Escherichia coli (E. coli) O157, Febrile seizures, The feeling of something in your throat, Fever, Fibroids, Fibromyalgia, Flu, Foetal alcohol syndrome, Food allergy, Food poisoning, Frozen shoulder, Functional neurological disorder (FND), Fungal nail infection, Gallstones, Ganglion cyst, Gastroenteritis, Gastro-oesophageal reflux disease (GORD), Genital herpes, Genital symptoms, Genital warts, Glandular fever, Golfers elbow, Gonorrhoea, Gout, Greater trochanteric pain syndrome, Gum disease, Haemorrhoids (piles), Hay fever, Head lice and nits, Headaches, Hearing loss, Heart attack, Heart block, Heart failure, Heart palpitations, Hepatitis A, Hepatitis B, Hepatitis C, Hiatus hernia, High blood pressure (hypertension), High cholesterol, HIV, Huntington’s disease, Hyperglycaemia (high blood sugar), Hyperhidrosis, Hypoglycaemia (low blood sugar), Idiopathic pulmonary fibrosis, Impetigo, Indigestion, Ingrown toenail, Infertility, Inflammatory bowel disease (IBD), Insomnia, Iron deficiency anaemia, Irritable bowel syndrome (IBS), Itching, Itchy bottom, Itchy skin, Joint hypermobility, Kidney infection, Kidney stones, Labyrinthitis, Lactose intolerance, Laryngitis, Leg cramps, Lichen planus, Lipoedema, Liver disease, Loss of libido, Low blood pressure (hypotension), Lumbar stenosis, Lupus, Lyme disease, Lymphoedema, Lymphogranuloma venereum (LGV), Malaria, Malnutrition, Managing genital symptoms, Measles, Meningitis, Meniere’s disease, Menopause, Middle ear infection (otitis media), Migraine, Motor neurone disease (MND), Mouth ulcer, Multiple sclerosis (MS), Multiple system atrophy (MSA), Mumps, Munchausen’s syndrome, Myalgic encephalomyelitis (ME) or chronic fatigue syndrome (CFS), Myasthenia gravis, Neck problems, Non-alcoholic fatty liver disease (NAFLD), Norovirus, Nosebleed, Obesity, Obsessive compulsive disorder (OCD), Obstructive sleep apnoea, Oral thrush in adults, Osteoarthritis, Osteoarthritis of the hip, Osteoarthritis of the knee, Osteoarthritis of the thumb, Osteoporosis, Outer ear infection (otitis externa), Overactive thyroid, Pain in the ball of the foot, Panic disorder, Parkinson’s disease, Patau’s syndrome, Patellofemoral pain syndrome, Pelvic inflammatory disease, Pelvic organ prolapse, Peripheral neuropathy, Personality disorder, PIMS, Plantar heel pain, Pleurisy, Pneumonia, Polio, Polycystic ovary syndrome (PCOS), Polymyalgia rheumatica, Post-polio syndrome, Post-traumatic stress disorder (PTSD), Postural orthostatic tachycardia syndrome (PoTS), Postnatal depression, Pregnancy and baby, Pressure ulcers, Progressive supranuclear palsy (PSP), Psoriasis, Psoriatic arthritis, Psychosis, Pulmonary hypertension, Rare conditions, Raynaud’s phenomenon, Reactive arthritis, Restless legs syndrome, Respiratory syncytial virus (RSV), Rheumatoid arthritis, Ringworm and other fungal infections, Rosacea, Scabies, Scarlet fever, Schizophrenia, Sciatica, Scoliosis, Seasonal affective disorder (SAD), Sepsis, Septic shock, Shingles, Shortness of breath, Sudden Dwarfism, Sickle cell disease, Sinusitis, Sjogren’s syndrome, Skin light sensitivity (photosensitivity), Skin rashes in children, Slapped cheek syndrome, Sore throat, Spleen problems and spleen removal, Stomach ache and abdominal pain, Stomach ulcer, Streptococcus A (strep A), Stress and low mood, Stroke, Subacromial pain syndrome, Sunburn, Supraventricular tachycardia, Swollen glands, Syphilis, Tennis elbow, Thirst, Threadworms, Thrush, Tick bites, Tinnitus, Tonsillitis, Tooth decay, Toothache, Tourette’s syndrome, Transient ischaemic attack (TIA), Transverse myelitis, Trichomonas infection, Trigeminal neuralgia, Tuberculosis (TB), Type 1 diabetes, Type 2 diabetes, Ulcerative colitis, Underactive thyroid, Urinary incontinence, Urinary tract infection (UTI), Urticaria (hives), Varicose eczema, Varicose veins, Venous leg ulcer, Vertigo, Vitamin B12 or folate deficiency anaemia, Warts and verruca, Whiplash, Whooping cough, Wolff-Parkinson-White syndrome, Yellow fever.
-    10.5 The Casino is not liable for mistakes in input or failure to use capital/incorrect letters.
-
-    ---
-
-    ### 11. AMENDMENTS TO THE TERMS
-
-    11.1 The Casino may modify these Terms at any time; changes communicated via email or Platform notice or not at all.
-    11.2 Continued use constitutes acceptance of revised Terms.
-
-    ---
-
-    ### 12. GOVERNING LAW AND JURISDICTION
-
-    12.1 Terms governed by laws of the Casino's jurisdiction of incorporation (Just Kidding).
-    12.2 Legal action subject to exclusive jurisdiction of the Casino’s courts (Also Kidding).
-
-    ---
-
-    ### 13. MISCELLANEOUS
-
-    13.1 Severability: Invalid provisions do not affect remaining Terms.
-    13.2 Assignment: The Casino may assign rights and obligations; the Player may not assign rights.
-    13.3 Waiver: Delay or failure to exercise rights does not constitute waiver.
-
-    ---
-
-    **CONTACT INFORMATION**
-
-    One More Time Casino Ltd
-    Customer Support Email: support@onemoretimecasino.com
-    Customer Support Number: 61016
-    CEO Email: 19santoe@sjfchs.org.uk
-
-    ---
-    """
-
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# user_interface_V6.py
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-
-class User_Interface:
-    """
-    Provides the user-facing entry point to the casino application.
-    Displays the Terms & Conditions and requires the user to agree before
-    granting access to the Casino Interface.
-    Automatically creates the database if it does not already exist.
-    """
-
-    def __init__(self):
-        """
-        Initialises the User Interface window, checks for database existence,
-        and starts the application at the Terms & Conditions screen.
-        """
-        self.interface_root = Tk()
-        self.interface_root.title("One More Time Casino - User Interface")
-        width = self.interface_root.winfo_screenwidth()
-        height = self.interface_root.winfo_screenheight()
-        self.interface_root.geometry(f"{width}x{height}+0+0")
-        self.interface_root.focus_force()
-
-        self.dbm = DatabaseManagement()
-
-        if not self.dbm.check_database_exists():
-            self.dbm.create_database()
-
-        self.styles = fetch_font_settings(self.interface_root)
-
-        self.main_frame = Frame(self.interface_root)
-        self.main_frame.pack(expand=True, fill="both", padx=20, pady=20)
-
-        self.current_section_frame = None
-
-        set_view(self, self.show_terms_and_conditions)
-
-        self.interface_root.mainloop()
-
-    def show_terms_and_conditions(self, frame):
-        """
-        Renders the Terms & Conditions screen. Displays the full T&C text in a
-        scrollable, read-only text area. A checkbox must be ticked before the
-        Continue button becomes active, at which point the user proceeds to the
-        casino introduction screen.
-
-        Args:
-            frame (Frame): The parent frame to build the view into.
-        """
-        Label(frame, text="Terms & Conditions", font=self.styles["title"]).pack(pady=10)
-
-        # Create a scrolled text area for long T&C content.
-        text_area = scrolledtext.ScrolledText(
-            frame, wrap=WORD, font=self.styles["terms_and_conditions"]
-        )
-        text_area.pack(expand=True, fill=BOTH)
-
-        text_area.insert(END, terms_and_conditions())
-        text_area.configure(state="disabled")
-
-        agree_var = IntVar()
-        tc_window_checkbutton = Checkbutton(
-            frame, text="I Agree to the Terms & Conditions", variable=agree_var
-        )
-        tc_window_checkbutton.pack(pady=5)
-
-        continue_button = Button(
-            frame,
-            text="Continue",
-            state=DISABLED,
-            command=lambda: set_view(self, self.casino_intro),
-        )
-        continue_button.pack(pady=5)
-
-        def on_checkbox_change(*args):
-            """
-            Callback triggered when the agree checkbox value changes.
-            Enables or disables the Continue button based on checkbox state.
-            """
-            continue_button.config(state=NORMAL if agree_var.get() == 1 else DISABLED)
-
-        agree_var.trace_add("write", on_checkbox_change)
-
-    def casino_intro(self, frame):
-        """
-        Renders the casino introduction screen with options to access the
-        casino, re-read the Terms & Conditions, or exit the application.
-
-        Args:
-            frame (Frame): The parent frame to build the view into.
-        """
-        Label(
-            frame, text="Welcome to\nOne More Time Casino", font=self.styles["heading"]
-        ).pack(pady=20)
-
-        Button(
-            frame,
-            text="Access Casino",
-            font=self.styles["button"],
-            width=30,
-            command=self.access_casino,
-        ).pack(pady=5)
-
-        Button(
-            frame,
-            text="Read Terms & Conditions",
-            font=self.styles["button"],
-            width=30,
-            command=lambda: set_view(self, self.show_terms_and_conditions),
-        ).pack(pady=5)
-
-        Button(
-            frame,
-            text="Exit",
-            font=self.styles["button"],
-            width=30,
-            command=self.interface_root.destroy,
-        ).pack(pady=5)
-
-    def access_casino(self):
-        """
-        Opens the Casino Interface in standard user mode by instantiating
-        Casino_Interface with administrator=False from casino_interface_V6.
-        """
-
-        self.interface_root.destroy()
-
-        Casino_Interface(False)
-
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# casino_interface_V6.py
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-
 # Minimum rounds played before a user may enable Tournament Mode.
 TOURNAMENT_MIN_ROUNDS = 25
 
-# Gauntlet Mode.
-GAUNTLET_START_DIFFICULTY = 10  # default starting difficulty
-GAUNTLET_DIFFICULTY_STEP = 10  # +10 per ramp interval
-GAUNTLET_RAMP_INTERVAL = 5  # ramp every N rounds
-GAUNTLET_BOT_COUNT = 3  # fixed number of opponents
-
-# Endless Mode.
 # Max bots, difficulties randomly distributed 0-100 and reshuffled each round.
 ENDLESS_BOT_COUNT = 9
 
@@ -3831,9 +3465,6 @@ DEFAULT_SETTINGS = {
     "tournament_players": 4,  # Total players including user.
     "win_criteria": "eliminate_all",
     "win_criteria_target": 1000,  # Used when criteria is "earn_target".
-    # Gauntlet.
-    "gauntlet_mode": False,
-    "gauntlet_start_difficulty": GAUNTLET_START_DIFFICULTY,
     # Endless.
     "endless_mode": False,
     # General.
@@ -3848,46 +3479,60 @@ TOURNAMENT_WIN_CRITERIA = {
 }
 
 
-class Casino_Interface:
+class CasinoInterface(BaseInterface):
     """
     Main casino interface for users and administrators. Handles login,
-    account management, game selection, and mode-specific rules such as
-    tournament, gauntlet and endless play.
+    account management, game selection and mode-specific rules such as
+    tournament and endless play.
+
+    Unlike the other interfaces, CasinoInterface accepts constructor
+    arguments so __init__ is overridden to capture them before delegating
+    to BaseInterface.__init__.
     """
+
+    WINDOW_BG_KEY = "casino"
 
     def __init__(self, administrator=False, user_data=None):
         """
-        Initialises the Casino Interface window, sets up the database manager,
-        font styles, and user data state. If launched in administrator mode,
-        pre-populates user data and marks the session as signed in before
-        starting the main menu.
+        Stores constructor arguments as instance state and then calls
+        super().__init__() which builds the window, checks the database,
+        and starts the mainloop.
 
         Args:
-            administrator (bool): If True, the interface launches in
-                                  administrator mode, bypassing login.
-            user_data (dict, optional): A dictionary containing user information
-                                        to pre-populate the session with.
-                                        Expected keys: 'user_id', 'username',
-                                        'administrator'. If None, defaults to
-                                        an unsigned-in state.
+            administrator (bool): If True, launches in administrator mode,
+                                  bypassing login.
+            user_data (dict, optional): Pre-populated user session dict with
+                                        keys 'user_id', 'username',
+                                        'administrator'. Defaults to an
+                                        unsigned-in state if None.
         """
-        self.interface_root = Tk()
-        self.interface_root.title(
-            "One More Time Casino — Administrator Access"
-            if administrator
-            else "One More Time Casino"
+        self._administrator = administrator
+        self._user_data_init = user_data
+
+        # Personalised game settings for HHE — set before mainloop starts.
+        self.settings = dict(DEFAULT_SETTINGS)
+
+        super().__init__()
+
+    # Uses a property to dynamically generate the window title based on administrator
+    # status, since this is not known until after the constructor arguments are processed.
+    @property
+    def WINDOW_TITLE(self):
+        """
+        Dynamic window title based on administrator mode.
+        """
+        return (
+            "One Less Time Casino — Administrator Access"
+            if self._administrator
+            else "One Less Time Casino"
         )
-        width = self.interface_root.winfo_screenwidth()
-        height = self.interface_root.winfo_screenheight()
-        self.interface_root.geometry(f"{width}x{height}+0+0")
-        self.interface_root.focus_force()
 
-        self.dbm = DatabaseManagement()
-
-        self.styles = fetch_font_settings(self.interface_root)
-
-        if user_data is not None:
-            self.user_data = user_data
+    def setup_user_data(self):
+        """
+        Initialises self.user_data from the constructor arguments.
+        """
+        if self._user_data_init is not None:
+            self.user_data = self._user_data_init
         else:
             self.user_data = {
                 "user_id": None,
@@ -3895,28 +3540,22 @@ class Casino_Interface:
                 "administrator": False,
             }
 
-        if administrator:
+        if self._administrator:
             self.user_data["user_id"] = 0
             self.user_data["username"] = "Administrator"
             self.user_data["administrator"] = True
 
-        self.main_frame = Frame(self.interface_root)
-        self.main_frame.pack(expand=True, fill="both", padx=20, pady=20)
-
-        self.current_section_frame = None
-
-        # Personalised settings for HHE.
-        self.settings = dict(DEFAULT_SETTINGS)
-
-        set_view(self, self.casino_menu)
-        self.interface_root.mainloop()
+    def startup(self):
+        # User data must be ready before any view is rendered.
+        self.setup_user_data()
+        self.dbm.check_expired_guest_account()
+        return self.casino_menu
 
     # Helpers.
 
     def user_linked(self):
         """
-        Returns True if a user account is currently linked to this session
-        (i.e. the user is signed in or this is an administrator session).
+        Returns True if a user account is currently linked to this session.
 
         Returns:
             bool: True if a user is linked, False otherwise.
@@ -3969,31 +3608,26 @@ class Casino_Interface:
 
     def fetch_special_scores(self):
         """
-        Retrieves the player's personal best scores for Gauntlet and Endless
-        modes from the database.
+        Retrieves the player's personal best score for Endless mode from
+        the database.
 
         Returns:
-            tuple: (gauntlet_pb, endless_pb) where each is an int representing
-                   the maximum rounds survived, or 0 if no score exists.
+            int: The maximum rounds survived in Endless mode, or 0 if no
+                 score exists or the user is not signed in.
         """
         user_id = self.user_data.get("user_id")
         if not user_id:
-            return 0, 0
+            return 0
 
         try:
-            statistics = self.dbm.fetch_player_statistics(user_id)
-            if not statistics:
-                return 0, 0
-            gauntlet_pb = int(statistics.get("gauntlet_max_rounds", 0))
-            endless_pb = int(statistics.get("endless_high_score", 0))
             scores = self.dbm.fetch_special_mode_scores(user_id)
             if not scores:
-                return 0, 0
-            gauntlet_pb = scores["gauntlet_max_rounds"]
-            endless_pb = scores["endless_high_score"]
-            return gauntlet_pb, endless_pb
+                return 0
+            # Endless is the only special mode currently tracked, so we can return it directly.
+            # If more modes are added, this should be refactored to specify which score is requested.
+            return scores["endless_high_score"]
         except Exception:
-            return 0, 0
+            return 0
 
     def casino_menu(self, frame):
         """
@@ -4006,82 +3640,75 @@ class Casino_Interface:
         Args:
             frame (Frame): The parent frame to build the view into.
         """
-        Label(
+        preset_label(
             frame,
-            text="One More Time Casino\nWelcome to the Casino",
+            text="Welcome to\nOne Less Time Casino",
             font=self.styles["heading"],
         ).pack(pady=15)
 
         linked = self.user_linked()
 
         if not linked:
-            Label(
+            preset_label(
                 frame,
-                text="Please sign in.\nIf you do not have an account please register.",
+                text="Please sign in.\nIf you do not have an account please either register or create a guest account.",
                 font=self.styles["emphasis"],
             ).pack(pady=10)
         else:
-            Label(
+            preset_label(
                 frame,
                 text=f"Welcome, {self.user_data['username']}",
                 font=self.styles["subheading"],
             ).pack(pady=10)
 
-        Button(
+        preset_button(
             frame,
             text="Game Menu",
-            font=self.styles["button"],
             width=30,
             state="normal" if linked else "disabled",
             command=lambda: set_view(self, self.show_game_menu),
         ).pack(pady=5)
 
         if not linked:
-            Label(
+            preset_label(
                 frame,
                 text="Sign in to access the Game Menu.",
                 font=self.styles["emphasis"],
             ).pack()
 
-        Button(
-            frame,
-            text="Sign Up",
-            font=self.styles["button"],
-            width=30,
-            command=self.user_sign_up,
-        ).pack(pady=5)
+        if not linked:
+            preset_button(
+                frame,
+                text="Sign Up",
+                width=30,
+                command=self.user_register,
+            ).pack(pady=5)
 
-        Button(
-            frame,
-            text="Login",
-            font=self.styles["button"],
-            width=30,
-            command=self.user_login_setup,
-        ).pack(pady=5)
+            preset_button(
+                frame,
+                text="Login",
+                width=30,
+                command=self.user_login_setup,
+            ).pack(pady=5)
 
-        account_text = (
-            "Account Information" if linked else "Sign in to access user info"
-        )
-        Button(
+        preset_button(
             frame,
-            text=account_text,
-            font=self.styles["button"],
+            text="Account Information",
             width=30,
             state="normal" if linked else "disabled",
             command=lambda: set_view(self, self.fetch_user_record),
         ).pack(pady=5)
 
         if not linked:
-            Label(
+            preset_label(
                 frame,
                 text="Sign in to view account information.",
                 font=self.styles["emphasis"],
             ).pack()
 
-        Button(
+        preset_button(
             frame,
             text="Exit Casino",
-            font=self.styles["button"],
             width=30,
             command=self.casino_exit,
         ).pack(pady=5)
@@ -4091,9 +3718,6 @@ class Casino_Interface:
         Displays the game selection menu. Requires an account to be linked;
         redirects to the main menu with a warning if not.
 
-        Gauntlet and Endless modes are configured and launched from Game
-        Settings. The Leaderboard remains here for quick access.
-
         Args:
             frame (Frame): The parent frame to build the view into.
         """
@@ -4101,7 +3725,7 @@ class Casino_Interface:
             set_view(self, self.casino_menu)
             return
 
-        Label(
+        preset_label(
             frame,
             text="Game Menu",
             font=self.styles["heading"],
@@ -4116,20 +3740,17 @@ class Casino_Interface:
         ]
 
         for text, command in buttons:
-            Button(
+            preset_button(
                 frame,
                 text=text,
-                font=self.styles["button"],
                 width=30,
                 command=command,
             ).pack(pady=5)
 
-    def user_sign_up(self):
+    def user_register(self):
         """
         Initiates the registration flow. If the administrator is already
-        signed in, prompts for confirmation before proceeding. Displays the
-        age restriction warning required under the Gambling Act 2005 before
-        navigating to the username input screen.
+        signed in, prompts for confirmation before proceeding.
         """
         if self.user_data["administrator"]:
             if not messagebox.askyesno(
@@ -4139,15 +3760,6 @@ class Casino_Interface:
             ):
                 return
 
-        messagebox.showwarning(
-            "Age Restriction",
-            "Under the Gambling Act 2005: Part 4, Protection of children and "
-            "young persons. It is illegal to permit any person under the age "
-            "of 18 to enter a licensed gambling premises. The only exception "
-            "is licensed family entertainment centres. For further information "
-            "please visit: https://www.legislation.gov.uk/ukpga/2005/19/contents.\n\n"
-            "By proceeding you confirm that you are over the age of 18.",
-        )
         set_view(self, lambda f: self.username_input(f, registered=True))
 
     def user_login_setup(self):
@@ -4175,7 +3787,7 @@ class Casino_Interface:
             frame (Frame): The parent frame to build the view into.
             registered (bool): If True, validates uniqueness for registration.
         """
-        Label(
+        preset_label(
             frame,
             text="Enter Username",
             font=self.styles["heading"],
@@ -4212,18 +3824,16 @@ class Casino_Interface:
                 ),
             )
 
-        Button(
+        preset_button(
             frame,
             text="Next",
-            font=self.styles["button"],
             width=25,
             command=proceed,
         ).pack(pady=10)
 
-        Button(
+        preset_button(
             frame,
             text="Back",
-            font=self.styles["button"],
             width=25,
             command=lambda: set_view(self, self.casino_menu),
         ).pack(pady=5)
@@ -4237,13 +3847,15 @@ class Casino_Interface:
             frame (Frame): The parent frame to build the view into.
             username (str): The username for the account being created.
         """
-        Label(frame, text="Account Type", font=self.styles["heading"]).pack(pady=10)
+        preset_label(frame, text="Account Type", font=self.styles["heading"]).pack(
+            pady=10
+        )
 
         def register():
             set_view(self, lambda f: self.create_password(f, username))
 
         def temporary():
-            self.dbm.sign_in_user(username, None, False)
+            self.dbm.register_user(username, None, False)
             result = self.dbm.fetch_user_id(username)
             self.user_data["user_id"] = result["user_id"] if result["found"] else None
             self.user_data["username"] = username
@@ -4255,10 +3867,9 @@ class Casino_Interface:
             ("Temporary Guest Account", temporary),
             ("Back", lambda: set_view(self, self.casino_menu)),
         ):
-            Button(
+            preset_button(
                 frame,
                 text=text,
-                font=self.styles["button"],
                 width=25,
                 command=command,
             ).pack(pady=5)
@@ -4266,7 +3877,7 @@ class Casino_Interface:
     def create_password(self, frame, username):
         """
         Launches the password confirmation dialog, creates the registered user
-        account on success, and returns to the main casino menu.
+        account on success and returns to the main casino menu.
 
         Args:
             frame (Frame): The parent frame used to position the dialog.
@@ -4275,7 +3886,7 @@ class Casino_Interface:
 
         password_info = passwords_confirmation(frame, self.interface_root)
         if password_info["confirmed"]:
-            self.dbm.sign_in_user(username, password_info["password"], True)
+            self.dbm.register_user(username, password_info["password"], True)
             result = self.dbm.fetch_user_id(username)
             self.user_data["user_id"] = result["user_id"] if result["found"] else None
             self.user_data["username"] = username
@@ -4299,15 +3910,17 @@ class Casino_Interface:
             set_view(self, lambda f: self.username_input(f, registered=False))
             return
 
-        Label(
+        preset_label(
             frame,
             text=f"Login for '{username}'",
             font=self.styles["heading"],
         ).pack(pady=10)
 
-        Label(frame, text="Enter Password:", font=self.styles["text"]).pack(pady=5)
+        preset_label(frame, text="Enter Password:", font=self.styles["text"]).pack(
+            pady=5
+        )
 
-        password_entry = Entry(frame, show="*", font=self.styles["text"])
+        password_entry = preset_entry(frame, show="*", font=self.styles["text"])
         password_entry.pack(pady=5)
 
         def submit_password():
@@ -4316,11 +3929,13 @@ class Casino_Interface:
             result = self.dbm.verify_user_password(username, password)
 
             if result.get("found") and result.get("verified"):
+                self.dbm.record_user_login(username)
                 uid = self.dbm.fetch_user_id(username)
                 self.user_data["user_id"] = uid["user_id"] if uid["found"] else None
                 self.user_data["username"] = username
                 self.user_data["administrator"] = False
                 messagebox.showinfo("Success", f"Welcome back, {username}.")
+
                 set_view(self, self.casino_menu)
 
             elif result.get("found") and not result.get("verified"):
@@ -4332,18 +3947,16 @@ class Casino_Interface:
                 messagebox.showerror("Error", "Username not found or login failed.")
                 set_view(self, lambda f: self.username_input(f, registered=False))
 
-        Button(
+        preset_button(
             frame,
             text="Login",
-            font=self.styles["button"],
             width=25,
             command=submit_password,
         ).pack(pady=5)
 
-        Button(
+        preset_button(
             frame,
             text="Cancel",
-            font=self.styles["button"],
             width=25,
             command=lambda: set_view(self, self.casino_menu),
         ).pack(pady=5)
@@ -4375,7 +3988,7 @@ class Casino_Interface:
             frame (Frame): The parent frame to build the view into.
             record (dict): The user record dictionary.
         """
-        Label(
+        preset_label(
             frame,
             text=f"User Information: {record.get('username')}",
             font=self.styles["heading"],
@@ -4387,17 +4000,15 @@ class Casino_Interface:
             ("Balance", record["balance"]),
             ("Created", record["created_at"]),
         ]:
-            Label(
+            preset_label(
                 frame,
                 text=f"{label}: {value}",
-                font=self.styles["text"],
                 anchor="w",
             ).pack(fill="x", padx=20, pady=2)
 
-        Button(
+        preset_button(
             frame,
             text="Back",
-            font=self.styles["button"],
             width=25,
             command=lambda: set_view(self, self.casino_menu),
         ).pack(pady=10)
@@ -4410,8 +4021,7 @@ class Casino_Interface:
         if messagebox.askyesno("Exit Casino", "Do you wish to exit the casino?"):
             messagebox.showinfo(
                 "Thank You for Visiting",
-                "Thank you for visiting One More Time Casino.  "
-                "We hope to see you again soon.  "
+                "Thank you for visiting One Less Time Casino.  "
                 "And remember, when the fun stops, stop.",
             )
             self.interface_root.destroy()
@@ -4426,9 +4036,25 @@ class Casino_Interface:
             set_view(self, self.casino_menu)
             return
 
-        Label(frame, text="Game Settings", font=self.styles["heading"]).pack(
-            pady=(10, 4)
+        # Create Canvas with Scrollbar for scrollable content
+        canvas = Canvas(frame, bg=self.window_bg, highlightthickness=0)
+        scrollbar = Scrollbar(frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = Frame(canvas, bg=self.window_bg)
+
+        scrollable_frame.bind(
+            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Pack Canvas and Scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        preset_label(
+            scrollable_frame, text="Game Settings", font=self.styles["heading"]
+        ).pack(pady=(10, 4))
 
         # Live variables.
         v_bot_count = IntVar(value=self.settings["bot_count"])
@@ -4441,26 +4067,21 @@ class Casino_Interface:
         v_total_players = IntVar(value=self.settings["tournament_players"])
         v_win_criteria = StringVar(value=self.settings["win_criteria"])
         v_win_target = StringVar(value=str(self.settings["win_criteria_target"]))
-        v_gauntlet_diff = IntVar(
-            value=self.settings.get(
-                "gauntlet_start_difficulty", GAUNTLET_START_DIFFICULTY
-            )
-        )
-
-        def label(text):
-            Label(frame, text=text, font=self.styles["subheading"], anchor="w").pack(
-                fill="x", padx=30, pady=(10, 2)
-            )
 
         def row(label_text, widget_factory):
-            row = Frame(frame)
+            """
+            Packs a horizontal row consisting of a descriptive label on
+            the left and an input widget (produced by widget_factory) on
+            the right into the scrollable settings frame.
+            """
+            row = Frame(scrollable_frame)
             row.pack(fill="x", padx=30, pady=2)
-            Label(
-                row, text=label_text, font=self.styles["text"], width=32, anchor="w"
-            ).pack(side="left")
+            preset_label(row, text=label_text, width=32, anchor="w").pack(side="left")
             widget_factory(row).pack(side="left", padx=8)
 
-        label("Table Settings")
+        preset_label(
+            scrollable_frame, text="Table Settings", font=self.styles["subheading"]
+        ).pack(fill="x", padx=30, pady=10)
         row(
             "Number of bots (1–9):",
             lambda p: Spinbox(
@@ -4474,33 +4095,29 @@ class Casino_Interface:
         )
         row(
             "Bot starting balance (£):",
-            lambda p: Entry(
-                p, textvariable=v_bot_balance, width=10, font=self.styles["text"]
-            ),
+            lambda p: preset_entry(p, textvariable=v_bot_balance, width=10),
         )
         row(
             "Small blind (£):",
-            lambda p: Entry(
-                p, textvariable=v_small_blind, width=10, font=self.styles["text"]
-            ),
+            lambda p: preset_entry(p, textvariable=v_small_blind, width=10),
         )
         row(
             "Big blind (£):",
-            lambda p: Entry(
-                p, textvariable=v_big_blind, width=10, font=self.styles["text"]
-            ),
+            lambda p: preset_entry(p, textvariable=v_big_blind, width=10),
         )
 
-        label("Bot Difficulty  (0 = easy, 100 = hard)")
-        difficulty_label = Label(
-            frame,
+        preset_label(
+            scrollable_frame, text="Bot Difficulty  (0 = easy, 100 = hard)", anchor="w"
+        ).pack(fill="x", padx=30, pady=10)
+        difficulty_label = preset_label(
+            scrollable_frame,
             text=f"Current: {v_bot_diff.get()}",
             font=self.styles["emphasis"],
             anchor="w",
         )
         difficulty_label.pack(fill="x", padx=30)
         Scale(
-            frame,
+            scrollable_frame,
             from_=0,
             to=100,
             orient=HORIZONTAL,
@@ -4510,13 +4127,28 @@ class Casino_Interface:
             command=lambda v: difficulty_label.config(text=f"Current: {int(float(v))}"),
         ).pack(anchor="w", padx=30, pady=2)
 
-        label("Tournament Mode")
+        preset_label(
+            scrollable_frame,
+            text="Tournament Mode",
+            font=self.styles["subheading"],
+            anchor="w",
+        ).pack(fill="x", padx=30, pady=10)
+        preset_label(
+            scrollable_frame,
+            text=(
+                "Play a series of rounds against bots. Win criteria and blind "
+                "escalation are configurable. Unlocks after 25 rounds played."
+            ),
+            font=self.styles["emphasis"],
+            anchor="w",
+            wraplength=700,
+        ).pack(fill="x", padx=30, pady=(0, 6))
         rounds_played = self.fetch_rounds_played()
         rounds_needed = max(0, TOURNAMENT_MIN_ROUNDS - rounds_played)
 
         if rounds_needed > 0:
-            Label(
-                frame,
+            preset_label(
+                scrollable_frame,
                 text=(
                     f"Locked — play {rounds_needed} more round"
                     f"{'s' if rounds_needed != 1 else ''} to unlock."
@@ -4527,19 +4159,18 @@ class Casino_Interface:
             self.settings["tournament_mode"] = False
             v_tournament.set(False)
         else:
-            toggle_row = Frame(frame)
+            toggle_row = Frame(scrollable_frame)
             toggle_row.pack(fill="x", padx=30, pady=2)
-            Label(
+            preset_label(
                 toggle_row,
                 text="Enable Tournament Mode:",
-                font=self.styles["text"],
                 width=32,
                 anchor="w",
             ).pack(side="left")
             Checkbutton(toggle_row, variable=v_tournament).pack(side="left")
 
-            Label(
-                frame,
+            preset_label(
+                scrollable_frame,
                 text=f"Rounds played: {rounds_played}",
                 font=self.styles["emphasis"],
                 anchor="w",
@@ -4568,12 +4199,11 @@ class Casino_Interface:
                 ),
             )
 
-            crit_frame = Frame(frame)
+            crit_frame = Frame(scrollable_frame)
             crit_frame.pack(fill="x", padx=30, pady=2)
-            Label(
+            preset_label(
                 crit_frame,
                 text="Round win criteria:",
-                font=self.styles["text"],
                 width=32,
                 anchor="w",
             ).pack(side="left")
@@ -4587,27 +4217,25 @@ class Casino_Interface:
             )
             crit_box.pack(side="left", padx=8)
 
-            crit_desc = Label(
-                frame,
+            crit_desc = preset_label(
+                scrollable_frame,
                 text=TOURNAMENT_WIN_CRITERIA.get(v_win_criteria.get(), ""),
                 font=self.styles["emphasis"],
                 anchor="w",
             )
             crit_desc.pack(fill="x", padx=30)
 
-            target_frame = Frame(frame)
-            Label(
+            target_frame = Frame(scrollable_frame)
+            preset_label(
                 target_frame,
                 text="Earn target (£):",
-                font=self.styles["text"],
                 width=32,
                 anchor="w",
             ).pack(side="left")
-            Entry(
+            preset_entry(
                 target_frame,
                 textvariable=v_win_target,
                 width=12,
-                font=self.styles["text"],
             ).pack(side="left", padx=8)
 
             def on_criteria_change(event=None):
@@ -4624,45 +4252,28 @@ class Casino_Interface:
             if v_win_criteria.get() == "earn_target":
                 target_frame.pack(fill="x", padx=30, pady=2)
 
-        label("Gauntlet Mode")
-        gauntlet_pb, _ = self.fetch_special_scores()
-        Label(
-            frame,
+        preset_label(
+            scrollable_frame,
+            text="Endless Mode",
+            font=self.styles["subheading"],
+            anchor="w",
+        ).pack(fill="x", padx=30, pady=10)
+
+        preset_label(
+            scrollable_frame,
             text=(
-                f"Personal best: {gauntlet_pb} round"
-                f"{'s' if gauntlet_pb != 1 else ''}"
-                if gauntlet_pb > 0
-                else "No score yet."
+                "Survive as long as possible against 9 bots whose difficulties "
+                "are reshuffled every round across the full 0–100 range. "
+                "There is no win condition — your score is how many rounds you last."
             ),
             font=self.styles["emphasis"],
             anchor="w",
-        ).pack(fill="x", padx=30)
-        row(
-            "Starting difficulty (0–90):",
-            lambda p: Spinbox(
-                p,
-                from_=0,
-                to=90,
-                increment=10,
-                textvariable=v_gauntlet_diff,
-                width=6,
-                font=self.styles["text"],
-            ),
-        )
-        Button(
-            frame,
-            text="Start Gauntlet",
-            font=self.styles["button"],
-            width=20,
-            command=lambda: self.start_gauntlet(
-                max(0, min(90, int(v_gauntlet_diff.get())))
-            ),
-        ).pack(anchor="w", padx=30, pady=4)
+            wraplength=700,
+        ).pack(fill="x", padx=30, pady=(0, 6))
 
-        label("Endless Mode")
-        _, endless_pb = self.fetch_special_scores()
-        Label(
-            frame,
+        endless_pb = self.fetch_special_scores()
+        preset_label(
+            scrollable_frame,
             text=(
                 f"High score: {endless_pb} round"
                 f"{'s' if endless_pb != 1 else ''} survived"
@@ -4672,15 +4283,15 @@ class Casino_Interface:
             font=self.styles["emphasis"],
             anchor="w",
         ).pack(fill="x", padx=30)
-        Button(
-            frame,
+
+        preset_button(
+            scrollable_frame,
             text="Start Endless",
-            font=self.styles["button"],
             width=20,
             command=self.start_endless,
         ).pack(anchor="w", padx=30, pady=4)
 
-        button_frame = Frame(frame)
+        button_frame = Frame(scrollable_frame)
         button_frame.pack(pady=12)
 
         def save_settings():
@@ -4755,13 +4366,6 @@ class Casino_Interface:
                 errors.append("Win target must be a positive integer.")
                 win_target = self.settings["win_criteria_target"]
 
-            try:
-                gaunt_start_diff = max(0, min(90, int(v_gauntlet_diff.get())))
-            except Exception:
-                gaunt_start_diff = self.settings.get(
-                    "gauntlet_start_difficulty", GAUNTLET_START_DIFFICULTY
-                )
-
             tournament_on = (
                 False
                 if self.fetch_rounds_played() < TOURNAMENT_MIN_ROUNDS
@@ -4784,7 +4388,6 @@ class Casino_Interface:
                     "tournament_players": total_players,
                     "win_criteria": v_win_criteria.get(),
                     "win_criteria_target": win_target,
-                    "gauntlet_start_difficulty": gaunt_start_diff,
                 }
             )
 
@@ -4807,24 +4410,23 @@ class Casino_Interface:
             ("Reset to Defaults", reset_defaults),
             ("Back to Game Menu", lambda: set_view(self, self.show_game_menu)),
         ):
-            Button(
+            preset_button(
                 button_frame,
                 text=text,
-                font=self.styles["button"],
                 width=20,
                 command=command,
             ).pack(side="left", padx=10)
 
     def show_leaderboard(self, frame):
         """
-        Displays a leaderboard showing the top Gauntlet and Endless scores
+        Displays a leaderboard showing the top Endless scores
         across all players in the database. Uses get_all_players_data()
         to retrieve the full data set and sorts by each metric.
 
         Args:
             frame (Frame): The parent frame to build the view into.
         """
-        Label(
+        preset_label(
             frame,
             text="Leaderboard",
             font=self.styles["heading"],
@@ -4837,12 +4439,12 @@ class Casino_Interface:
 
         def board_section(title, key, unit="rounds"):
             """Displays a titled top-5 table."""
-            Label(
+            preset_label(
                 frame,
                 text=title,
                 font=self.styles["subheading"],
             ).pack(pady=(12, 2))
-            Frame(frame, height=1, bg="#888888").pack(fill="x", padx=40)
+            Frame(frame, height=1, bg=CS["separator"]).pack(fill="x", padx=40)
 
             candidates = [
                 p for p in all_data if p.get(key, 0)
@@ -4851,7 +4453,7 @@ class Casino_Interface:
 
             # Use binary_search_by_id for the username lookup.
             sorted_by_id = bubble_sort(
-                all_data, key="user_id"
+                all_data, key="user_id", reverse=False
             )  # Ensure data is sorted by user_id for binary search.
             for entry in ranked:
                 index = binary_search_by_id(sorted_by_id, entry["user_id"])
@@ -4869,10 +4471,9 @@ class Casino_Interface:
                     username = f"User {entry['user_id']}"
 
             if not ranked:
-                Label(
+                preset_label(
                     frame,
                     text="No scores recorded yet.",
-                    font=self.styles["text"],
                 ).pack(pady=4)
                 return
 
@@ -4888,45 +4489,36 @@ class Casino_Interface:
                     username = f"User {entry['user_id']}"
 
                 score = int(entry[key])
-                Label(
+                preset_label(
                     frame,
                     text=f"  {index}.  {username:<20}  {score} {unit}",
-                    font=self.styles["text"],
                     anchor="w",
                 ).pack(fill="x", padx=60, pady=1)
 
-        board_section("Gauntlet — Most Rounds Survived", "gauntlet_max_rounds")
         board_section("Endless — Most Rounds Survived", "endless_high_score")
 
-        Button(
+        preset_button(
             frame,
             text="Back to Game Menu",
-            font=self.styles["button"],
             width=25,
             command=lambda: set_view(self, self.show_game_menu),
         ).pack(pady=14)
 
-    def show_special_mode_summary(self, mode, rounds_survived):
+    def show_special_mode_summary(self, rounds_survived):
         """
-        Shows a post-game summary dialog for Gauntlet or Endless mode,
+        Shows a post-game summary dialog for available special modes (currently just Endless),
         comparing the result to the player's stored personal best and
         updating the database if a new record was set.
 
         Args:
-            mode (str): Either "gauntlet" or "endless".
             rounds_survived (int): How many rounds the player survived.
         """
         user_id = self.user_data.get("user_id")
-        gauntlet_pb, endless_pb = self.fetch_special_scores()
+        endless_pb = self.fetch_special_scores()
 
-        if mode == "gauntlet":
-            old_pb = gauntlet_pb
-            pb_key = "gauntlet_max_rounds"
-            label = "Gauntlet"
-        else:
-            old_pb = endless_pb
-            pb_key = "endless_high_score"
-            label = "Endless"
+        old_pb = endless_pb
+        pb_key = "endless_high_score"
+        label = "Endless"
 
         new_record = rounds_survived > old_pb
 
@@ -4937,8 +4529,8 @@ class Casino_Interface:
                 pass
 
         if new_record:
-            title = f"New Personal Best!"
-            msg = (
+            title = "New Personal Best!"
+            message = (
                 f"{label} Mode — Game Over\n\n"
                 f"Rounds survived: {rounds_survived}\n"
                 f"Previous best: {old_pb}\n\n"
@@ -4946,15 +4538,13 @@ class Casino_Interface:
             )
         else:
             title = f"{label} Mode — Game Over"
-            msg = (
+            message = (
                 f"{label} Mode — Game Over\n\n"
                 f"Rounds survived: {rounds_survived}\n"
                 f"Personal best: {old_pb}\n\n"
-                f"{'So close! ' if rounds_survived >= old_pb - 2 and old_pb > 0 else ''}"
-                f"Keep going to beat your record!"
             )
 
-        messagebox.showinfo(title, msg)
+        messagebox.showinfo(title, message)
         set_view(self, self.show_game_menu)
 
     def whitejoe_rules(self):
@@ -4988,10 +4578,10 @@ class Casino_Interface:
             return
 
         ShowGameRules(self.interface_root).show_harrogate_hold_em_rules(
-            lambda: self.start_harrogate()
+            lambda: self.start_hhe()
         )
 
-    def start_harrogate(self):
+    def start_hhe(self):
         """
         Builds a bot list from self.settings and launches standard
         Harrogate Hold 'Em.
@@ -5001,9 +4591,7 @@ class Casino_Interface:
         (the settings panel already prevents this scenario).
         """
 
-        # Never allow tournament below the threshold.
         settings = dict(self.settings)
-        settings["gauntlet_mode"] = False
         settings["endless_mode"] = False
         if (
             settings.get("tournament_mode")
@@ -5014,59 +4602,13 @@ class Casino_Interface:
         bot_count = settings["bot_count"]
         difficulty = settings["bot_difficulty"]
 
-        list = list(DEFAULT_BOT_LIST)
-        random.shuffle(list)
-        bots = [[list[index % len(list)], difficulty] for index in range(bot_count)]
-
-        HarrogateHoldEm(self.user_data, settings, bots)
-
-        self.interface_root.destroy()
-
-    def start_gauntlet(self, start_difficulty=None):
-        """
-        Launches Gauntlet Mode.
-
-        Builds a settings dict with 'gauntlet_mode=True' and the chosen
-        starting difficulty. The game engine is expected to read
-        'gauntlet_mode', 'gauntlet_start_difficulty',
-        'gauntlet_difficulty_step', and 'gauntlet_ramp_interval' from
-        the settings dict to implement the ramp.
-
-        After the game returns, 'show_special_mode_summary' is called
-        with the rounds survived, which the engine should store in
-        'settings["rounds_survived"]' on exit.
-
-        Args:
-            start_difficulty (int, optional): Starting bot difficulty.
-                Defaults to the GAUNTLET_START_DIFFICULTY constant.
-        """
-
-        if start_difficulty is None:
-            start_difficulty = self.settings.get(
-                "gauntlet_start_difficulty", GAUNTLET_START_DIFFICULTY
-            )
-
-        settings = dict(self.settings)
-        settings["gauntlet_mode"] = True
-        settings["endless_mode"] = False
-        settings["tournament_mode"] = False
-        settings["bot_count"] = GAUNTLET_BOT_COUNT
-        settings["gauntlet_start_difficulty"] = start_difficulty
-        settings["gauntlet_difficulty_step"] = GAUNTLET_DIFFICULTY_STEP
-        settings["gauntlet_ramp_interval"] = GAUNTLET_RAMP_INTERVAL
-        settings["rounds_survived"] = 0
-
-        list = list(DEFAULT_BOT_LIST)
-        random.shuffle(list)
+        bot_list = list(DEFAULT_BOT_LIST)
+        random.shuffle(bot_list)
         bots = [
-            [list[index % len(list)], start_difficulty]
-            for index in range(GAUNTLET_BOT_COUNT)
+            [bot_list[index % len(bot_list)], difficulty] for index in range(bot_count)
         ]
 
         HarrogateHoldEm(self.user_data, settings, bots)
-
-        rounds = int(settings.get("rounds_survived", 0))
-        self.show_special_mode_summary("gauntlet", rounds)
 
         self.interface_root.destroy()
 
@@ -5083,13 +4625,12 @@ class Casino_Interface:
 
         settings = dict(self.settings)
         settings["endless_mode"] = True
-        settings["gauntlet_mode"] = False
         settings["tournament_mode"] = False
         settings["bot_count"] = ENDLESS_BOT_COUNT
         settings["rounds_survived"] = 0
 
-        list = list(DEFAULT_BOT_LIST)
-        random.shuffle(list)
+        bot_list = list(DEFAULT_BOT_LIST)
+        random.shuffle(bot_list)
 
         # Spread difficulties evenly across the range then shuffle.
         step = 100 // ENDLESS_BOT_COUNT
@@ -5097,47 +4638,24 @@ class Casino_Interface:
         random.shuffle(difficulties)
 
         bots = [
-            [list[index % len(list)], difficulties[index]]
+            [bot_list[index % len(bot_list)], difficulties[index]]
             for index in range(ENDLESS_BOT_COUNT)
         ]
 
         HarrogateHoldEm(self.user_data, settings, bots)
 
         rounds = int(settings.get("rounds_survived", 0))
-        self.show_special_mode_summary("endless", rounds)
+        self.show_special_mode_summary(rounds)
 
         self.interface_root.destroy()
 
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# game_rules_V6.py
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# GAME RULES DISPLAY
 
 
 class ShowGameRules:
-    """
-    Displays game rules for WhiteJoe and Harrogate Hold 'em in a modal
-    Toplevel window. The user must scroll through the rules and tick a
-    checkbox confirming they have read and understood them before the
-    Continue button becomes active. The window cannot be closed via the
-    window manager's close button.
-    """
 
-    def __init__(self, root):
-        """
-        Initialises the ShowGameRules instance, stores the root window
-        reference for font settings and Toplevel parenting, and defines
-        the full rules text for both games.
-
-        Args:
-            root: The root Tk window used to bind fonts and parent the
-                  rules Toplevel.
-        """
-        self.interface_root = root
-
-        self.styles = fetch_font_settings(root)
-
-        self.wj_rules = """
+    WJ_RULES = """
         The aim of the game is to beat the dealer by getting higher than the dealer’s hand value.\n
         To beat the dealer you must either:\n
         \t1. Draw a hand value that is higher than the dealer’s hand value.\n
@@ -5146,11 +4664,9 @@ class ShowGameRules:
         To lose the game:\n
         \t1. Your hand value exceeds 21.\n
         \t2. The dealers hand has a greater value than yours at the end of the round.\n
-        You will start off with a whopping £1,000 (Can be distributed in any multiple of 10) and the buy in is already paid for.\n
-        You will then be offered to place a bet with the amount of money you have, The screen will show how much you have in your possession.(Saved Data not available yet).\n
-        The dealer will then deal out the cards clockwise (Multiplayer not available yet) with 2 cards facing upwards for you and 1 card facing up and another hidden for dealer.\n
-        The dealer will start at the person on their left (also known as “first base”) and wait for that player to play their hand.\n
-        You have two cards face up in front of your bet.\n
+        You will start off with a whopping £1,000 and the buy in is already paid for.\n
+        You will then be offered to place a bet with the amount of money you have, The screen will show how much you have in your possession.\n
+        The dealer will then deal out your cards with 2 cards facing upwards for you and 1 card facing up and another hidden for dealer.\n\n
         To play your hand, first you add the card values together and get a hand total anywhere from 4 to 21.\n
         If you’re dealt a ten-value card and an Ace as your first two cards that means you got a Blackjack.\n
         Those get paid 3 to 2 (or 1.5 times your wager) immediately, without playing through the round, as long as the dealer doesn’t also have a Blackjack.\n
@@ -5165,7 +4681,7 @@ class ShowGameRules:
         Once again you are reminded to read the T&C's before playing.
         """
 
-        self.hhe_rules = """
+    HHE_RULES = """
         The aim of the game is to use your hole cards in combination with the community cards to make the best possible five-card poker hand.
         \t*Each player is dealt two cards face down (the 'hole cards')
         \t*Over several betting rounds, five more cards are (eventually) dealt face up in the middle of the table.
@@ -5211,13 +4727,25 @@ class ShowGameRules:
         \tOnce this has been completed, another round of betting occurs, similar to what took play on the previous round of play. Once more the remaining players have the option to options to check, bet, call, fold, or raise.
         \tAfter all betting action has been completed, the remaining players in the hand with hole cards now expose their holdings to determine a winner. This is called the showdown.
         *The Showdown:
-        \tThe remaining players show their hole cards, and with the assistance of the dealer, a winning hand is determined.
+        \tThe remaining players show their hole cards and with the assistance of the dealer, a winning hand is determined.
         \tThe player with the best combination of five cards wins the pot according to the official poker hand rankings.
         \tA link to the official poker hand rankings will be attached to this document and in the game before you start. 
         \thttps://en.wikipedia.org/wiki/List_of_poker_hands
         Unique to this game is the opportunity to change difficulty (difficulty is regarding the opponents) and create custom characters however their actions are independent to single rounds and any money they lose or earn is not carried forward.
         Once again you are reminded to read the T&C's before playing.
         """
+
+    def __init__(self, root):
+        """
+        Initialises the ShowGameRules instance with the root window
+        reference for font settings and Toplevel parenting.
+
+        Args:
+            root: The root Tk window used to bind fonts and parent the
+                  rules Toplevel.
+        """
+        self.interface_root = root
+        self.styles = fetch_text_styles(root)
 
     def show_whitejoe_rules(self, callback):
         """
@@ -5228,7 +4756,7 @@ class ShowGameRules:
             callback (callable): A zero-argument function called when the
                                   user clicks Continue.
         """
-        self.show_rules_window("WhiteJoe Rules", self.wj_rules, callback)
+        self.show_rules_window("WhiteJoe Rules", self.WJ_RULES, callback)
 
     def show_harrogate_hold_em_rules(self, callback):
         """
@@ -5240,7 +4768,7 @@ class ShowGameRules:
             callback (callable): A zero-argument function called when the
                                   user clicks Continue.
         """
-        self.show_rules_window("Harrogate Hold 'em Rules", self.hhe_rules, callback)
+        self.show_rules_window("Harrogate Hold 'em Rules", self.HHE_RULES, callback)
 
     def show_rules_window(self, title, rules_text, callback):
         """
@@ -5255,16 +4783,11 @@ class ShowGameRules:
             callback (callable): A zero-argument function called when the
                                   user clicks Continue.
         """
+        bg = CS["rules"]
         window = Toplevel(self.interface_root)
-        window.title(title)
-        window.grab_set()
-        window.protocol("WM_DELETE_WINDOW", lambda: None)
-        width = window.winfo_screenwidth()
-        height = window.winfo_screenheight()
-        window.geometry(f"{width}x{height}+0+0")
-        window.focus_force()
+        create_window(window, title, bg)
 
-        heading = Label(window, text=title, font=self.styles["title"])
+        heading = preset_label(window, text=title, font=self.styles["title"])
         heading.pack(pady=10)
 
         text_area = scrolledtext.ScrolledText(
@@ -5278,7 +4801,7 @@ class ShowGameRules:
         bottom_frame = Frame(window)
         bottom_frame.pack(side=BOTTOM, fill=X, pady=10)
 
-        continue_button = Button(
+        continue_button = preset_button(
             bottom_frame,
             text="Continue",
             command=lambda: (window.destroy(), callback()),
@@ -5300,16 +4823,16 @@ VALUES = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
 
 class CasinoDeckManager:
     """
-    Central manager for deck handling, card format conversion, and game logic
+    Central manager for deck handling, card format conversion and game logic
     for both poker and blackjack. Wraps the treys library to provide a unified
-    interface for drawing cards, evaluating hands, and converting between
+    interface for drawing cards, evaluating hands and converting between
     string and integer card representations.
     """
 
     def __init__(self, shuffle=True, game_mode="poker"):
         """
         Initialises the deck manager with a fresh treys deck, a treys
-        Evaluator instance, and the specified game mode. Optionally shuffles
+        Evaluator instance and the specified game mode. Optionally shuffles
         the deck on creation.
 
         Args:
@@ -5337,7 +4860,6 @@ class CasinoDeckManager:
         Raises:
             ValueError: If mode is not 'poker' or 'blackjack'.
         """
-        # mode: 'poker' or 'blackjack'.
         mode = mode.lower()
 
         if mode not in ("poker", "blackjack"):
@@ -5437,7 +4959,7 @@ class CasinoDeckManager:
 
     def copy(self):
         """
-        Creates an independent shallow copy of this deck manager instance.
+        Creates an independent copy of this deck manager instance.
         The copied deck shares the same Evaluator (which is stateless) but
         has its own independent card list. Used to ensure Monte Carlo
         simulations do not interfere with each other.
@@ -5634,29 +5156,32 @@ class CasinoDeckManager:
 
 class WhiteJoe:
     """
-    Starts a new window for the WhiteJoe game mode, which is a custom blackjack variant.
     Handles all game state, betting logic, card dealing, dealer resolution,
     and balance management. Supports both regular user and administrator
-    sessions. All game events are logged to a scrollable message panel with
-    colour-coded entries for wins, losses, and pushes.
+    sessions.
     """
 
     def __init__(self, user_data):
         """
         Initialises the WhiteJoe game window, sets up external resources,
-        initialises game state variables, and builds the main game interface.
+        initialises game state variables and builds the main game interface.
 
         Args:
             user_data (dict): Dictionary containing at minimum 'username'
-                              (str) and 'administrator' (bool) keys, and
+                              (str) and 'administrator' (bool) keys and
                               optionally 'user_id'.
         """
+        self.window_bg = CS["casino"]
         self.wj_root = Tk()
-        self.wj_root.title("One More Time Casino - WhiteJoe")
-        width = self.wj_root.winfo_screenwidth()
-        height = self.wj_root.winfo_screenheight()
-        self.wj_root.geometry(f"{width}x{height}+0+0")
-        self.wj_root.focus_force()
+        self.main_frame, self.styles = create_window(
+            self.wj_root,
+            "One Less Time Casino - WhiteJoe",
+            self.window_bg,
+            is_main_frame=True,
+        )
+        self.wj_root.protocol(
+            "WM_DELETE_WINDOW", lambda: (self.wj_root.quit(), sys.exit(0))
+        )
 
         self.user_data = user_data
 
@@ -5664,39 +5189,9 @@ class WhiteJoe:
         self.log_active = False
         self.log_delay_ms = int(DELAY * 1000)
 
-        self.dbm = DatabaseManagement()
-
-        self.styles = fetch_font_settings(self.wj_root)
-
-        self.main_frame = Frame(self.wj_root)
-        self.main_frame.pack(expand=True, fill="both", padx=10, pady=10)
+        self.dbm = DatabaseManagement(DB_PATH)
 
         self.action_buttons = []
-
-        self.colour_scheme = {
-            # Left-hand panels.
-            "left_bg": "#e6dcc6",
-            # Right-hand panels.
-            "top_right_bg": "#2e7d73",
-            "bottom_right_bg": "#5b2a3c",
-            # Interactive widgets.
-            "widget_bg": "#6a2e4f",
-            "text_bg": "#141414",
-            "text_fg": "#f2f2f2",
-            "left_fg": "#1e1e1e",
-            # Log panel.
-            "log_bg": "#1a1a1a",
-            "log_fg": "#cfcfcf",
-            # Log entry.
-            "start_bg": "#243b7a",
-            "start_fg": "#ffffff",
-            "win_bg": "#244d3a",
-            "win_fg": "#a8e6c1",
-            "loss_bg": "#4a1e1e",
-            "loss_fg": "#f2a3a3",
-            "tie_bg": "#5c4a10",
-            "tie_fg": "#f0d898",
-        }
 
         # Game state.
         self.player_hand = []
@@ -5705,35 +5200,110 @@ class WhiteJoe:
         self.current_bet = 0
         self.round_active = False
 
-        set_view(self, self.whitejoe_screen)
+        self.start_balance = 0
 
-    def run(self):
-        """
-        Starts the tkinter main event loop for the WhiteJoe window.
-        """
+        if not self.user_data.get("administrator"):
+            balance_data = self.dbm.fetch_user_balance(self.user_data["username"])
+            if not balance_data["found"]:
+                self.return_to_menu(
+                    is_error=True, error=Exception("User not found in database.")
+                )
+                return
+            self.start_balance = balance_data["balance"]
+
+            set_view(self, self.whitejoe_screen)
+        else:
+            set_view(self, self.admin_modify_bet)
+
         self.wj_root.mainloop()
+
+    def admin_modify_bet(self, frame):
+        """
+        Opens a modal Toplevel dialog that allows the administrator to set
+        a custom starting chip balance. The dialog cannot be dismissed via
+        the window manager — a valid balance must be submitted.
+
+        When called from __init__ (before whitejoe_screen has run) the
+        dialog navigates to whitejoe_screen on submission. When called
+        from check_balance mid-game it only updates the balance label and
+        closes, preserving all active game state.
+
+        Args:
+            frame (Frame or Tk): The parent widget used to anchor the
+                                 Toplevel dialog.
+        """
+        screen_built = getattr(self, "balance_label", None) is not None
+
+        balance_window = Toplevel(frame)
+        create_window(
+            balance_window,
+            "Set Starting Balance",
+            self.window_bg,
+        )
+        balance_window.grab_set()
+        balance_window.protocol("WM_DELETE_WINDOW", lambda: None)
+        balance_window.focus_force()
+
+        preset_label(
+            balance_window,
+            text="Enter starting balance (£):",
+        ).pack(pady=8)
+
+        balance_entry = preset_entry(
+            balance_window,
+            width=20,
+        )
+        balance_entry.pack(pady=5)
+
+        def submit_balance():
+            """
+            Validates the balance entry and closes the dialog. If the main
+            game screen has not yet been built, navigates to whitejoe_screen.
+            If the screen is already live, updates the balance label in place
+            without disturbing game state.
+            """
+            try:
+                balance = int(balance_entry.get().strip())
+                if balance < 0:
+                    raise ValueError()
+                self.start_balance = balance
+                self.dbm.modify_user_balance(self.user_data["username"], balance)
+                balance_window.destroy()
+                if screen_built:
+                    self.balance_label.config(text=f"Balance: £{balance}")
+                else:
+                    set_view(self, self.whitejoe_screen)
+            except Exception:
+                messagebox.showerror("Error", "Please enter a valid positive integer.")
+
+        preset_button(
+            balance_window,
+            text="Submit",
+            relief="flat",
+            command=submit_balance,
+        ).pack(pady=10)
 
     def whitejoe_screen(self, frame):
         """
         Builds the main game layout using a three-panel grid. The left panel
         contains the scrollable game log, the top-right panel shows user
-        information and balance, and the bottom-right panel contains the bet
+        information and balance and the bottom-right panel contains the bet
         controls and action buttons.
 
         Args:
             frame (Frame): The parent frame to build the view into.
         """
-        cs = self.colour_scheme
-
         frame.columnconfigure(0, weight=2)
         frame.columnconfigure(1, weight=1)
         frame.rowconfigure(0, weight=1)
         frame.rowconfigure(1, weight=1)
 
-        left_frame = Frame(frame, bd=2, relief="sunken", bg=cs["left_bg"])
+        # Left panel
+        left_frame = Frame(frame, bd=2, relief="sunken", bg=CS["top_left"])
         left_frame.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=5, pady=5)
 
-        self.log_canvas = Canvas(left_frame, bg=cs["left_bg"], highlightthickness=0)
+        # Canvas + Scrollbar
+        self.log_canvas = Canvas(left_frame, bg=CS["top_left"], highlightthickness=0)
         scrollbar = Scrollbar(
             left_frame, orient="vertical", command=self.log_canvas.yview
         )
@@ -5741,7 +5311,8 @@ class WhiteJoe:
         scrollbar.pack(side="right", fill="y")
         self.log_canvas.pack(side="left", fill="both", expand=True)
 
-        self.log_frame = Frame(self.log_canvas, bg=cs["left_bg"])
+        # Inner frame
+        self.log_frame = Frame(self.log_canvas, bg=CS["top_left"])
         self.log_window = self.log_canvas.create_window(
             (0, 0), window=self.log_frame, anchor="nw"
         )
@@ -5757,116 +5328,65 @@ class WhiteJoe:
             ),
         )
 
-        top_right_frame = Frame(frame, bd=2, relief="sunken", bg=cs["top_right_bg"])
+        # Top-right panel
+        top_right_frame = Frame(frame, bd=2, relief="sunken", bg=CS["top_right"])
         top_right_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 
-        Button(
+        preset_button(
             top_right_frame,
             text="Return to Menu",
-            font=self.styles["button"],
-            bg=cs["widget_bg"],
-            fg=cs["text_fg"],
-            relief="flat",
-            bd=0,
-            cursor="hand2",
             command=self.return_to_menu,
         ).pack(pady=5)
-
-        balance = 0
-
-        if not self.user_data.get("administrator"):
-            balance_data = self.dbm.fetch_user_balance(self.user_data["username"])
-            if not balance_data["found"]:
-                self.return_to_menu(
-                    is_error=True, error=Exception("User not found in database.")
-                )
-                return
-            balance = balance_data["balance"]
-        else:
-            self.admin_modify_bet(frame)
 
         labels = []
         for text in (
             f"Username: {self.user_data['username']}",
-            f"Balance: £{balance}",
+            f"Balance: £{self.start_balance}",
             "Current Bet: £0",
         ):
-            label = Label(
+            label = preset_label(
                 top_right_frame,
                 text=text,
-                font=self.styles["text"],
-                bg=cs["top_right_bg"],
-                fg=cs["text_fg"],
                 anchor="w",
             )
             label.pack(anchor="w", pady=5, padx=5)
             labels.append(label)
 
-        self.balance_label = cast(Label, labels[1])
-        self.current_bet_label = cast(Label, labels[2])
+        self.balance_label = cast(preset_label, labels[1])
+        self.current_bet_label = cast(preset_label, labels[2])
 
-        bottom_right_frame = Frame(
-            frame, bd=2, relief="sunken", bg=cs["bottom_right_bg"]
-        )
+        # Bottom-right panel
+        bottom_right_frame = Frame(frame, bd=2, relief="sunken", bg=CS["bottom_right"])
         bottom_right_frame.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
 
-        def adjust_current_bet(amount):
+        def check_bet_input(amount=0):
+            """
+            Updates the current bet by the given amount, clamping the result
+            between 0 and the player's current balance. Updates bet_var,
+            the current-bet label, and the Start Round button state.
+            """
             try:
-                value = int(self.bet_var.get())
-            except Exception:
-                value = 0
-            value += amount
-            balance = self.return_balance()
-            if balance is not None:
-                value = max(1, min(value, int(balance)))
-            self.bet_var.set(str(value))
-            self.current_bet_label.config(text=f"Current Bet: £{value}")
-            self.update_button_states()
+                current_value = int(self.bet_var.get())
+                new_value = max(0, current_value + amount)
+                balance = self.return_balance()
+                if balance is not None:
+                    new_value = min(new_value, int(balance))
+            except (ValueError, TypeError):
+                new_value = 0
 
-        def check_bet_input(*_):
-            raw = self.bet_var.get()
-            if raw in ("", "-"):
-                self.current_bet_label.config(text="Current Bet: £0")
-                self.start_button.config(state="disabled")
-                return
+            self.bet_var.set(str(new_value))
+            self.current_bet = new_value
+            self.current_bet_label.config(text=f"Current Bet: £{new_value}")
+            state = (
+                "normal" if (new_value > 0 and not self.round_active) else "disabled"
+            )
+            self.start_button.config(state=state)
 
-            digits_only = "".join(c for c in raw if c.isdigit())
-            if digits_only != raw:
-                self.bet_var.set(digits_only if digits_only else "0")
-                return
-            try:
-                value = int(digits_only) if digits_only else 0
-            except Exception:
-                value = 0
-
-            balance = self.return_balance()
-            if balance is not None:
-                value = min(value, int(balance))
-            self.current_bet_label.config(text=f"Current Bet: £{value}")
-            self.update_button_states()
-
-        # Bet entry.
-        self.bet_var = StringVar(value="0")
-        self.bet_var.trace_add("write", check_bet_input)
-
-        Entry(
-            bottom_right_frame,
-            textvariable=self.bet_var,
-            width=12,
-            font=self.styles["text"],
-            bg=cs["widget_bg"],
-            fg=cs["text_fg"],
-            insertbackground=cs["text_fg"],
-            relief="flat",
-            bd=4,
-            justify="center",
-        ).pack(pady=(8, 6))
-
-        # Increment rows.
+        # Increment rows
         for inc in (1, 10, 100, 1000):
             row = Frame(
                 bottom_right_frame,
-                bg=cs["text_bg"],
+                bg=CS["text_bg"],
                 bd=2,
                 relief="ridge",
                 padx=6,
@@ -5874,79 +5394,54 @@ class WhiteJoe:
             )
             row.pack(fill="x", pady=3)
 
-            Button(
+            preset_button(
                 row,
                 text="+",
-                font=self.styles["button"],
                 width=3,
-                bg=cs["widget_bg"],
-                fg=cs["text_fg"],
-                relief="flat",
-                bd=0,
-                cursor="hand2",
-                command=lambda v=inc: adjust_current_bet(v),
+                command=lambda v=inc: check_bet_input(amount=v),
             ).pack(side="left", padx=4)
 
-            Label(
+            preset_label(
                 row,
                 text=str(inc),
-                font=self.styles["text"],
-                bg=cs["text_bg"],
-                fg=cs["text_fg"],
                 width=8,
                 anchor="center",
             ).pack(side="left", expand=True)
 
-            Button(
+            preset_button(
                 row,
                 text="-",
-                font=self.styles["button"],
-                bg=cs["widget_bg"],
-                fg=cs["text_fg"],
-                relief="flat",
-                bd=0,
                 width=3,
-                cursor="hand2",
-                command=lambda v=-inc: adjust_current_bet(v),
+                command=lambda v=-inc: check_bet_input(amount=v),
             ).pack(side="right", padx=4)
 
-        # Action buttons.
+        # Action buttons
         for text, command in (
             ("Hit", self.hit),
             ("Stand", self.stand),
             ("Double Down", self.double_down),
             ("Surrender", self.surrender),
         ):
-            button = Button(
+            button = preset_button(
                 bottom_right_frame,
                 text=text,
-                font=self.styles["button"],
-                bg=cs["widget_bg"],
-                fg=cs["text_fg"],
-                relief="flat",
-                bd=0,
                 width=18,
-                cursor="hand2",
                 command=command,
                 state="disabled",
             )
             button.pack(pady=6)
             self.action_buttons.append(button)
 
-        self.start_button = Button(
+        self.start_button = preset_button(
             bottom_right_frame,
             text="Start Round",
-            font=self.styles["button"],
-            bg=cs["start_bg"],
-            fg=cs["start_fg"],
-            relief="flat",
-            bd=0,
             width=18,
-            activebackground="#3a52a0",
-            cursor="hand2",
             command=self.start_round,
         )
         self.start_button.pack(pady=10)
+
+        self.bet_var = StringVar(value="0")
+        self.bet_var.trace_add("write", lambda *_: check_bet_input())
 
         self.update_button_states()
 
@@ -5962,83 +5457,16 @@ class WhiteJoe:
         except ValueError:
             bet = 0
 
-        # Start button.
-        self.start_button.config(
-            state="disabled" if self.round_active or bet <= 0 else "normal"
-        )
+        # Start button
+        if self.round_active or bet <= 0:
+            self.start_button.config(state="disabled")
+        else:
+            self.start_button.config(state="normal")
 
-        # Action buttons.
+        # Action buttons
         state = "normal" if self.round_active else "disabled"
         for button in self.action_buttons:
             button.config(state=state)
-
-    def admin_modify_bet(self, frame):
-        """
-        Opens a modal Toplevel dialog that allows the administrator to set
-        a custom starting chip balance. The dialog cannot be dismissed
-        via the window manager — a valid balance must be submitted.
-
-        On submission, updates the balance label and persists the new
-        balance to the database.
-
-        Args:
-            frame: The parent widget used to position the Toplevel.
-        """
-        balance_window = Toplevel(frame)
-        balance_window.title("Set Starting Balance")
-        balance_window.grab_set()
-        balance_window.protocol("WM_DELETE_WINDOW", lambda: None)
-        balance_window.configure(bg=self.colour_scheme["left_bg"])
-        try:
-            balance_window.attributes("-zoomed", True)  # MacOS/Linux.
-        except Exception:
-            pass
-        try:
-            balance_window.state("zoomed")  # Windows.
-        except Exception:
-            pass
-
-        Label(
-            balance_window,
-            text="Enter starting balance (£):",
-            font=self.styles["text"],
-            bg=self.colour_scheme["left_bg"],
-            fg=self.colour_scheme["text_fg"],
-        ).pack(pady=8)
-
-        balance_entry = Entry(
-            balance_window,
-            width=20,
-            font=self.styles["text"],
-            bg=self.colour_scheme["widget_bg"],
-            fg=self.colour_scheme["text_fg"],
-            insertbackground=self.colour_scheme["text_fg"],
-        )
-        balance_entry.pack(pady=5)
-
-        def submit_balance():
-            """Validates the entry, updates the UI and database, and closes
-            the dialog. Shows an error on invalid input."""
-            try:
-                balance = int(balance_entry.get().strip())
-                if balance < 0:
-                    raise ValueError()
-                self.balance_label.config(text=f"Balance: £{balance}")
-                balance_window.destroy()
-                self.dbm.modify_user_balance(self.user_data["username"], balance)
-            except Exception:
-                messagebox.showerror(text="Please enter a valid positive integer.")
-
-        Button(
-            balance_window,
-            text="Submit",
-            font=self.styles["button"],
-            bg=self.colour_scheme["widget_bg"],
-            fg=self.colour_scheme["text_fg"],
-            relief="flat",
-            bd=0,
-            command=submit_balance,
-        ).pack(pady=10)
 
     def log_message(
         self, text, round_start=False, is_win=False, is_loss=False, is_push=False
@@ -6064,7 +5492,7 @@ class WhiteJoe:
 
     def process_log_queue(self):
         """
-        Processes the next entry in the log queue, renders it, and schedules
+        Processes the next entry in the log queue, renders it and schedules
         itself to run again after log_delay_ms milliseconds. Stops when the
         queue is empty.
         """
@@ -6082,7 +5510,7 @@ class WhiteJoe:
     def render_log(self, text, round_start, is_win, is_loss, is_push):
         """
         Creates and packs a colour-coded Label into the log frame for the
-        given message, then scrolls the log canvas to the bottom.
+        given message and then scrolls the log canvas to the bottom.
 
         Args:
             text (str): The message text to display.
@@ -6091,41 +5519,32 @@ class WhiteJoe:
             is_loss (bool): Applies loss background colour.
             is_push (bool): Applies push background colour.
         """
-        label = Label(
+        label = preset_label(
             self.log_frame,
             text=text,
-            font=self.styles["text"],
             bg=(
-                self.colour_scheme["start_bg"]
+                CS["start_bg"]
                 if round_start
                 else (
-                    self.colour_scheme["win_bg"]
+                    CS["win_bg"]
                     if is_win
                     else (
-                        self.colour_scheme["loss_bg"]
+                        CS["loss_bg"]
                         if is_loss
-                        else (
-                            self.colour_scheme["tie_bg"]
-                            if is_push
-                            else self.colour_scheme["log_bg"]
-                        )
+                        else (CS["tie_bg"] if is_push else CS["log_bg"])
                     )
                 )
             ),
             fg=(
-                self.colour_scheme["start_fg"]
+                CS["start_fg"]
                 if round_start
                 else (
-                    self.colour_scheme["win_fg"]
+                    CS["win_fg"]
                     if is_win
                     else (
-                        self.colour_scheme["loss_fg"]
+                        CS["loss_fg"]
                         if is_loss
-                        else (
-                            self.colour_scheme["tie_bg"]
-                            if is_push
-                            else self.colour_scheme["log_fg"]
-                        )
+                        else (CS["tie_bg"] if is_push else CS["log_fg"])
                     )
                 )
             ),
@@ -6182,7 +5601,7 @@ class WhiteJoe:
                     "Your balance is £0. As an administrator, you can set a new balance.",
                 )
 
-                self.admin_modify_bet(self.wj_root)
+                self.admin_modify_bet(self.main_frame)
                 return True
 
             else:
@@ -6197,7 +5616,7 @@ class WhiteJoe:
     def modify_user_balance(self, balance: int):
         """
         Updates the user's balance in the database, refreshes the balance
-        label in the UI, and logs the new balance to the game log.
+        label in the UI and logs the new balance to the game log.
 
         Args:
             balance (int): The new balance to set.
@@ -6253,6 +5672,7 @@ class WhiteJoe:
             balance += int(self.current_bet * 2.5)
             self.modify_user_balance(balance)
             self.end_round(win=True)
+            return
 
         self.dealer_hand.extend([self.deck.draw(1), self.deck.draw(1)])
 
@@ -6263,7 +5683,7 @@ class WhiteJoe:
     def logs_after_deal(self):
         """
         Logs the initial deal state to the game log: the player's two cards
-        and total, the dealer's visible card and its value, and a prompt for
+        and total, the dealer's visible card and its value and a prompt for
         the player to act.
         """
         player_value = self.deck.blackjack_hand_value(self.player_hand)
@@ -6277,7 +5697,7 @@ class WhiteJoe:
 
     def hit(self):
         """
-        Draws one card for the player, logs the result, and checks for a
+        Draws one card for the player, logs the result and checks for a
         bust. If the player busts, ends the round as a loss. Otherwise logs
         a prompt to continue. Does nothing if no round is active.
         """
@@ -6320,7 +5740,7 @@ class WhiteJoe:
     def double_down(self):
         """
         Doubles the current bet (deducting the additional amount from the
-        user's balance), draws exactly one card, and resolves the dealer.
+        user's balance), draws exactly one card and resolves the dealer.
         Prevents doubling if the user has insufficient balance. Does nothing
         if no round is active.
         """
@@ -6485,8 +5905,8 @@ class WhiteJoe:
     def return_to_menu(self, is_error=False, error=None):
         """
         Destroys the game window and returns the user to the appropriate
-        interface. Navigates to Admin_Interface for administrators or
-        Casino_Interface for regular users. Optionally displays an error dialog
+        interface. Navigates to AdminInterface for administrators or
+        CasinoInterface for regular users. Optionally displays an error dialog
         before returning.
 
         Args:
@@ -6500,7 +5920,7 @@ class WhiteJoe:
 
         self.wj_root.destroy()
 
-        Casino_Interface(
+        CasinoInterface(
             administrator=True if self.user_data.get("administrator") else False,
             user_data=self.user_data,
         )
@@ -6529,8 +5949,11 @@ DEFAULT_DELTA = 0.05
 # Maximum outs considered when estimating drawing equity.
 MAX_OUTS = 20
 
-# Fold-bias constants.
+# Difficulty levels (0 to 100) affect bot betting behavior. At difficulty 0, bot makes
+# looser plays (higher fold override bias). At difficulty 100, bot approaches optimal
+# strategy. Constants below control how much the bot deviates from optimal play.
 
+# Fold-bias constants.
 """ At difficulty 0  a bot has a FOLD_BIAS_MAX chance each decision of
 converting a marginal fold into a call.  At difficulty 100 the chance
 drops to FOLD_BIAS_MIN, keeping high-difficulty bots close to optimal."""
@@ -6538,61 +5961,48 @@ FOLD_BIAS_MAX = 0.40  # 40% override at difficulty 0.
 FOLD_BIAS_MIN = 0.04  # 4% override at difficulty 100.
 
 
-class PokerPlayer:
+# POKER PLAYER MANAGEMENT
+
+
+class HumanPokerPlayer:
     """
-    Represents a poker participant, either a human player or a bot. Human players
-    load and persist statistics while bots generate tendencies procedurally
-    based on difficulty. Handles range charts and decision-making logic.
+    A human player backed by the database.
+
+    Loads real statistics and a persisted range chart on construction.
+    Inexperienced players (rounds_played <= EXPERIENCE_THRESHOLD) receive a
+    default range for gameplay while their stored range continues to be
+    updated in the database.
+
+    Attributes:
+        user_id (int): Database primary key for this player.
+        dbm (DatabaseManagement): Database manager instance.
+        record (dict): Raw record loaded from user_poker_data.
+        vpip (float): Voluntarily Put money In Pot percentage.
+        pfr (float): Pre-Flop Raise percentage.
+        aggression_factor (float): pfr / max(1.0, vpip).
+        fold_to_raise (float): Normalised fold-to-raise frequency.
+        call_when_weak (float): Normalised call-when-weak frequency.
+        statistics (dict): rounds_played and avg_bet_size.
+        base_range (dict): Range chart used as the session baseline.
+        stored_range (dict): Range chart that is persisted to the database.
+        active_range (dict): Session copy of base_range (modified in play).
     """
 
-    def __init__(self, *, user_id=None, is_bot=False, difficulty=None):
+    def __init__(self, *, user_id: int):
         """
-        Initialises a poker player instance, delegating to init_player() for
-        human players or init_bot() for AI bots. Sets active_range to a
-        copy of base_range after initialisation.
+        Initialises a human player by loading their poker data from the database.
 
         Args:
-            user_id: Database ID for human players.  Required if
-                     is_bot=False.
-            is_bot (bool): True for AI opponents, False for human players.
-                           Defaults to False.
-            difficulty (int, optional): Bot difficulty level 0–100.
-                                        Required if is_bot=True.
+            user_id (int): Database primary key for this player.
 
         Raises:
-            ValueError: If user_id is missing for a human player, or
-                        difficulty is missing for a bot.
+            ValueError: If poker data cannot be loaded from the database.
         """
-        self.user_id = user_id
-        self.is_bot = bool(is_bot)
-        self.difficulty = difficulty
-
-        # Deck manager used for hand evaluation utilities.
-        self.dm = CasinoDeckManager(game_mode="poker")
-
-        if not self.is_bot:
-            self.init_player()
-        else:
-            self.init_bot()
-
-        # Active range starts as a session copy of base_range.
-        self.active_range = self.base_range.copy()
-
-    def init_player(self):
-        """
-        Initialises a human player by loading their poker data from the
-        database. Sets all statistical attributes from the loaded record.
-        Uses a default range for inexperienced players (<=50 rounds) while
-        preserving the stored range for future updates.
-
-        Raises:
-            ValueError: If user_id is not set or poker data cannot be
-                        loaded from the database.
-        """
-        if not self.user_id:
+        if not user_id:
             raise ValueError("user_id is required for human players.")
 
-        self.dbm = DatabaseManagement()
+        self.user_id = user_id
+        self.dbm = DatabaseManagement(DB_PATH)
 
         record = self.dbm.load_user_poker_data(self.user_id)
         if record is None:
@@ -6621,63 +6031,26 @@ class PokerPlayer:
             self.base_range = stored_range if stored_range else generate_range_chart()
             self.stored_range = self.base_range
 
-        self.bot_characteristics = None
-
-    def init_bot(self):
-        """
-        Initialises an AI bot with synthetically generated tendencies scaled
-        by difficulty. Higher difficulty bots are tighter, more aggressive,
-        bluff more optimally, and use more Monte Carlo simulations. No
-        database interaction occurs.
-
-        Raises:
-            ValueError: If difficulty is not set.
-        """
-        if self.difficulty is None:
-            raise ValueError("difficulty is required for bot players.")
-
-        self.dbm = None
-        self.record = None
-
-        # Tendency parameters interpolated by difficulty.
-        self.vpip = difficulty_curve(self.difficulty, 35, 18)
-        self.pfr = difficulty_curve(self.difficulty, 10, 20)
-        self.aggression_factor = self.pfr / max(1.0, self.vpip)
-        self.bluff_freq = difficulty_curve(self.difficulty, 0.15, 0.40)
-        self.fold_to_raise = difficulty_curve(self.difficulty, 0.60, 0.30)
-        self.call_when_weak = difficulty_curve(self.difficulty, 0.50, 0.20)
-
-        self.base_range = generate_bot_range(self.vpip, self.difficulty)
-
-        self.statistics = {
-            "rounds_played": 0,
-            "avg_bet_size": 0,
-        }
-
-        self.bot_characteristics = BotCharacteristics(self.difficulty)
+        # Active range starts as a session copy of base_range.
+        self.active_range = self.base_range.copy()
 
     def decide(
         self, *, player_hand, community_cards, opponents, pot, to_call, balance, street
     ):
         """
-        Makes a poker decision for this player based on the current game
-        state by delegating to make_decision().
+        Makes a poker decision by delegating to make_decision().
 
         Args:
             player_hand (list[str]): The player's two hole cards.
             community_cards (list[str]): The current community cards (0–5).
-            opponents (list[PokerPlayer]): The active opponent players.
+            opponents (list[BasePokerPlayer]): The active opponent players.
             pot (float): The current pot size.
             to_call (float): The amount required to call.
             balance (float): The player's remaining chips.
-            street (str): The current betting round ('preflop', 'flop',
-            'turn', or 'river').
+            street (str): The current betting round ('preflop', 'flop', 'turn', 'river').
 
         Returns:
-            tuple: One of:
-                   - '("fold",)'
-                   - '("call",)'
-                   - '("raise", amount)'
+            tuple: One of ("fold",), ("call",), ("raise", amount).
         """
         opponent_ranges = [opp.active_range for opp in opponents]
 
@@ -6690,18 +6063,17 @@ class PokerPlayer:
             pot=pot,
             balance=balance,
             to_call=to_call,
-            bot=self.bot_characteristics,
+            bot=None,
             street=street,
         )
 
     def refresh_from_db(self):
         """
-        Reloads all player attributes from the database.  Useful when
+        Reloads all player attributes from the database. Useful when
         another process has updated the database since this instance was
-        initialised.  Does nothing for bots or if the database manager is
-        unavailable.
+        initialised.
         """
-        if self.is_bot or not self.dbm or self.user_id is None:
+        if not self.dbm or self.user_id is None:
             return
 
         record = self.dbm.load_user_poker_data(self.user_id)
@@ -6731,26 +6103,20 @@ class PokerPlayer:
     def reset_active_range(self):
         """
         Resets the active range to a fresh copy of the base range.
-        Should be called between hands to clear any temporary range
-        modifications made during a session.
         """
         self.active_range = self.base_range.copy()
 
     def fetch_player_info(self):
         """
-        Returns a summary dictionary of this player's characteristics and
-        statistics.
+        Returns a summary dictionary of this player's characteristics.
 
         Returns:
-            dict: Keys — user_id, is_bot, difficulty, vpip, pfr,
-                  aggression_factor, bluff_freq, fold_to_raise,
+            dict: Keys — user_id, vpip, pfr, aggression_factor, fold_to_raise,
                   call_when_weak, rounds_played, record.
         """
         return {
             "record": self.record,
             "user_id": self.user_id,
-            "is_bot": self.is_bot,
-            "difficulty": self.difficulty,
             "vpip": self.vpip,
             "pfr": self.pfr,
             "aggression_factor": self.aggression_factor,
@@ -6761,18 +6127,138 @@ class PokerPlayer:
 
     def __repr__(self):
         """
-        Returns a concise string representation of the player including
-        type, identity, and key statistics.
+        Returns a concise string representation of the human player.
         """
-        if self.is_bot:
-            return (
-                f"PokerPlayer(bot, difficulty={self.difficulty}, "
-                f"VPIP={self.vpip:.1f}%, PFR={self.pfr:.1f}%)"
-            )
         return (
-            f"PokerPlayer(user_id={self.user_id}, "
+            f"HumanPokerPlayer(user_id={self.user_id}, "
             f"VPIP={self.vpip:.1f}%, PFR={self.pfr:.1f}%, "
             f"Rounds Played={self.statistics['rounds_played']})"
+        )
+
+
+class BotPokerPlayer:
+    """
+    An AI bot player with synthetically generated tendencies.
+
+    All parameters are derived from the difficulty level using
+    difficulty_curve(). No database interaction occurs.
+
+    Attributes:
+        difficulty (int): Bot difficulty level 0–100.
+        bot_characteristics (BotCharacteristics): Full AI parameter set.
+        vpip (float): Voluntarily Put money In Pot percentage.
+        pfr (float): Pre-Flop Raise percentage.
+        aggression_factor (float): pfr / max(1.0, vpip).
+        bluff_freq (float): Base bluffing frequency.
+        fold_to_raise (float): Tendency to fold when facing a raise.
+        call_when_weak (float): Tendency to call with a weak hand.
+        statistics (dict): Placeholder statistics (always zeros for bots).
+        base_range (dict): Hand range generated from vpip and difficulty.
+        active_range (dict): Session copy of base_range.
+    """
+
+    def __init__(self, *, difficulty: int):
+        """
+        Initialises an AI bot with synthetically generated tendencies scaled by difficulty.
+
+        Args:
+            difficulty (int): Bot difficulty level 0–100.
+
+        Raises:
+            ValueError: If difficulty is not set.
+        """
+        if difficulty is None:
+            raise ValueError("difficulty is required for bot players.")
+
+        self.difficulty = difficulty
+        self.user_id = None
+        self.dbm = None
+        self.record = None
+
+        # Tendency parameters interpolated by difficulty.
+        self.vpip = difficulty_curve(self.difficulty, 35, 18)
+        self.pfr = difficulty_curve(self.difficulty, 10, 20)
+        self.aggression_factor = self.pfr / max(1.0, self.vpip)
+        self.bluff_freq = difficulty_curve(self.difficulty, 0.15, 0.40)
+        self.fold_to_raise = difficulty_curve(self.difficulty, 0.60, 0.30)
+        self.call_when_weak = difficulty_curve(self.difficulty, 0.50, 0.20)
+
+        self.base_range = generate_bot_range(self.vpip, self.difficulty)
+
+        self.statistics = {
+            "rounds_played": 0,
+            "avg_bet_size": 0,
+        }
+
+        self.bot_characteristics = BotCharacteristics(self.difficulty)
+        # Active range starts as a session copy of base_range.
+        self.active_range = self.base_range.copy()
+
+    def decide(
+        self, *, player_hand, community_cards, opponents, pot, to_call, balance, street
+    ):
+        """
+        Makes a poker decision using game-theory principles and opponent modelling.
+        Delegates to make_decision().
+
+        Args:
+            player_hand (list[str]): The player's two hole cards.
+            community_cards (list[str]): The current community cards (0–5).
+            opponents (list[BasePokerPlayer]): The active opponent players.
+            pot (float): The current pot size.
+            to_call (float): The amount required to call.
+            balance (float): The player's remaining chips.
+            street (str): The current betting round ('preflop', 'flop', 'turn', 'river').
+
+        Returns:
+            tuple: One of ("fold",), ("call",), ("raise", amount).
+        """
+        opponent_ranges = [opp.active_range for opp in opponents]
+
+        return make_decision(
+            player_hand=player_hand,
+            player_range=self.active_range,
+            community_cards=community_cards,
+            opponent_ranges=opponent_ranges,
+            opponents=opponents,
+            pot=pot,
+            balance=balance,
+            to_call=to_call,
+            bot=self.bot_characteristics,
+            street=street,
+        )
+
+    def reset_active_range(self):
+        """
+        Resets the active range to a fresh copy of the base range.
+        """
+        self.active_range = self.base_range.copy()
+
+    def fetch_player_info(self):
+        """
+        Returns a summary dictionary of this bot's characteristics.
+
+        Returns:
+            dict: Keys — difficulty, vpip, pfr, aggression_factor, fold_to_raise,
+                  call_when_weak, bluff_freq.
+        """
+        return {
+            "difficulty": self.difficulty,
+            "vpip": self.vpip,
+            "pfr": self.pfr,
+            "aggression_factor": self.aggression_factor,
+            "fold_to_raise": self.fold_to_raise,
+            "call_when_weak": self.call_when_weak,
+            "bluff_freq": self.bluff_freq,
+        }
+
+    def __repr__(self):
+        """
+        Returns a concise string representation of the bot player.
+        """
+        return (
+            f"BotPokerPlayer(difficulty={self.difficulty}, "
+            f"VPIP={self.vpip:.1f}%, PFR={self.pfr:.1f}%)"
         )
 
 
@@ -6924,9 +6410,9 @@ def validate_hand_notation(hand):
 
 def update_range(chart, action, hand, delta=DEFAULT_DELTA):
     """
-    Updates a range chart based on an observed action, then normalises the
+    Updates a range chart based on an observed action and then normalises the
     probabilities to sum to 1.0. Raising increases the hand's probability,
-    folding decreases it, and calling applies a smaller increase.
+    folding decreases it and calling applies a smaller increase.
 
     Args:
         chart (dict): Current range chart mapping hand notations to
@@ -7275,7 +6761,7 @@ def estimate_outs(player_hand, community_cards):
     """
     Estimates the number of outs available to improve the hand.
     Considers flush draws, open-ended straight draws, gutshot straight
-    draws, and overcards. Capped at MAX_OUTS.
+    draws and overcards. Capped at MAX_OUTS.
 
     Args:
         player_hand (list[str]): The player's two hole cards.
@@ -7444,7 +6930,7 @@ def should_bluff_raise(pot, raise_amount, equity, opponent_fold_to_raise, bot):
 def calculate_raise_amount(pot, equity, balance, bot):
     """
     Calculates an appropriate raise amount based on pot size, hand equity,
-    available balance, and bot difficulty. High-difficulty bots use larger
+    available balance and bot difficulty. High-difficulty bots use larger
     sizing. The result is rounded down to the nearest £5 and capped at
     the player's balance.
 
@@ -7496,6 +6982,9 @@ def cards_to_notation(player_hand):
     return rank1 + rank2 + ("s" if suit1 == suit2 else "o")
 
 
+# POKER DECISION ENGINE
+
+
 def make_decision(
     player_hand,
     player_range,
@@ -7525,7 +7014,7 @@ def make_decision(
     **Step 2 — Equity calculation**
         Joint equity against all active opponents is estimated via Monte
         Carlo simulation ('collective_hand_equity'). Noise scaled by
-        difficulty is applied, the range multiplier is factored in, and
+        difficulty is applied, the range multiplier is factored in and
         risk tolerance scales the result. Low-difficulty bots may further
         misestimate equity by a random factor.
 
@@ -7589,6 +7078,10 @@ def make_decision(
                - '("call",)'
                - '("raise", amount)'
     """
+    # Human players pass bot=None; return a sensible default rather than crash.
+    if bot is None:
+        return ("call",) if to_call == 0 else ("fold",)
+
     error_prob = max(0.0, 1.0 - bot.difficulty / 100.0)
 
     # Preflop range check.
@@ -7723,10 +7216,46 @@ DEFAULT_BOT_LIST = [
     "Grey",
     "Mr Rhodes",
     "Leon S. Kennedy",
+    "Ada Wong",
     "Albert Wesker",
+    "Jack Krauser",
+    "Luis Serra",
+    "Nathan Drake",
+    "Joel Miller",
+    "Tobias Rieper",
+    "Arthur Morgan",
+    "Dutch Van Der Linde",
+    "Jin Sakai",
+    "Atsu Onryo",
+    "Alfred",
+    "Danny Trejo",
+    "Bagley",
     "Sauron",
     "Morgoth",
     "Han Solo",
+    "Gordon Freeman",
+    "Mr Chips",
+    "Dante from Devil May Cry",
+    "Cal Kestis",
+    "Master Chief",
+    "Lara Croft",
+    "Vector the Crocodile",
+    "Rayman",
+    "Hideo Kojima",
+    "Naked Snake",
+    "Big Boss",
+    "Venom Snake",
+    "Liquid Snake",
+    "Solidus Snake",
+    "Archimedes",
+    "Giancarlo Esposito",
+    "Kinji Hakari",
+    "Toji Fushiguro",
+    "Jon Snow",
+    "Pikmin",
+    "Hatsune Miku",
+    "Oggdo Bogdo",
+    "Spawn of Oggdo",
 ]
 
 
@@ -7740,7 +7269,7 @@ class TournamentManager:
     """
     Manages multi-round tournaments for Harrogate Hold 'Em.
 
-    Stores settings such as rounds, player count and win criteria, and
+    Stores settings such as rounds, player count and win criteria and
     tracks progression, blinds and results.
 
     Attributes:
@@ -7881,19 +7410,19 @@ class TournamentManager:
         if self.current_round > self.total_rounds:
             self.tournament_over = True
             self.tournament_won = self.round_wins > 0
-            msg = (
+            message = (
                 f"Tournament complete!\n"
                 f"You won {self.round_wins} of {self.total_rounds} rounds.\n"
             )
-            msg += (
-                "🏆 Tournament Victory!"
+            message += (
+                "Tournament Victory!"
                 if self.tournament_won
                 else "Better luck next time."
             )
             return {
                 "tournament_over": True,
                 "tournament_won": self.tournament_won,
-                "message": msg,
+                "message": message,
             }
 
         criteria_desc = {
@@ -7903,9 +7432,9 @@ class TournamentManager:
             WIN_CRITERIA_LAST_MAN_BLIND: "Survive as blinds escalate",
         }.get(self.win_criteria, "")
 
-        msg = (
+        message = (
             f"Round {self.current_round - 1} complete.  "
-            f"{'Round won! ✓' if human_won_round else 'Round lost.'}\n"
+            f"{'Round won!' if human_won_round else 'Round lost.'}\n"
             f"Round {self.current_round} of {self.total_rounds}.\n"
             f"Win criteria: {criteria_desc}\n"
             f"Blinds: £{self.current_small_blind} / £{self.current_big_blind}"
@@ -7913,7 +7442,7 @@ class TournamentManager:
         return {
             "tournament_over": False,
             "tournament_won": False,
-            "message": msg,
+            "message": message,
         }
 
     def fetch_status_text(self):
@@ -7922,7 +7451,7 @@ class TournamentManager:
         tournament status label during active gameplay.
 
         Returns:
-            str: Status text describing round, wins, and current blinds.
+            str: Status text describing round, wins and current blinds.
         """
         if not self.tournament_over:
             return (
@@ -7943,7 +7472,7 @@ class HarrogateHoldEm:
     def __init__(self, user_data, settings, bots):
         """
         Initialises the Harrogate Hold 'Em window, game state, player list
-        (human player + bots), UI layout, and the background bot-decision queue
+        (human player + bots), UI layout and the background bot-decision queue
         checker.
 
         Args:
@@ -7963,12 +7492,17 @@ class HarrogateHoldEm:
         """
         self.user_data = user_data
 
+        self.window_bg = CS["casino"]
         self.hhe_root = Tk()
-        self.hhe_root.title("One More Time Casino — Harrogate Hold 'Em")
-        width = self.hhe_root.winfo_screenwidth()
-        height = self.hhe_root.winfo_screenheight()
-        self.hhe_root.geometry(f"{width}x{height}+0+0")
-        self.hhe_root.focus_force()
+        self.main_frame, self.styles = create_window(
+            self.hhe_root,
+            "One Less Time Casino — Harrogate Hold 'Em",
+            self.window_bg,
+            is_main_frame=True,
+        )
+        self.hhe_root.protocol(
+            "WM_DELETE_WINDOW", lambda: (self.hhe_root.quit(), sys.exit(0))
+        )
 
         self.log_queue = []
         self.log_active = False
@@ -7977,12 +7511,10 @@ class HarrogateHoldEm:
         self.bot_decision_queue = Queue()
         self.bot_thinking = False
 
-        self.dbm = DatabaseManagement()
+        self.dbm = DatabaseManagement(DB_PATH)
 
         if not self.dbm.check_user_poker_data_exists(user_data["user_id"]):
             self.dbm.initialise_user_poker_data(user_data["user_id"])
-
-        self.styles = fetch_font_settings(self.hhe_root)
 
         # Auto-generate bots if not supplied.
         if bots is None:
@@ -8016,9 +7548,7 @@ class HarrogateHoldEm:
         player_model = None
         if self.user_data.get("user_id"):
             try:
-                player_model = PokerPlayer(
-                    user_id=self.user_data["user_id"], is_bot=False
-                )
+                player_model = HumanPokerPlayer(user_id=self.user_data["user_id"])
             except Exception as exception:
                 messagebox.showerror(
                     "Error", f"Failed to initialise player model: {exception}"
@@ -8053,8 +7583,8 @@ class HarrogateHoldEm:
                     "status": "Waiting",
                     "is_bot": True,
                     "user_id": None,
-                    "model": PokerPlayer(
-                        is_bot=True, difficulty=max(0, self.bots[index]["difficulty"])
+                    "model": BotPokerPlayer(
+                        difficulty=max(0, self.bots[index]["difficulty"])
                     ),
                 }
             )
@@ -8086,49 +7616,93 @@ class HarrogateHoldEm:
         self.turn = [[], []]
         self.river = [[], []]
 
-        self.main_frame = Frame(self.hhe_root)
-        self.main_frame.pack(expand=True, fill="both", padx=10, pady=10)
-
         self.action_buttons = []
 
-        self.colour_scheme = {
-            "top_left_bg": "#ddd3bc",
-            "bottom_left_bg": "#e6dcc6",
-            # Right-hand panels.
-            "top_right_bg": "#2e7d73",
-            "middle_right_bg": "#286b62",
-            "bottom_right_bg": "#5b2a3c",
-            # Interactive widgets.
-            "widget_bg": "#6a2e4f",
-            "text_bg": "#141414",
-            "text_fg": "#f2f2f2",
-            "left_fg": "#1e1e1e",
-            # Log panel.
-            "log_bg": "#1a1a1a",
-            "log_fg": "#cfcfcf",
-            # Log entry.
-            "start_bg": "#243b7a",
-            "start_fg": "#ffffff",
-            "win_bg": "#244d3a",
-            "win_fg": "#a8e6c1",
-            "loss_bg": "#4a1e1e",
-            "loss_fg": "#f2a3a3",
-            "tie_bg": "#5c4a10",
-            "tie_fg": "#f0d898",
-            "thinking_bg": "#3c2a4a",
-            "thinking_fg": "#d4b8e8",
-            "tournament_bg": "#4a1e38",
-            "tournament_fg": "#e8b8d0",
-        }
+        self.start_balance = 0
 
-        set_view(self, self.harrogate_hold_em_screen)
-        self.check_bot_decision_queue()
+        if not self.user_data.get("administrator"):
+            balance_data = self.dbm.fetch_user_balance(self.user_data["username"])
+            if not balance_data["found"]:
+                self.return_to_menu(
+                    is_error=True, error=Exception("User not found in database.")
+                )
+                return
+            self.start_balance = balance_data["balance"]
 
-    def run(self):
-        """
-        Starts the tkinter main event loop for the Harrogate Hold 'Em window.
-        """
+            set_view(self, self.harrogate_hold_em_screen)
+            self.check_bot_decision_queue()
+        else:
+            set_view(self, self.admin_modify_bet)
+
         self.hhe_root.mainloop()
+
+    def admin_modify_bet(self, frame):
+        """
+        Opens a modal Toplevel dialog that allows the administrator to set
+        a custom starting chip balance. The dialog cannot be dismissed via
+        the window manager — a valid balance must be submitted.
+
+        When called from __init__ (before whitejoe_screen has run) the
+        dialog navigates to whitejoe_screen on submission. When called
+        from check_balance mid-game it only updates the balance label and
+        closes, preserving all active game state.
+
+        Args:
+            frame (Frame or Tk): The parent widget used to anchor the
+                                 Toplevel dialog.
+        """
+        screen_built = getattr(self, "balance_label", None) is not None
+
+        balance_window = Toplevel(frame)
+        create_window(
+            balance_window,
+            "Set Starting Balance",
+            self.window_bg,
+        )
+        balance_window.grab_set()
+        balance_window.protocol("WM_DELETE_WINDOW", lambda: None)
+        balance_window.focus_force()
+
+        preset_label(
+            balance_window,
+            text="Enter starting balance (£):",
+        ).pack(pady=8)
+
+        balance_entry = preset_entry(
+            balance_window,
+            width=20,
+        )
+        balance_entry.pack(pady=5)
+
+        def submit_balance():
+            """
+            Validates the balance entry and closes the dialog. If the main
+            game screen has not yet been built, navigates to whitejoe_screen.
+            If the screen is already live, updates the balance label in place
+            without disturbing game state.
+            """
+            try:
+                balance = int(balance_entry.get().strip())
+                if balance < 0:
+                    raise ValueError()
+                self.start_balance = balance
+                self.dbm.modify_user_balance(self.user_data["username"], balance)
+                balance_window.destroy()
+                if screen_built:
+                    self.balance_label.config(text=f"Balance: £{balance}")
+                else:
+                    set_view(self, self.harrogate_hold_em_screen)
+                    self.check_bot_decision_queue()
+
+            except Exception:
+                messagebox.showerror("Error", "Please enter a valid positive integer.")
+
+        preset_button(
+            balance_window,
+            text="Submit",
+            relief="flat",
+            command=submit_balance,
+        ).pack(pady=10)
 
     def harrogate_hold_em_screen(self, frame):
         """
@@ -8137,94 +7711,89 @@ class HarrogateHoldEm:
         - Top-left: game state labels (round, board, blinds, pot, turn,
           tournament status).
         - Bottom-left: scrollable colour-coded game log.
-        - Top-right: user information, balance, and Return to Menu button.
+        - Top-right: user information, balance and Return to Menu button.
         - Middle-right: scrollable players list.
         - Bottom-right: bet entry controls and action buttons.
 
         Args:
             frame (Frame): The parent frame to build the view into.
         """
-        cs = self.colour_scheme
-
         frame.columnconfigure(0, weight=2)
         frame.columnconfigure(1, weight=1)
         frame.rowconfigure(0, weight=1)
-        frame.rowconfigure(1, weight=1)
+        frame.rowconfigure(1, weight=2)
         frame.rowconfigure(2, weight=1)
 
-        top_left = Frame(frame, bd=2, relief="sunken", bg=cs["top_left_bg"])
-        top_left.grid(column=0, row=0, sticky="nsew", padx=5, pady=5)
+        top_left_frame = Frame(frame, bd=2, relief="sunken", bg=CS["top_left"])
+        top_left_frame.grid(column=0, row=0, sticky="nsew", padx=5, pady=5)
 
-        self.round_number_label = Label(
-            top_left,
-            bg=cs["top_left_bg"],
-            fg=cs["left_fg"],
+        self.round_number_label = preset_label(
+            top_left_frame,
+            bg=CS["round_label_bg"],
+            relief="groove",
             anchor="w",
-            font=self.styles["text"],
         )
         self.round_number_label.pack(fill="x", padx=10, pady=5)
 
-        self.board_label = Label(
-            top_left,
-            bg=cs["top_left_bg"],
-            fg=cs["left_fg"],
+        self.board_label = preset_label(
+            top_left_frame,
+            bg=CS["top_left"],
+            relief="flat",
             anchor="w",
-            font=self.styles["text"],
         )
         self.board_label.pack(fill="x", padx=10, pady=5)
 
-        self.player_blinds_label = Label(
-            top_left,
-            bg=cs["top_left_bg"],
-            fg=cs["left_fg"],
+        self.player_blinds_label = preset_label(
+            top_left_frame,
+            bg=CS["top_left"],
+            relief="flat",
             anchor="w",
-            font=self.styles["text"],
         )
         self.player_blinds_label.pack(fill="x", padx=10, pady=5)
 
-        self.pot_size_label = Label(
-            top_left,
-            bg=cs["top_left_bg"],
-            fg=cs["left_fg"],
+        self.pot_size_label = preset_label(
+            top_left_frame,
+            bg=CS["top_left"],
+            relief="flat",
             anchor="w",
-            font=self.styles["text"],
         )
         self.pot_size_label.pack(fill="x", padx=10, pady=5)
 
-        self.player_turn_label = Label(
-            top_left,
-            bg=cs["top_left_bg"],
-            fg=cs["left_fg"],
+        self.player_turn_label = preset_label(
+            top_left_frame,
+            font=self.styles["emphasis"],
+            bg=CS["top_left"],
+            relief="flat",
             anchor="w",
-            font=self.styles["text"],
         )
         self.player_turn_label.pack(fill="x", padx=10, pady=5)
 
-        self.tournament_label = Label(
-            top_left,
+        self.tournament_label = preset_label(
+            top_left_frame,
             font=self.styles["emphasis"],
-            bg=cs["tournament_bg"],
-            fg=cs["tournament_fg"],
-            pady=4,
-            padx=6,
+            bg=CS["tournament_bg"],
+            fg=CS["tournament_fg"],
+            relief="flat",
         )
         if self.tournament_mode:
             self.tournament_label.pack(fill="x", padx=10, pady=4)
 
-        bottom_left = Frame(frame, bd=2, relief="sunken", bg=cs["bottom_left_bg"])
-        bottom_left.grid(column=0, row=1, rowspan=2, sticky="nsew", padx=5, pady=5)
+        bottom_left_frame = Frame(frame, bd=2, relief="sunken", bg=CS["bottom_left"])
+        bottom_left_frame.grid(
+            column=0, row=1, rowspan=2, sticky="nsew", padx=5, pady=5
+        )
 
         self.log_canvas = Canvas(
-            bottom_left, bg=cs["bottom_left_bg"], highlightthickness=0
+            bottom_left_frame, bg=CS["bottom_left"], highlightthickness=0
         )
         log_sb = Scrollbar(
-            bottom_left, orient="vertical", command=self.log_canvas.yview
+            bottom_left_frame, orient="vertical", command=self.log_canvas.yview
         )
         self.log_canvas.configure(yscrollcommand=log_sb.set)
         log_sb.pack(side="right", fill="y")
         self.log_canvas.pack(side="left", fill="both", expand=True)
 
-        self.log_frame = Frame(self.log_canvas, bg=cs["bottom_left_bg"])
+        self.log_frame = Frame(self.log_canvas, bg=CS["bottom_left"])
         self.log_window = self.log_canvas.create_window(
             (0, 0), window=self.log_frame, anchor="nw"
         )
@@ -8240,74 +7809,52 @@ class HarrogateHoldEm:
             ),
         )
 
-        top_right = Frame(frame, bd=2, relief="sunken", bg=cs["top_right_bg"])
-        top_right.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
+        top_right_frame = Frame(frame, bd=2, relief="sunken", bg=CS["top_right"])
+        top_right_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 
-        Button(
-            top_right,
+        preset_button(
+            top_right_frame,
             text="Return to Menu",
-            font=self.styles["button"],
-            bg=cs["widget_bg"],
-            fg=cs["text_fg"],
-            relief="flat",
-            bd=0,
-            cursor="hand2",
             command=self.return_to_menu,
         ).pack(pady=5)
-
-        balance = 0
-        if not self.user_data.get("administrator"):
-            balance_data = self.dbm.fetch_user_balance(self.user_data["username"])
-            if not balance_data["found"]:
-                self.return_to_menu(
-                    is_error=True,
-                    error=Exception("User not found in database."),
-                )
-                return
-            balance = balance_data["balance"]
-        else:
-            self.admin_modify_bet(frame)
 
         labels = []
         for text in (
             f"Username: {self.user_data['username']}",
-            f"Balance: £{balance}",
+            f"Balance: £{self.start_balance}",
             "Current Bet: £0",
             f"Blinds: £{self.small_blind_value} / £{self.big_blind_value}",
         ):
-            label = Label(
-                top_right,
+            label = preset_label(
+                top_right_frame,
                 text=text,
-                font=self.styles["text"],
-                bg=cs["top_right_bg"],
-                fg=cs["text_fg"],
                 anchor="w",
             )
             label.pack(anchor="w", pady=5, padx=5)
             labels.append(label)
 
-        self.balance_label = cast(Label, labels[1])
-        self.current_bet_label = cast(Label, labels[2])
-        self.blinds_label = cast(Label, labels[3])
+        self.balance_label = cast(preset_label, labels[1])
+        self.current_bet_label = cast(preset_label, labels[2])
+        self.blinds_label = cast(preset_label, labels[3])
 
-        mid_right = Frame(frame, bd=2, relief="sunken", bg=cs["middle_right_bg"])
-        mid_right.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
-        mid_right.columnconfigure(0, weight=1)
-        mid_right.columnconfigure(1, weight=0)
-        mid_right.rowconfigure(0, weight=1)
+        middle_right_frame = Frame(frame, bd=2, relief="sunken", bg=CS["middle_right"])
+        middle_right_frame.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
+        middle_right_frame.columnconfigure(0, weight=1)
+        middle_right_frame.columnconfigure(1, weight=0)
+        middle_right_frame.rowconfigure(0, weight=1)
 
         self.players_canvas = Canvas(
-            mid_right, bg=cs["middle_right_bg"], highlightthickness=0
+            middle_right_frame, bg=CS["middle_right"], highlightthickness=0
         )
         self.players_canvas.grid(row=0, column=0, sticky="nsew")
 
         players_sb = Scrollbar(
-            mid_right, orient="vertical", command=self.players_canvas.yview
+            middle_right_frame, orient="vertical", command=self.players_canvas.yview
         )
         players_sb.grid(row=0, column=1, sticky="ns")
         self.players_canvas.configure(yscrollcommand=players_sb.set)
 
-        self.players_frame = Frame(self.players_canvas, bg=cs["middle_right_bg"])
+        self.players_frame = Frame(self.players_canvas, bg=CS["middle_right"])
         self.players_window = self.players_canvas.create_window(
             (0, 0), window=self.players_frame, anchor="nw"
         )
@@ -8327,105 +7874,92 @@ class HarrogateHoldEm:
 
         self.build_players_panel()
 
-        bot_right = Frame(frame, bd=2, relief="sunken", bg=cs["bottom_right_bg"])
-        bot_right.grid(row=2, column=1, sticky="nsew", padx=5, pady=5)
+        bottom_right_outer = Frame(frame, bd=2, relief="sunken", bg=CS["bottom_right"])
+        bottom_right_outer.grid(row=2, column=1, sticky="nsew", padx=5, pady=5)
+        bottom_right_outer.columnconfigure(0, weight=1)
+        bottom_right_outer.columnconfigure(1, weight=0)
+        bottom_right_outer.rowconfigure(0, weight=1)
 
-        def adjust_current_bet(amount):
+        bottom_right_canvas = Canvas(
+            bottom_right_outer, bg=CS["bottom_right"], highlightthickness=0
+        )
+        bottom_right_canvas.grid(row=0, column=0, sticky="nsew")
+
+        bottom_right_sb = Scrollbar(
+            bottom_right_outer, orient="vertical", command=bottom_right_canvas.yview
+        )
+        bottom_right_sb.grid(row=0, column=1, sticky="ns")
+        bottom_right_canvas.configure(yscrollcommand=bottom_right_sb.set)
+
+        bottom_right_frame = Frame(bottom_right_canvas, bg=CS["bottom_right"])
+        bottom_right_window = bottom_right_canvas.create_window(
+            (0, 0), window=bottom_right_frame, anchor="nw"
+        )
+
+        bottom_right_canvas.bind(
+            "<Configure>",
+            lambda e: bottom_right_canvas.itemconfig(
+                bottom_right_window, width=e.width
+            ),
+        )
+        bottom_right_frame.bind(
+            "<Configure>",
+            lambda e: bottom_right_canvas.configure(
+                scrollregion=bottom_right_canvas.bbox("all")
+            ),
+        )
+
+        def check_bet_input(amount=0):
+            """
+            Updates the current bet by the given amount, clamping the result
+            between 0 and the player's current balance. Updates bet_var,
+            the current-bet label, and the Start Round button state.
+            """
             try:
-                value = int(self.bet_var.get())
-            except Exception:
-                value = 0
-            value += amount
-            balance = self.return_balance()
-            if balance is not None:
-                value = max(1, min(value, int(balance)))
-            self.bet_var.set(str(value))
-            self.current_bet_label.config(text=f"Current Bet: £{value}")
-            self.update_button_states()
+                current_value = int(self.bet_var.get())
+                new_value = max(0, current_value + amount)
+                balance = self.return_balance()
+                if balance is not None:
+                    new_value = min(new_value, int(balance))
+            except (ValueError, TypeError):
+                new_value = 0
 
-        def check_bet_input(*_):
-            raw = self.bet_var.get()
-            if raw in ("", "-"):
-                self.current_bet_label.config(text="Current Bet: £0")
-                self.start_button.config(state="disabled")
-                return
+            self.bet_var.set(str(new_value))
+            self.current_bet = new_value
+            self.current_bet_label.config(text=f"Current Bet: £{new_value}")
+            state = (
+                "normal" if (new_value > 0 and not self.round_active) else "disabled"
+            )
+            self.start_button.config(state=state)
 
-            digits_only = "".join(c for c in raw if c.isdigit())
-            if digits_only != raw:
-                self.bet_var.set(digits_only if digits_only else "0")
-                return
-            try:
-                value = int(digits_only) if digits_only else 0
-            except Exception:
-                value = 0
-
-            balance = self.return_balance()
-            if balance is not None:
-                value = min(value, int(balance))
-            self.current_bet_label.config(text=f"Current Bet: £{value}")
-            self.update_button_states()
-
-        self.bet_var = StringVar(value="0")
-        self.bet_var.trace_add("write", check_bet_input)
-
-        Entry(
-            bot_right,
-            textvariable=self.bet_var,
-            width=12,
-            font=self.styles["text"],
-            bg=cs["widget_bg"],
-            fg=cs["text_fg"],
-            insertbackground=cs["text_fg"],
-            relief="flat",
-            bd=4,
-            justify="center",
-        ).pack(pady=(8, 6))
-
-        for inc in (10, 100, 1000):
-            row_f = Frame(
-                bot_right,
-                bg=cs["text_bg"],
-                bd=2,
-                relief="ridge",
+        # Increment rows
+        for inc in (1, 10, 100, 1000):
+            row = Frame(
+                bottom_right_frame,
                 padx=6,
                 pady=3,
             )
-            row_f.pack(fill="x", pady=3)
+            row.pack(fill="x", pady=3)
 
-            Button(
-                row_f,
+            preset_button(
+                row,
                 text="+",
-                font=self.styles["button"],
                 width=3,
-                bg=cs["widget_bg"],
-                fg=cs["text_fg"],
-                relief="flat",
-                bd=0,
-                cursor="hand2",
-                command=lambda v=inc: adjust_current_bet(v),
+                command=lambda v=inc: check_bet_input(amount=v),
             ).pack(side="left", padx=4)
 
-            Label(
-                row_f,
+            preset_label(
+                row,
                 text=str(inc),
-                font=self.styles["text"],
-                bg=cs["text_bg"],
-                fg=cs["text_fg"],
                 width=8,
                 anchor="center",
             ).pack(side="left", expand=True)
 
-            Button(
-                row_f,
-                text="−",
-                font=self.styles["button"],
-                bg=cs["widget_bg"],
-                fg=cs["text_fg"],
-                relief="flat",
-                bd=0,
+            preset_button(
+                row,
+                text="-",
                 width=3,
-                cursor="hand2",
-                command=lambda v=-inc: adjust_current_bet(v),
+                command=lambda v=-inc: check_bet_input(amount=v),
             ).pack(side="right", padx=4)
 
         for text, command in (
@@ -8433,38 +7967,28 @@ class HarrogateHoldEm:
             ("Call", self.call),
             ("Fold", self.fold),
         ):
-            button = Button(
-                bot_right,
+            button = preset_button(
+                bottom_right_frame,
                 text=text,
-                font=self.styles["button"],
-                bg=cs["widget_bg"],
-                fg=cs["text_fg"],
-                relief="flat",
-                bd=0,
                 width=18,
-                cursor="hand2",
                 command=command,
                 state="disabled",
             )
             button.pack(pady=6)
             self.action_buttons.append(button)
 
-        self.start_button = Button(
-            bot_right,
+        self.start_button = preset_button(
+            bottom_right_frame,
             text=f"Start Round {self.round_number}",
-            font=self.styles["button"],
-            bg=cs["start_bg"],
-            fg=cs["start_fg"],
-            relief="flat",
-            bd=0,
             width=18,
-            activebackground="#3a52a0",
             cursor="hand2",
             command=self.check_round,
         )
         self.start_button.pack(pady=10)
 
-        self.update_labels()
+        self.bet_var = StringVar(value="0")
+        self.bet_var.trace_add("write", lambda *_: check_bet_input())
+
         self.update_button_states()
 
     def build_players_panel(self):
@@ -8473,33 +7997,30 @@ class HarrogateHoldEm:
         Displays for each player: name with position indicators ([SB], [BB],
         current-turn arrow <), hole cards (visible for the human player and at
         showdown; face-down [?] [?] for bots otherwise), chip balance,
-        current-round bet, and status string.
+        current-round bet and status string.
 
         Called both on initial layout and by update_player_status() on every
         refresh so that styling is always consistent.
         """
-        cs = self.colour_scheme
-
         for widget in self.players_frame.winfo_children():
             widget.destroy()
 
-        Label(
+        preset_label(
             self.players_frame,
             text="Players",
+            bg=CS["middle_right"],
             font=self.styles["subheading"],
-            bg=cs["middle_right_bg"],
-            fg=cs["text_fg"],
         ).pack(anchor="w", padx=8, pady=(6, 10))
 
-        Frame(self.players_frame, height=1, bg=cs["widget_bg"]).pack(
+        Frame(self.players_frame, height=1, bg=CS["widget_bg"]).pack(
             fill="x", padx=8, pady=2
         )
 
         for player in self.players:
-            row_f = Frame(self.players_frame, bg=cs["middle_right_bg"])
+            row_f = Frame(self.players_frame, bg=CS["middle_right"])
             row_f.pack(fill="x", padx=8, pady=4)
 
-            left_f = Frame(row_f, bg=cs["middle_right_bg"])
+            left_f = Frame(row_f, bg=CS["middle_right"])
             left_f.pack(side="left", fill="x", expand=True)
 
             pos_text = ""
@@ -8514,12 +8035,11 @@ class HarrogateHoldEm:
                 ):
                     pos_text += "  <"
 
-            Label(
+            preset_label(
                 left_f,
                 text=player["player"] + pos_text,
-                font=self.styles["text"],
-                bg=cs["middle_right_bg"],
-                fg=cs["text_fg"],
+                bg=CS["middle_right"],
+                relief="flat",
                 anchor="w",
                 wraplength=180,
             ).pack(fill="x")
@@ -8530,64 +8050,59 @@ class HarrogateHoldEm:
                         " ".join(player["cards"][1]) if len(player["cards"]) > 1 else ""
                     )
                     if cards_text:
-                        Label(
+                        preset_label(
                             left_f,
                             text=f"Cards:  {cards_text}",
-                            font=self.styles["text"],
-                            bg=cs["middle_right_bg"],
-                            fg=cs["text_fg"],
+                            bg=CS["middle_right"],
+                            relief="flat",
                             anchor="w",
                         ).pack(fill="x")
                 else:
-                    Label(
+                    preset_label(
                         left_f,
                         text="Cards:  [?]  [?]",
-                        font=self.styles["text"],
-                        bg=cs["middle_right_bg"],
-                        fg=cs["text_fg"],
+                        bg=CS["middle_right"],
+                        relief="flat",
                         anchor="w",
                     ).pack(fill="x")
 
-            right_f = Frame(row_f, bg=cs["middle_right_bg"])
+            right_f = Frame(row_f, bg=CS["middle_right"])
             right_f.pack(side="right")
 
-            Label(
+            preset_label(
                 right_f,
                 text=f"£{player['balance']}",
-                font=self.styles["text"],
-                bg=cs["middle_right_bg"],
-                fg=cs["text_fg"],
+                bg=CS["middle_right"],
+                relief="flat",
                 anchor="e",
                 width=8,
             ).pack(anchor="e")
 
             if player["bet"] > 0:
-                Label(
+                preset_label(
                     right_f,
                     text=f"Bet:  £{player['bet']}",
-                    font=self.styles["text"],
-                    bg=cs["middle_right_bg"],
-                    fg=cs["text_fg"],
+                    bg=CS["middle_right"],
+                    relief="flat",
                     anchor="e",
                 ).pack(anchor="e")
 
-            Label(
+            preset_label(
                 right_f,
                 text=player["status"],
-                font=self.styles["text"],
-                bg=cs["middle_right_bg"],
-                fg=cs["text_fg"],
+                bg=CS["middle_right"],
+                relief="flat",
                 anchor="e",
             ).pack(anchor="e")
 
-            Frame(self.players_frame, height=1, bg=cs["widget_bg"]).pack(
+            Frame(self.players_frame, height=1, bg=CS["widget_bg"]).pack(
                 fill="x", padx=8, pady=2
             )
 
     def update_ui(self):
         """
         Convenience wrapper that refreshes all three UI components —
-        labels, button states, and the players list panel — in one call.
+        labels, button states and the players list panel — in one call.
         """
         self.update_labels()
         self.update_button_states()
@@ -8735,7 +8250,7 @@ class HarrogateHoldEm:
     def reset_players(self):
         """
         Prepares all players for a new round by clearing their hole cards,
-        resetting bets to zero, and restoring status to 'Waiting'.
+        resetting bets to zero and restoring status to 'Waiting'.
         Players whose status is 'OUT' are left unchanged.
         """
         for player in self.players:
@@ -8795,74 +8310,6 @@ class HarrogateHoldEm:
         self.player_turn = True
         self.update_ui()
 
-    def admin_modify_bet(self, frame):
-        """
-        Opens a modal Toplevel dialog that allows the administrator to set
-        a custom starting chip balance. The dialog cannot be dismissed
-        via the window manager — a valid balance must be submitted.
-
-        On submission, updates the balance label and persists the new
-        balance to the database.
-
-        Args:
-            frame: The parent widget used to position the Toplevel.
-        """
-        balance_window = Toplevel(frame)
-        balance_window.title("Set Starting Balance")
-        balance_window.grab_set()
-        balance_window.protocol("WM_DELETE_WINDOW", lambda: None)
-        balance_window.configure(bg=self.colour_scheme["top_left_bg"])
-        try:
-            balance_window.attributes("-zoomed", True)  # MacOS/Linux.
-        except Exception:
-            pass
-        try:
-            balance_window.state("zoomed")  # Windows.
-        except Exception:
-            pass
-
-        Label(
-            balance_window,
-            text="Enter starting balance (£):",
-            font=self.styles["text"],
-            bg=self.colour_scheme["top_left_bg"],
-            fg=self.colour_scheme["text_fg"],
-        ).pack(pady=8)
-
-        balance_entry = Entry(
-            balance_window,
-            width=20,
-            font=self.styles["text"],
-            bg=self.colour_scheme["widget_bg"],
-            fg=self.colour_scheme["text_fg"],
-            insertbackground=self.colour_scheme["text_fg"],
-        )
-        balance_entry.pack(pady=5)
-
-        def submit_balance():
-            """Validates the entry, updates the UI and database, and closes
-            the dialog. Shows an error on invalid input."""
-            try:
-                balance = int(balance_entry.get().strip())
-                if balance < 0:
-                    raise ValueError()
-                self.balance_label.config(text=f"Balance: £{balance}")
-                balance_window.destroy()
-                self.dbm.modify_user_balance(self.user_data["username"], balance)
-            except Exception:
-                messagebox.showerror(text="Please enter a valid positive integer.")
-
-        Button(
-            balance_window,
-            text="Submit",
-            font=self.styles["button"],
-            bg=self.colour_scheme["widget_bg"],
-            fg=self.colour_scheme["text_fg"],
-            relief="flat",
-            bd=0,
-            command=submit_balance,
-        ).pack(pady=10)
-
     def log_message(
         self,
         text,
@@ -8895,40 +8342,50 @@ class HarrogateHoldEm:
 
     def process_log_queue(self):
         """
-        Pops and renders the next entry from the log queue, then schedules
-        itself to run again after log_delay_ms milliseconds.  Stops when
-        the queue is empty or the log frame has been destroyed.
+        Pops and renders the next entry from the log queue and then schedules
+        itself to run again after log_delay_ms milliseconds. Stops when
+        the queue is empty or the log frame has been destroyed. No errors
+        are printed if the application stops runnings while the queue is
+        processing.
         """
-        if not getattr(self, "log_frame", None) or not self.log_frame.winfo_exists():
-            self.log_queue.clear()
-            self.log_active = False
-            return
+        try:
+            if (
+                not getattr(self, "log_frame", None)
+                or not self.log_frame.winfo_exists()
+            ):
+                self.log_queue.clear()
+                self.log_active = False
+                return
 
-        if not self.log_queue:
-            self.log_active = False
-            return
+            if not self.log_queue:
+                self.log_active = False
+                return
 
-        self.log_active = True
-        item = self.log_queue.pop(0)
+            self.log_active = True
+            item = self.log_queue.pop(0)
 
-        # Accept both 6-tuple and 7-tuple entries.
-        if len(item) == 6:
-            text, round_start, is_win, is_loss, tie, is_thinking = item
-            is_tournament = False
-        else:
-            text, round_start, is_win, is_loss, tie, is_thinking, is_tournament = item
+            # Accept both 6-tuple and 7-tuple entries.
+            if len(item) == 6:
+                text, round_start, is_win, is_loss, tie, is_thinking = item
+                is_tournament = False
+            else:
+                text, round_start, is_win, is_loss, tie, is_thinking, is_tournament = (
+                    item
+                )
 
-        self.render_log(
-            text, round_start, is_win, is_loss, tie, is_thinking, is_tournament
-        )
-        self.hhe_root.after(self.log_delay_ms, self.process_log_queue)
+            self.render_log(
+                text, round_start, is_win, is_loss, tie, is_thinking, is_tournament
+            )
+            self.hhe_root.after(self.log_delay_ms, self.process_log_queue)
+        except Exception:
+            pass
 
     def render_log(
         self, text, round_start, is_win, is_loss, tie, is_thinking, is_tournament=False
     ):
         """
         Creates and packs a colour-coded Label into the log frame for the
-        given message, then scrolls the log canvas to the bottom.  Guards
+        given message and then scrolls the log canvas to the bottom.  Guards
         against rendering into a destroyed frame.
 
         Args:
@@ -8943,54 +8400,52 @@ class HarrogateHoldEm:
         if not getattr(self, "log_frame", None) or not self.log_frame.winfo_exists():
             return
 
-        cs = self.colour_scheme
         bg = (
-            cs["tournament_bg"]
+            CS["tournament_bg"]
             if is_tournament
             else (
-                cs["start_bg"]
+                CS["start_bg"]
                 if round_start
                 else (
-                    cs["win_bg"]
+                    CS["win_bg"]
                     if is_win
                     else (
-                        cs["loss_bg"]
+                        CS["loss_bg"]
                         if is_loss
                         else (
-                            cs["tie_bg"]
+                            CS["tie_bg"]
                             if tie
-                            else cs["thinking_bg"] if is_thinking else cs["log_bg"]
+                            else (CS["thinking_bg"] if is_thinking else CS["log_bg"])
                         )
                     )
                 )
             )
         )
         fg = (
-            cs["tournament_fg"]
+            CS["tournament_fg"]
             if is_tournament
             else (
-                cs["start_fg"]
+                CS["start_fg"]
                 if round_start
                 else (
-                    cs["win_fg"]
+                    CS["win_fg"]
                     if is_win
                     else (
-                        cs["loss_fg"]
+                        CS["loss_fg"]
                         if is_loss
                         else (
-                            cs["tie_fg"]
+                            CS["tie_fg"]
                             if tie
-                            else cs["thinking_fg"] if is_thinking else cs["log_fg"]
+                            else (CS["thinking_fg"] if is_thinking else CS["log_fg"])
                         )
                     )
                 )
             )
         )
 
-        Label(
+        preset_label(
             self.log_frame,
             text=text,
-            font=self.styles["text"],
             bg=bg,
             fg=fg,
             bd=1,
@@ -9008,56 +8463,51 @@ class HarrogateHoldEm:
 
     def return_balance(self):
         """
-        Retrieves the human player's current chip balance from the database.
-        Redirects to the main menu with an error if the user is not found
-        or the balance is None.
+        Retrieves the current user balance from the database. Redirects to
+        the menu with an error if the user is not found or the balance is
+        None. Returns 0 as a fallback to prevent arithmetic errors.
 
         Returns:
-            int: The current balance, or 0 as a safe fallback.
+            float: The current balance, or 0 if an error occurred.
         """
-        data = self.dbm.fetch_user_balance(self.user_data["username"])
-        if not data["found"]:
+        balance_data = self.dbm.fetch_user_balance(self.user_data["username"])
+
+        if not balance_data["found"]:
             self.return_to_menu(
                 is_error=True, error=Exception("User not found in database.")
             )
-            return 0
-        if data["balance"] is None:
+
+        if balance_data["balance"] is not None:
+            return balance_data["balance"]
+        else:
             self.return_to_menu(
-                is_error=True,
-                error=Exception("Fetched balance returned None."),
+                is_error=True, error=Exception("Fetched balance returns 'None'")
             )
-            return 0
-        return int(data["balance"])
+            return 0  # In order to prevent errors regarding 'None' errors in mathematical operations.
 
-    def check_balance(self, frame):
+    def check_balance(self):
         """
-        Checks whether the human player's balance has reached zero.
-
-        For administrators, opens the balance modification dialog so they
-        can set a new balance and continue. For regular users, displays
-        an informational message and returns them to the main menu.
-
-        Args:
-            frame: Parent widget passed to admin_modify_bet if needed.
+        Checks whether the user's balance is zero. For administrators,
+        opens the balance modification dialog.
 
         Returns:
-            bool: True if the player can continue, False if they have been
-                  returned to the menu.
+            bool: True if the user can continue playing, False if they have
+                  been redirected away.
         """
         if self.return_balance() == 0:
             if self.user_data.get("administrator"):
                 messagebox.showinfo(
                     "Balance Depleted",
-                    "Your balance is £0. As an administrator you may "
-                    "set a new balance to continue.",
+                    "Your balance is £0. As an administrator, you can set a new balance.",
                 )
-                self.admin_modify_bet(frame)
+
+                self.admin_modify_bet(self.main_frame)
                 return True
+
             else:
                 messagebox.showinfo(
                     "Balance Depleted",
-                    "Your balance has reached £0.  "
-                    "You will be returned to the main menu.",
+                    "Your balance is now £0. Returning to menu.",
                 )
                 self.return_to_menu()
                 return False
@@ -9084,7 +8534,7 @@ class HarrogateHoldEm:
     def log_player_action_to_db(self, action, bet_size):
         """
         Logs the human player's action for the current street and round
-        to the database, and appends it to the in-memory actions_logged
+        to the database and appends it to the in-memory actions_logged
         list for end-of-round statistics aggregation.
 
         Args:
@@ -9116,7 +8566,7 @@ class HarrogateHoldEm:
         """
         Initiates a new round. Clears any pending log entries, resets
         action tracking, logs the round-start message, resets player
-        states, refreshes the UI, and delegates to play_round().
+        states, refreshes the UI and delegates to play_round().
         """
         self.round_active = True
         self.log_queue.clear()
@@ -9130,13 +8580,13 @@ class HarrogateHoldEm:
 
     def blind_management(self):
         """
-        Assigns small blind, big blind, and first-action positions for
+        Assigns small blind, big blind and first-action positions for
         the current round. Skips players with 'OUT' status when
         rotating.
 
         Posts the blinds by deducting from player balances (capped at
         each player's available balance to prevent negative chips),
-        adding the amounts to the pot, and setting current_bet to the
+        adding the amounts to the pot and setting current_bet to the
         big blind amount.
         """
         # Advance dealer button each round for rotation.
@@ -9190,8 +8640,8 @@ class HarrogateHoldEm:
     def distribute_cards(self):
         """
         Creates a freshly shuffled deck, deals two hole cards to each
-        active (non-OUT) player, then deals and stores five community
-        cards split into flop (3), turn (1), and river (1) components.
+        active (non-OUT) player and then deals and stores five community
+        cards split into flop (3), turn (1) and river (1) components.
         """
         self.deck = CasinoDeckManager(shuffle=True, game_mode="poker")
 
@@ -9223,7 +8673,7 @@ class HarrogateHoldEm:
         Executes a complete poker round: updates blinds from the
         TournamentManager if active, records the tournament round-start
         snapshot, posts blinds, deals cards, logs the human player's hole
-        cards, refreshes the UI, and begins the street sequence at
+        cards, refreshes the UI and begins the street sequence at
         preflop.
         """
         if self.tournament_mode and self.tournament:
@@ -9349,7 +8799,7 @@ class HarrogateHoldEm:
         """
         Polls the bot decision queue on the main thread every 50 ms.  When
         a completed decision is available, clears bot_thinking, executes
-        or error-handles the decision, advances current_position, and
+        or error-handles the decision, advances current_position and
         schedules the next call to decisions() after log_delay_ms.
 
         Reschedules itself regardless of whether a decision was ready.
@@ -9434,9 +8884,9 @@ class HarrogateHoldEm:
 
         - **fold**: sets status to 'Folded' and logs the action.
         - **call**: handles check (call_amount == 0), all-in call
-          (call_amount ≥ balance), and normal call; logs and updates pot.
+          (call_amount ≥ balance) and normal call; logs and updates pot.
         - **raise**: enforces the minimum raise, caps at player balance,
-          updates pot and current_bet, logs, and resets other players via
+          updates pot and current_bet, logs and resets other players via
           reset_after_raise().
 
         Args:
@@ -9528,7 +8978,7 @@ class HarrogateHoldEm:
     def bot_error(self, player, error):
         """
         Handles a bot decision error gracefully. Displays a messagebox,
-        logs the event, and marks the bot as 'OUT'.
+        logs the event and marks the bot as 'OUT'.
 
         Args:
             player (dict): The bot player that caused the error.
@@ -9553,7 +9003,7 @@ class HarrogateHoldEm:
 
         For preflop, preserves blind 'Decided' statuses and sets action
         to start after the big blind. For all post-flop streets, resets
-        all active players to 'Waiting', clears per-street bets, and
+        all active players to 'Waiting', clears per-street bets and
         sets action to start left of the dealer.
 
         Calls showdown() at the showdown street, otherwise calls
@@ -9599,7 +9049,7 @@ class HarrogateHoldEm:
         """
         Called when all players have acted on the current street. Logs
         the street completion, checks for a single remaining active
-        player (awarding the pot immediately without a showdown), and
+        player (awarding the pot immediately without a showdown) and
         advances to the next street otherwise.
         """
         self.log_message(f"{self.street.capitalize()} betting complete.")
@@ -9623,7 +9073,7 @@ class HarrogateHoldEm:
         Evaluates all remaining active players' hands against the full
         board using the treys evaluator (lower score = stronger hand),
         determines the winner(s), logs each player's hand and the
-        outcome, and schedules end_round() after the log queue has
+        outcome and schedules end_round() after the log queue has
         finished rendering.
 
         Handles split pots when multiple players tie.
@@ -9711,8 +9161,8 @@ class HarrogateHoldEm:
     def update_user_poker_data(self):
         """
         Aggregates the human player's in-round action log and updates
-        their poker statistics in the database. Derives VPIP, PFR, and
-        faced-raise flags from actions_logged, then calls
+        their poker statistics in the database. Derives VPIP, PFR and
+        faced-raise flags from actions_logged and then calls
         update_hand_statistics and resolve_player_actions.
         """
         for player in self.players:
@@ -9760,7 +9210,7 @@ class HarrogateHoldEm:
         for a loss or tie), persists the new balance to the database,
         logs the outcome and remaining balance, updates poker statistics,
         increments the round counter, handles tournament progression if
-        active, and schedules finish_end_round() after the log queue
+        active and schedules finish_end_round() after the log queue
         empties.
 
         Args:
@@ -9849,7 +9299,7 @@ class HarrogateHoldEm:
         rendering. Resets the current-bet label, eliminates bots with
         zero chips, marks the human player as 'OUT' if they have no chips,
         checks for game-over conditions, increments the round display
-        number, and re-enables the Start Round button.
+        number and re-enables the Start Round button.
         """
         self.current_bet = 0
         if (
@@ -9920,7 +9370,7 @@ class HarrogateHoldEm:
     def return_to_menu(self, is_error=False, error=None):
         """
         Destroys the game window and returns the user to the appropriate
-        interface: Admin_Interface for administrators, Casino_Interface
+        interface: AdminInterface for administrators, CasinoInterface
         for regular users. Optionally shows an error dialog
         before navigating.
 
@@ -9933,7 +9383,7 @@ class HarrogateHoldEm:
             messagebox.showerror("Error", f"{error}\n\nExiting game.")
         self.hhe_root.destroy()
 
-        Casino_Interface(
+        CasinoInterface(
             administrator=True if self.user_data.get("administrator") else False,
             user_data=self.user_data,
         )
@@ -9942,7 +9392,7 @@ class HarrogateHoldEm:
         """
         Handles the human player choosing to fold. Sets their status to
         'Folded', logs the action to the database, advances
-        current_position, and continues the decision loop.
+        current_position and continues the decision loop.
         """
         for player in self.players:
             if not player["is_bot"]:
@@ -9964,7 +9414,7 @@ class HarrogateHoldEm:
         - Call amount ≥ balance → all-in call for exact balance.
         - Normal call → deduct call_amount, update pot.
 
-        Logs the action to the database, advances current_position, and
+        Logs the action to the database, advances current_position and
         continues the decision loop.
         """
         for player in self.players:
@@ -10056,4 +9506,4 @@ class HarrogateHoldEm:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 if __name__ == "__main__":
-    Admin_Interface() if "--admin" in sys.argv else User_Interface()
+    AdminInterface() if "--admin" in sys.argv else CasinoInterface(False)

@@ -26,8 +26,8 @@ from tkinter import (
 )
 from tkinter.ttk import Combobox, Treeview
 import random
-from search_sort_algorithms_V6 import bubble_sort, binary_search_by_id
-from gui_helpers_V6 import CS, create_window, preset_label, preset_button, preset_entry, set_view
+from search_sort_algorithms import bubble_sort, binary_search_by_id
+from gui_helpers import CS, create_window, preset_label, preset_button, preset_entry, set_view
 
 class BaseInterface:
     """
@@ -89,7 +89,7 @@ class BaseInterface:
 
         self.interface_root.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        from database_management_and_logging_V6 import DatabaseManagement, DB_PATH
+        from database_management_and_logging import DatabaseManagement, DB_PATH
         self.db_path = DB_PATH
         self.dbm = DatabaseManagement(self.db_path)
 
@@ -318,7 +318,7 @@ class AdminConsole(BaseInterface):
                             password_entry.delete(0, "end")
                             return
 
-                        from check_systems_V6 import passwords_confirmation
+                        from check_systems import passwords_confirmation
                         password_state = passwords_confirmation(
                             frame, self.interface_root
                         )
@@ -372,7 +372,7 @@ class AdminConsole(BaseInterface):
         EncryptionSoftware class from encryption_software_V6.
         """
 
-        from encryption_software_V6 import EncryptionSoftware
+        from encryption_software import EncryptionSoftware
         EncryptionSoftware()
 
     def show_database_management(self, frame):
@@ -906,7 +906,7 @@ class AdminConsole(BaseInterface):
         """
 
         while True:
-            from check_systems_V6 import passwords_confirmation
+            from check_systems import passwords_confirmation
             password_state = passwords_confirmation(frame, self.interface_root)
             if password_state["confirmed"]:
                 self.dbm.register_user(username, password_state["password"], True)
@@ -1580,7 +1580,7 @@ class CasinoInterface(BaseInterface):
             username (str): The username for the account being created.
         """
 
-        from check_systems_V6 import passwords_confirmation
+        from check_systems import passwords_confirmation
         password_info = passwords_confirmation(frame, self.interface_root)
         if password_info["confirmed"]:
             self.dbm.register_user(username, password_info["password"], True)
@@ -2262,7 +2262,7 @@ class CasinoInterface(BaseInterface):
         user data.
         """
 
-        from whitejoe_V6 import WhiteJoe
+        from whitejoe import WhiteJoe
         WhiteJoe(self.user_data)
 
         self.interface_root.destroy()
@@ -2300,7 +2300,7 @@ class CasinoInterface(BaseInterface):
         bot_count = settings["bot_count"]
         difficulty = settings["bot_difficulty"]
 
-        from harrogate_hold_em_V6 import DEFAULT_BOT_LIST, HarrogateHoldEm
+        from harrogate_hold_em import DEFAULT_BOT_LIST, HarrogateHoldEm
         bot_list = list(DEFAULT_BOT_LIST)
         random.shuffle(bot_list)
         bots = [
@@ -2328,7 +2328,7 @@ class CasinoInterface(BaseInterface):
         settings["bot_count"] = ENDLESS_BOT_COUNT
         settings["rounds_survived"] = 0
 
-        from harrogate_hold_em_V6 import DEFAULT_BOT_LIST, HarrogateHoldEm
+        from harrogate_hold_em import DEFAULT_BOT_LIST, HarrogateHoldEm
         bot_list = list(DEFAULT_BOT_LIST)
         random.shuffle(bot_list)
 
@@ -2445,7 +2445,7 @@ class ShowGameRules:
                   rules Toplevel.
         """
         self.interface_root = root
-        from gui_helpers_V6 import fetch_text_styles
+        from gui_helpers import fetch_text_styles
         self.styles = fetch_text_styles(root)
 
     def show_whitejoe_rules(self, callback):

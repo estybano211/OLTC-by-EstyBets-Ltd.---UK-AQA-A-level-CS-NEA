@@ -5,7 +5,7 @@ from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 from datetime import datetime
-from gui_helpers_V6 import  CS, create_window, preset_label, preset_button, set_view
+from gui_helpers import  CS, create_window, preset_label, preset_button, set_view
 
 
 class EncryptionSoftware:
@@ -33,7 +33,7 @@ class EncryptionSoftware:
         )
 
         try:
-            from database_management_and_logging_V6 import DatabaseManagement, DB_PATH
+            from database_management_and_logging import DatabaseManagement, DB_PATH
             
             self.dbm = DatabaseManagement(DB_PATH)
             self.dbm.admin_accessed_system("Encryption Software")

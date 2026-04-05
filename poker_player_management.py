@@ -1,4 +1,4 @@
-from deck_management_V6 import CasinoDeckManager
+from deck_management import CasinoDeckManager
 import random
 from itertools import combinations
 
@@ -74,7 +74,7 @@ class HumanPokerPlayer:
 
         self.user_id = user_id
         
-        from database_management_and_logging_V6 import DatabaseManagement, DB_PATH
+        from database_management_and_logging import DatabaseManagement, DB_PATH
         self.dbm = DatabaseManagement(DB_PATH)
 
         record = self.dbm.load_user_poker_data(self.user_id)

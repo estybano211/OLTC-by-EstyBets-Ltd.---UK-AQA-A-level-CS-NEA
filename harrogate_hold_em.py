@@ -13,10 +13,10 @@ from threading import Thread
 from queue import Queue, Empty
 from time import time, sleep
 import random
-from deck_management_V6 import CasinoDeckManager
-from poker_player_management_V6 import HumanPokerPlayer, BotPokerPlayer
-from search_sort_algorithms_V6 import linear_search
-from gui_helpers_V6 import DELAY, CS, create_window, preset_label, preset_button, preset_entry, set_view
+from deck_management import CasinoDeckManager
+from poker_player_management import HumanPokerPlayer, BotPokerPlayer
+from search_sort_algorithms import linear_search
+from gui_helpers import DELAY, CS, create_window, preset_label, preset_button, preset_entry, set_view
 
 DEFAULT_BOT_LIST = [
     "Angus",
@@ -319,7 +319,7 @@ class HarrogateHoldEm:
         self.bot_decision_queue = Queue()
         self.bot_thinking = False
 
-        from database_management_and_logging_V6 import DatabaseManagement, DB_PATH
+        from database_management_and_logging import DatabaseManagement, DB_PATH
         self.dbm = DatabaseManagement(DB_PATH)
 
         if not self.dbm.check_user_poker_data_exists(user_data["user_id"]):

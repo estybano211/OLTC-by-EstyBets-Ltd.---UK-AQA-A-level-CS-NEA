@@ -2,17 +2,17 @@
 # one_less_time_casino.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-# This is a compilation of 10 separate programs:
-# 1. database_management_and_logging_V6.py
-# 2. gui_helpers_V6.py
-# 3. search_sort_algorithms_V6.py
-# 4. encryption_software_V6.py
-# 5. check_systems_V6.py
-# 6. system_interfaces_V6.py
-# 7. deck_management_V6.py
-# 8. whitejoe_V6.py
-# 9. poker_player_management_V6.py
-# 10. harrogate_hold_em_V6.py
+# This is the complete source code for the One Less Time Casino application:
+# 1. database_management_and_logging.py
+# 2. gui_helpers.py
+# 3. search_sort_algorithms.py
+# 4. encryption_software.py
+# 5. check_systems.py
+# 6. system_interfaces.py
+# 7. deck_management.py
+# 8. whitejoe.py
+# 9. poker_player_management.py
+# 10. harrogate_hold_em.py
 
 import sys
 import os

@@ -9,8 +9,8 @@ from tkinter import (
     Scrollbar,
 )
 from typing import cast
-from deck_management_V6 import CasinoDeckManager
-from gui_helpers_V6 import DELAY, CS, create_window, preset_label, preset_button, preset_entry, set_view
+from deck_management import CasinoDeckManager
+from gui_helpers import DELAY, CS, create_window, preset_label, preset_button, preset_entry, set_view
 
 
 class WhiteJoe:
@@ -48,7 +48,7 @@ class WhiteJoe:
         self.log_active = False
         self.log_delay_ms = int(DELAY * 1000)
 
-        from database_management_and_logging_V6 import DatabaseManagement, DB_PATH
+        from database_management_and_logging import DatabaseManagement, DB_PATH
         self.dbm = DatabaseManagement(DB_PATH)
 
         self.action_buttons = []

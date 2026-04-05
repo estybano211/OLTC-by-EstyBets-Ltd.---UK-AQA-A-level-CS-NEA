@@ -281,7 +281,7 @@ class DatabaseManagement:
         exist.
         """
 
-        from encryption_software_V6 import hash_function
+        from encryption_software import hash_function
         hashed_password = hash_function("Password1")
 
         with self.connect() as conn:
@@ -349,7 +349,7 @@ class DatabaseManagement:
             database_logger.debug("'password_hash' for Administrator not found.")
             return {"found": False, "verified": False}
 
-        from encryption_software_V6 import verify_hash
+        from encryption_software import verify_hash
         verified = verify_hash(row["password_hash"], password)
 
         database_logger.info(
@@ -372,7 +372,7 @@ class DatabaseManagement:
                 admin_logger.info("Request to change Admin Password.")
                 database_logger.info("Request to change Administrator password.")
 
-                from encryption_software_V6 import hash_function
+                from encryption_software import hash_function
                 password_hash = hash_function(new_password)
 
                 conn.execute(
@@ -558,7 +558,7 @@ class DatabaseManagement:
                 admin_logger.info(f"Request to change User: '{user_id}' password.")
                 database_logger.info(f"Request to change User: '{user_id}' password.")
 
-                from encryption_software_V6 import hash_function
+                from encryption_software import hash_function
 
                 conn.execute(
                     "UPDATE users SET password_hash = ? WHERE user_id = ?",
@@ -736,7 +736,7 @@ class DatabaseManagement:
         if username.strip().lower() == "administrator":
             raise ValueError("The username 'Administrator' cannot be used.")
 
-        from encryption_software_V6 import hash_function
+        from encryption_software import hash_function
         password_hash = hash_function(password) if password else None
 
         with self.connect() as conn:
@@ -794,7 +794,7 @@ class DatabaseManagement:
             database_logger.info(f"'password_hash' for User: '{username}' not found.")
             return {"found": False, "verified": False}
 
-        from encryption_software_V6 import verify_hash
+        from encryption_software import verify_hash
         verified = verify_hash(row["password_hash"], password)
 
         database_logger.info(
@@ -1007,7 +1007,7 @@ class DatabaseManagement:
                     "INSERT INTO user_poker_data (user_id) VALUES (?)", (user_id,)
                 )
 
-                from poker_player_management_V6 import generate_range_chart
+                from poker_player_management import generate_range_chart
                 conn.execute(
                     "UPDATE user_poker_data SET player_range = ? WHERE user_id = ?",
                     (json.dumps(generate_range_chart()), user_id),

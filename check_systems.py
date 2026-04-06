@@ -3,7 +3,14 @@ import hashlib
 import hmac
 import binascii
 from tkinter import Entry, Label, Button, Frame, Toplevel, messagebox
-from gui_helpers import fetch_text_styles, CS, create_window, preset_label, preset_entry, preset_button
+from gui_helpers import (
+    fetch_text_styles,
+    CS,
+    create_window,
+    preset_label,
+    preset_entry,
+    preset_button,
+)
 
 PBKDF2_ITERATIONS = 200_000  # Iterations for password hashing (Password-Based Key Derivation Function 2).
 SALT_BYTES = 16  # Number of random bytes for salt.

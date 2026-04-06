@@ -27,7 +27,15 @@ from tkinter import (
 from tkinter.ttk import Combobox, Treeview
 import random
 from search_sort_algorithms import bubble_sort, binary_search_by_id
-from gui_helpers import CS, create_window, preset_label, preset_button, preset_entry, set_view
+from gui_helpers import (
+    CS,
+    create_window,
+    preset_label,
+    preset_button,
+    preset_entry,
+    set_view,
+)
+
 
 class BaseInterface:
     """
@@ -90,11 +98,15 @@ class BaseInterface:
         self.interface_root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         from database_management_and_logging import DatabaseManagement, DB_PATH
+
         self.db_path = DB_PATH
         self.dbm = DatabaseManagement(self.db_path)
 
         if not self.dbm.check_database_exists():
             self.dbm.create_database()
+
+        self.dbm.check_expired_guest_account()
+        self.dbm.apply_daily_login_bonus()
 
         self.current_section_frame = None
 
@@ -274,7 +286,9 @@ class AdminConsole(BaseInterface):
         """
         if not self.dbm.check_database_exists():
             messagebox.showwarning(
-                "Warning", f"'{self.db_path}' does not exist.", parent=self.interface_root
+                "Warning",
+                f"'{self.db_path}' does not exist.",
+                parent=self.interface_root,
             )
             return
         if messagebox.askyesno(
@@ -319,6 +333,7 @@ class AdminConsole(BaseInterface):
                             return
 
                         from check_systems import passwords_confirmation
+
                         password_state = passwords_confirmation(
                             frame, self.interface_root
                         )
@@ -373,6 +388,7 @@ class AdminConsole(BaseInterface):
         """
 
         from encryption_software import EncryptionSoftware
+
         EncryptionSoftware()
 
     def show_database_management(self, frame):
@@ -433,7 +449,9 @@ class AdminConsole(BaseInterface):
                     )
 
             except Exception as error:
-                messagebox.showerror("Error", f"Failed to create '{self.db_path}': {error}")
+                messagebox.showerror(
+                    "Error", f"Failed to create '{self.db_path}': {error}"
+                )
 
     def delete_database(self):
         """
@@ -470,7 +488,9 @@ class AdminConsole(BaseInterface):
                     )
 
             except Exception as error:
-                messagebox.showerror("Error", f"Failed to delete '{self.db_path}': {error}")
+                messagebox.showerror(
+                    "Error", f"Failed to delete '{self.db_path}': {error}"
+                )
 
     def show_view_database(self, frame):
         """
@@ -907,6 +927,7 @@ class AdminConsole(BaseInterface):
 
         while True:
             from check_systems import passwords_confirmation
+
             password_state = passwords_confirmation(frame, self.interface_root)
             if password_state["confirmed"]:
                 self.dbm.register_user(username, password_state["password"], True)
@@ -1581,6 +1602,7 @@ class CasinoInterface(BaseInterface):
         """
 
         from check_systems import passwords_confirmation
+
         password_info = passwords_confirmation(frame, self.interface_root)
         if password_info["confirmed"]:
             self.dbm.register_user(username, password_info["password"], True)
@@ -2263,6 +2285,7 @@ class CasinoInterface(BaseInterface):
         """
 
         from whitejoe import WhiteJoe
+
         WhiteJoe(self.user_data)
 
         self.interface_root.destroy()
@@ -2301,6 +2324,7 @@ class CasinoInterface(BaseInterface):
         difficulty = settings["bot_difficulty"]
 
         from harrogate_hold_em import DEFAULT_BOT_LIST, HarrogateHoldEm
+
         bot_list = list(DEFAULT_BOT_LIST)
         random.shuffle(bot_list)
         bots = [
@@ -2329,6 +2353,7 @@ class CasinoInterface(BaseInterface):
         settings["rounds_survived"] = 0
 
         from harrogate_hold_em import DEFAULT_BOT_LIST, HarrogateHoldEm
+
         bot_list = list(DEFAULT_BOT_LIST)
         random.shuffle(bot_list)
 
@@ -2446,6 +2471,7 @@ class ShowGameRules:
         """
         self.interface_root = root
         from gui_helpers import fetch_text_styles
+
         self.styles = fetch_text_styles(root)
 
     def show_whitejoe_rules(self, callback):
@@ -2509,3 +2535,6 @@ class ShowGameRules:
         )
         continue_button.pack(pady=10)
 
+
+if __name__ == "__main__":
+    AdminInterface() if "--admin" in sys.argv else CasinoInterface(False)

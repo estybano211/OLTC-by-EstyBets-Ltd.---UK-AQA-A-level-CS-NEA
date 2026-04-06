@@ -10,7 +10,15 @@ from tkinter import (
 )
 from typing import cast
 from deck_management import CasinoDeckManager
-from gui_helpers import DELAY, CS, create_window, preset_label, preset_button, preset_entry, set_view
+from gui_helpers import (
+    DELAY,
+    CS,
+    create_window,
+    preset_label,
+    preset_button,
+    preset_entry,
+    set_view,
+)
 
 
 class WhiteJoe:
@@ -49,6 +57,7 @@ class WhiteJoe:
         self.log_delay_ms = int(DELAY * 1000)
 
         from database_management_and_logging import DatabaseManagement, DB_PATH
+
         self.dbm = DatabaseManagement(DB_PATH)
 
         self.action_buttons = []
@@ -781,11 +790,11 @@ class WhiteJoe:
         self.wj_root.destroy()
 
         from system_interfaces import CasinoInterface
+
         CasinoInterface(
             administrator=True if self.user_data.get("administrator") else False,
             user_data=self.user_data,
         )
-
 
 
 if __name__ == "__main__":

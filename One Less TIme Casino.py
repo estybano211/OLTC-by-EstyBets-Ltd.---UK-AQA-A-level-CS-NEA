@@ -1,7 +1,3 @@
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# one_less_time_casino.py
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 # This is the complete source code for the One Less Time Casino application:
 # 1. database_management_and_logging.py
 # 2. gui_helpers.py
@@ -683,7 +679,11 @@ class DatabaseManagement:
 
     def delete_user_record(self, user_id):
         """
-        Permanently deletes a user record.
+        Permanently deletes a user record and all associated poker data.
+
+        Child rows in user_poker_actions and user_poker_data are removed
+        before the parent row in users so that the foreign key constraints
+        are satisfied.
 
         Args:
             user_id (int): The user ID to delete.
@@ -693,6 +693,12 @@ class DatabaseManagement:
                 admin_logger.info(f"Request to delete User ID: '{user_id}' record.")
                 database_logger.info(f"Request to delete User ID: '{user_id}' record.")
 
+                conn.execute(
+                    "DELETE FROM user_poker_actions WHERE user_id = ?", (user_id,)
+                )
+                conn.execute(
+                    "DELETE FROM user_poker_data WHERE user_id = ?", (user_id,)
+                )
                 conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
 
                 admin_logger.info("Delete user record request successful.")
@@ -860,39 +866,110 @@ class DatabaseManagement:
 
     def record_user_login(self, username):
         """
-        Records a user login event.
+        Records the current timestamp as the last login time for the given
+        user. The timestamp is stored in ISO 8601 format (YYYY-MM-DD HH:MM:SS)
+        so that SQLite's strftime functions can compare it correctly.
 
         Args:
             username (str): The username of the user who logged in.
         """
         with self.connect() as conn:
             try:
-                current_time = datetime.now().strftime("%d-%m-%Y | %H:%M:%S")
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 conn.execute(
                     "UPDATE users SET last_login = ? WHERE username = ?",
-                    (current_time, username),
+                    (now_str, username),
                 )
                 database_logger.info(
-                    f"Recorded login for User: '{username}' at {current_time}."
+                    f"Recorded login for User: '{username}' at {now_str}."
                 )
             except sqlite3.Error as error:
                 database_logger.exception(f"'record_user_login' error. {error}")
-                raise
 
-    # Checks if its been 24 hours since a guest accounts creation not last login and deletes if so. Should be called at startup to clean up expired guest accounts.
     def check_expired_guest_account(self):
-        try:
-            with self.connect() as conn:
+        """
+        Deletes guest accounts (registered = 0) and all their associated
+        poker data if their created_at timestamp is more than 24 hours in
+        the past. Should be called once at program start-up.
+
+        Child rows in user_poker_actions and user_poker_data are removed
+        before the parent row in users so that the foreign key constraints
+        are satisfied.
+        """
+        with self.connect() as conn:
+            try:
                 database_logger.info("Checking for expired guest accounts.")
-                current_time = datetime.now()
-                conn.execute(
-                    "DELETE FROM users WHERE registered = 0 AND "
-                    "strftime('%s', 'now') - strftime('%s', created_at) > ?",
+
+                expired = conn.execute(
+                    """
+                    SELECT user_id FROM users
+                    WHERE registered = 0
+                    AND strftime('%s', 'now') - strftime('%s', created_at) > ?
+                    """,
                     (24 * 3600,),
+                ).fetchall()
+
+                for row in expired:
+                    uid = row["user_id"]
+                    conn.execute(
+                        "DELETE FROM user_poker_actions WHERE user_id = ?", (uid,)
+                    )
+                    conn.execute(
+                        "DELETE FROM user_poker_data WHERE user_id = ?", (uid,)
+                    )
+                    conn.execute("DELETE FROM users WHERE user_id = ?", (uid,))
+                    database_logger.info(f"Removed expired guest user_id={uid}.")
+
+                conn.commit()
+                database_logger.info("Expired guest account check complete.")
+
+            except sqlite3.Error as error:
+                database_logger.exception(
+                    f"'check_expired_guest_account' error. {error}"
                 )
-                database_logger.info("Expired guest accounts deleted.")
-        except sqlite3.Error as error:
-            database_logger.exception(f"'startup_checks' error. {error}")
+
+    def apply_daily_login_bonus(self):
+        """
+        Awards a £1,000 bonus to every registered user whose last_login
+        was recorded more than 24 hours ago. Resets last_login to now
+        after each award so the bonus is granted at most once every
+        24 hours.
+
+        Should be called once at program start-up.
+        """
+        with self.connect() as conn:
+            try:
+                eligible = conn.execute(
+                    """
+                    SELECT user_id FROM users
+                    WHERE registered = 1
+                    AND last_login IS NOT NULL
+                    AND strftime('%s', 'now') - strftime('%s', last_login) > ?
+                    """,
+                    (24 * 3600,),
+                ).fetchall()
+
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                for row in eligible:
+                    uid = row["user_id"]
+                    conn.execute(
+                        """
+                        UPDATE users
+                        SET balance    = balance + 1000,
+                            last_login = ?
+                        WHERE user_id = ?
+                        """,
+                        (now_str, uid),
+                    )
+                    database_logger.info(
+                        f"Awarded £1,000 daily login bonus to user_id={uid}."
+                    )
+
+                conn.commit()
+                database_logger.info("Daily login bonus check complete.")
+
+            except sqlite3.Error as error:
+                database_logger.exception(f"'apply_daily_login_bonus' error. {error}")
 
     def fetch_user_id(self, username):
         """
@@ -1593,9 +1670,6 @@ CS = {
     "admin": "#BB756D",
     "casino": "#1F6053",
     "rules": "#000000",
-    # Tables
-    "table_even": "#9627C5",
-    "table_odd": "#D7BDE2",
     # Label, entry and button backgrounds.
     "label_bg": "#D7CBB4",
     "label_text": "#000000",
@@ -1605,18 +1679,16 @@ CS = {
     "button_text": "#000000",
     # Frames backgrounds.
     "top_left": "#D79393",
-    "middle_left": "#A3E4D7",
     "bottom_left": "#E59866",
     "top_right": "#2E7D73",
     "middle_right": "#BCC88B",
     "bottom_right": "#5B2A3C",
     # Widgets.
-    "round_label_bg": "#1A5276",
     "widget_bg": "#A50B5E",
-    "widget_fg": "#000000",
+    "widget_text": "#000000",
     # Text.
-    "text_fg": "#FFFFFF",
     "text_bg": "#1A1A1A",
+    "text_fg": "#FFFFFF",
     # Log panel.
     "log_bg": "#000000",
     "log_fg": "#FFFFFF",
@@ -1635,8 +1707,11 @@ CS = {
     "tournament_fg": "#E8B8D0",
     "endless_bg": "#E74C3C",
     "endless_fg": "#31A3AD",
+    # Misc.
+    "table_even": "#9627C5",
+    "table_odd": "#D7BDE2",
     "separator": "#888888",
-    "frame_fg": "#000000",
+    "round_label_bg": "#1A5276",
 }
 
 # Default delay for message logging in seconds.
@@ -1803,6 +1878,7 @@ def set_view(self, view_builder):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # search_sort_algorithms_V6.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 
 def linear_search(array, key, value):
     """
@@ -2402,6 +2478,9 @@ class BaseInterface:
 
         if not self.dbm.check_database_exists():
             self.dbm.create_database()
+
+        self.dbm.check_expired_guest_account()
+        self.dbm.apply_daily_login_bonus()
 
         self.current_section_frame = None
 
@@ -3548,7 +3627,6 @@ class CasinoInterface(BaseInterface):
     def startup(self):
         # User data must be ready before any view is rendered.
         self.setup_user_data()
-        self.dbm.check_expired_guest_account()
         return self.casino_menu
 
     # Helpers.
@@ -6043,7 +6121,7 @@ class HumanPokerPlayer:
         Args:
             player_hand (list[str]): The player's two hole cards.
             community_cards (list[str]): The current community cards (0–5).
-            opponents (list[BasePokerPlayer]): The active opponent players.
+            opponents (list[HumanPokerPlayer | BotPokerPlayer]): The active opponent players.
             pot (float): The current pot size.
             to_call (float): The amount required to call.
             balance (float): The player's remaining chips.
@@ -6204,7 +6282,7 @@ class BotPokerPlayer:
         Args:
             player_hand (list[str]): The player's two hole cards.
             community_cards (list[str]): The current community cards (0–5).
-            opponents (list[BasePokerPlayer]): The active opponent players.
+            opponents (list[HumanPokerPlayer | BotPokerPlayer]): The active opponent players.
             pot (float): The current pot size.
             to_call (float): The amount required to call.
             balance (float): The player's remaining chips.
@@ -9245,7 +9323,8 @@ class HarrogateHoldEm:
         elif tie:
             self.log_message("It's a tie!", tie=True)
 
-        self.dbm.modify_user_balance(self.user_data["username"], human["balance"])
+        if not self.tournament_mode or win:
+            self.dbm.modify_user_balance(self.user_data["username"], human["balance"])
 
         if getattr(self, "balance_label", None) and self.balance_label.winfo_exists():
             self.balance_label.config(text=f"Balance: £{human['balance']}")

@@ -16,7 +16,15 @@ import random
 from deck_management import CasinoDeckManager
 from poker_player_management import HumanPokerPlayer, BotPokerPlayer
 from search_sort_algorithms import linear_search
-from gui_helpers import DELAY, CS, create_window, preset_label, preset_button, preset_entry, set_view
+from gui_helpers import (
+    DELAY,
+    CS,
+    create_window,
+    preset_label,
+    preset_button,
+    preset_entry,
+    set_view,
+)
 
 DEFAULT_BOT_LIST = [
     "Angus",
@@ -320,6 +328,7 @@ class HarrogateHoldEm:
         self.bot_thinking = False
 
         from database_management_and_logging import DatabaseManagement, DB_PATH
+
         self.dbm = DatabaseManagement(DB_PATH)
 
         if not self.dbm.check_user_poker_data_exists(user_data["user_id"]):
@@ -2193,6 +2202,7 @@ class HarrogateHoldEm:
         self.hhe_root.destroy()
 
         from system_interfaces import CasinoInterface
+
         CasinoInterface(
             administrator=True if self.user_data.get("administrator") else False,
             user_data=self.user_data,

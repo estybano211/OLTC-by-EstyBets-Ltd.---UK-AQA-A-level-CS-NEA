@@ -73,8 +73,9 @@ class HumanPokerPlayer:
             raise ValueError("user_id is required for human players.")
 
         self.user_id = user_id
-        
+
         from database_management_and_logging import DatabaseManagement, DB_PATH
+
         self.dbm = DatabaseManagement(DB_PATH)
 
         record = self.dbm.load_user_poker_data(self.user_id)
@@ -1276,4 +1277,3 @@ def make_decision(
 
     # Default action — fold
     return ("fold",)
-

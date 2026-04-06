@@ -281,7 +281,8 @@ class DatabaseManagement:
         exist.
         """
 
-        from encryption_software import hash_function
+        from check_systems import hash_function
+
         hashed_password = hash_function("Password1")
 
         with self.connect() as conn:
@@ -349,7 +350,8 @@ class DatabaseManagement:
             database_logger.debug("'password_hash' for Administrator not found.")
             return {"found": False, "verified": False}
 
-        from encryption_software import verify_hash
+        from check_systems import verify_hash
+
         verified = verify_hash(row["password_hash"], password)
 
         database_logger.info(
@@ -372,7 +374,8 @@ class DatabaseManagement:
                 admin_logger.info("Request to change Admin Password.")
                 database_logger.info("Request to change Administrator password.")
 
-                from encryption_software import hash_function
+                from check_systems import hash_function
+
                 password_hash = hash_function(new_password)
 
                 conn.execute(
@@ -558,7 +561,7 @@ class DatabaseManagement:
                 admin_logger.info(f"Request to change User: '{user_id}' password.")
                 database_logger.info(f"Request to change User: '{user_id}' password.")
 
-                from encryption_software import hash_function
+                from check_systems import hash_function
 
                 conn.execute(
                     "UPDATE users SET password_hash = ? WHERE user_id = ?",
@@ -628,7 +631,11 @@ class DatabaseManagement:
 
     def delete_user_record(self, user_id):
         """
-        Permanently deletes a user record.
+        Permanently deletes a user record and all associated poker data.
+
+        Child rows in user_poker_actions and user_poker_data are removed
+        before the parent row in users so that the foreign key constraints
+        are satisfied.
 
         Args:
             user_id (int): The user ID to delete.
@@ -638,6 +645,12 @@ class DatabaseManagement:
                 admin_logger.info(f"Request to delete User ID: '{user_id}' record.")
                 database_logger.info(f"Request to delete User ID: '{user_id}' record.")
 
+                conn.execute(
+                    "DELETE FROM user_poker_actions WHERE user_id = ?", (user_id,)
+                )
+                conn.execute(
+                    "DELETE FROM user_poker_data WHERE user_id = ?", (user_id,)
+                )
                 conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
 
                 admin_logger.info("Delete user record request successful.")
@@ -736,7 +749,8 @@ class DatabaseManagement:
         if username.strip().lower() == "administrator":
             raise ValueError("The username 'Administrator' cannot be used.")
 
-        from encryption_software import hash_function
+        from check_systems import hash_function
+
         password_hash = hash_function(password) if password else None
 
         with self.connect() as conn:
@@ -794,7 +808,8 @@ class DatabaseManagement:
             database_logger.info(f"'password_hash' for User: '{username}' not found.")
             return {"found": False, "verified": False}
 
-        from encryption_software import verify_hash
+        from check_systems import verify_hash
+
         verified = verify_hash(row["password_hash"], password)
 
         database_logger.info(
@@ -826,20 +841,91 @@ class DatabaseManagement:
                 database_logger.exception(f"'record_user_login' error. {error}")
                 raise
 
-    # Checks if its been 24 hours since a guest accounts creation not last login and deletes if so. Should be called at startup to clean up expired guest accounts.
-    def check_expired_guest_account(self):
-        try:
-            with self.connect() as conn:
-                database_logger.info("Checking for expired guest accounts.")
-                current_time = datetime.now()
-                conn.execute(
-                    "DELETE FROM users WHERE registered = 0 AND "
-                    "strftime('%s', 'now') - strftime('%s', created_at) > ?",
+    def apply_daily_login_bonus(self):
+        """
+        Awards a £1,000 bonus to every registered user whose last_login
+        was recorded more than 24 hours ago. Resets last_login to now
+        after each award so the bonus is granted at most once every
+        24 hours.
+
+        Should be called once at program start-up.
+        """
+        with self.connect() as conn:
+            try:
+                eligible = conn.execute(
+                    """
+                        SELECT user_id FROM users
+                        WHERE registered = 1
+                        AND last_login IS NOT NULL
+                        AND strftime('%s', 'now') - strftime('%s', last_login) > ?
+                        """,
                     (24 * 3600,),
+                ).fetchall()
+
+                now_str = datetime.now().strftime("%d-%m-%Y | %H:%M:%S")
+
+                for row in eligible:
+                    uid = row["user_id"]
+                    conn.execute(
+                        """
+                            UPDATE users
+                            SET balance    = balance + 1000,
+                                last_login = ?
+                            WHERE user_id = ?
+                            """,
+                        (now_str, uid),
+                    )
+                    database_logger.info(
+                        f"Awarded £1,000 daily login bonus to user_id={uid}."
+                    )
+
+                conn.commit()
+                database_logger.info("Daily login bonus check complete.")
+
+            except sqlite3.Error as error:
+                database_logger.exception(f"'apply_daily_login_bonus' error. {error}")
+
+    def check_expired_guest_account(self):
+        """
+        Deletes guest accounts (registered = 0) and all their associated
+        poker data if their created_at timestamp is more than 24 hours in
+        the past. Should be called once at program start-up.
+
+        Child rows in user_poker_actions and user_poker_data are removed
+        before the parent row in users so that the foreign key constraints
+        are satisfied.
+        """
+        with self.connect() as conn:
+            try:
+                database_logger.info("Checking for expired guest accounts.")
+
+                expired = conn.execute(
+                    """
+                    SELECT user_id FROM users
+                    WHERE registered = 0
+                    AND strftime('%s', 'now') - strftime('%s', created_at) > ?
+                    """,
+                    (24 * 3600,),
+                ).fetchall()
+
+                for row in expired:
+                    uid = row["user_id"]
+                    conn.execute(
+                        "DELETE FROM user_poker_actions WHERE user_id = ?", (uid,)
+                    )
+                    conn.execute(
+                        "DELETE FROM user_poker_data WHERE user_id = ?", (uid,)
+                    )
+                    conn.execute("DELETE FROM users WHERE user_id = ?", (uid,))
+                    database_logger.info(f"Removed expired guest user_id={uid}.")
+
+                conn.commit()
+                database_logger.info("Expired guest account check complete.")
+
+            except sqlite3.Error as error:
+                database_logger.exception(
+                    f"'check_expired_guest_account' error. {error}"
                 )
-                database_logger.info("Expired guest accounts deleted.")
-        except sqlite3.Error as error:
-            database_logger.exception(f"'startup_checks' error. {error}")
 
     def fetch_user_id(self, username):
         """
@@ -1008,6 +1094,7 @@ class DatabaseManagement:
                 )
 
                 from poker_player_management import generate_range_chart
+
                 conn.execute(
                     "UPDATE user_poker_data SET player_range = ? WHERE user_id = ?",
                     (json.dumps(generate_range_chart()), user_id),

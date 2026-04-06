@@ -255,4 +255,3 @@ def set_view(self, view_builder):
     self.current_section_frame.pack(expand=True, fill="both")
 
     view_builder(self.current_section_frame)
-

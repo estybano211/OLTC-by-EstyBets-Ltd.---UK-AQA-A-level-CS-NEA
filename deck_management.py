@@ -35,24 +35,6 @@ class CasinoDeckManager:
         if shuffle:
             self.deck.shuffle()
 
-    def set_game_mode(self, mode):
-        """
-        Sets the active game mode, controlling which evaluation logic is used
-        in evaluate_hand().
-
-        Args:
-            mode (str): The game mode to set. Must be 'poker' or 'blackjack'.
-
-        Raises:
-            ValueError: If mode is not 'poker' or 'blackjack'.
-        """
-        mode = mode.lower()
-
-        if mode not in ("poker", "blackjack"):
-            raise ValueError("Game mode must be 'poker' or 'blackjack'")
-
-        self.game_mode = mode
-
     def str_deck(self):
         """
         Returns the current deck contents as a list of string representations.
@@ -139,7 +121,7 @@ class CasinoDeckManager:
         Returns the number of cards currently remaining in the deck.
 
         Returns:
-            int: The count of remaining cards.
+            int: The number of remaining cards.
         """
         return len(self.deck.cards)
 
@@ -147,7 +129,7 @@ class CasinoDeckManager:
         """
         Creates an independent copy of this deck manager instance.
         The copied deck shares the same Evaluator (which is stateless) but
-        has its own independent card list. Used to ensure Monte Carlo
+        has its own independent card list. Used to ensure
         simulations do not interfere with each other.
 
         Returns:
@@ -295,7 +277,7 @@ class CasinoDeckManager:
         Evaluates a hand according to the current game mode.
 
         For blackjack: converts the hand to treys integers and returns the
-        numerical hand value via blackjack_hand_value().
+        numerical hand value through blackjack_hand_value().
 
         For poker: evaluates the hand against the provided board using the
         treys Evaluator, returning a tuple of the raw score and the hand

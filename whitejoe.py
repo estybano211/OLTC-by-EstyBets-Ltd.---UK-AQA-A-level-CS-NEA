@@ -89,7 +89,7 @@ class WhiteJoe:
     def admin_modify_bet(self, frame):
         """
         Opens a modal Toplevel dialog that allows the administrator to set
-        a custom starting chip balance. The dialog cannot be dismissed via
+        a custom starting chip balance. The dialog cannot be dismissed through
         the window manager — a valid balance must be submitted.
 
         When called from __init__ (before whitejoe_screen has run) the
@@ -221,8 +221,8 @@ class WhiteJoe:
             label.pack(anchor="w", pady=5, padx=5)
             labels.append(label)
 
-        self.balance_label = cast(preset_label, labels[1])
-        self.current_bet_label = cast(preset_label, labels[2])
+        self.balance_label = labels[1]
+        self.current_bet_label = labels[2]
 
         # Bottom-right panel
         bottom_right_frame = Frame(frame, bd=2, relief="sunken", bg=CS["bottom_right"])

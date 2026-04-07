@@ -17,7 +17,7 @@ class EncryptionSoftware:
     def __init__(self):
         """
         Initialises the root window, applies GUI styles, logs the system access
-        event via DatabaseManagement, sets the AES key placeholder to None and
+        event through DatabaseManagement, sets the AES key placeholder to None and
         starts the main interface.
         """
         self.window_bg = CS["admin"]
@@ -122,7 +122,7 @@ class EncryptionSoftware:
     def generate_encrypted_aes_key(self):
         """
         Generates a random 256-bit AES key, encrypts it using a user-selected
-        RSA public key via PKCS1-OAEP and saves the encrypted result as a
+        RSA public key through PKCS1-OAEP and saves the encrypted result as a
         binary file to a user-selected directory. The filename includes a
         timestamp in DD-Month-YYYY format. Displays a success message with the
         saved file path, or an error message on failure.
@@ -293,7 +293,3 @@ class EncryptionSoftware:
 
         except Exception as error:
             messagebox.showerror("Error", f"Decryption failed: {error}")
-
-
-if __name__ == "__main__":
-    EncryptionSoftware()

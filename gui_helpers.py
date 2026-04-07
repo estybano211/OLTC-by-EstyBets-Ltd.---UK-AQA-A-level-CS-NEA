@@ -3,8 +3,7 @@ from tkinter import Frame, font, Label, Entry, Button
 
 def fetch_text_styles(root):
     """
-    Creates and returns a dictionary of named tkinter Font objects for consistent
-    styling across the project.
+    Creates and returns a dictionary of named tkinter Font objects.
 
     Args:
         root: The root Tk window used to bind the font objects.
@@ -50,9 +49,6 @@ CS = {
     "admin": "#BB756D",
     "casino": "#1F6053",
     "rules": "#000000",
-    # Tables
-    "table_even": "#9627C5",
-    "table_odd": "#D7BDE2",
     # Label, entry and button backgrounds.
     "label_bg": "#D7CBB4",
     "label_text": "#000000",
@@ -62,18 +58,16 @@ CS = {
     "button_text": "#000000",
     # Frames backgrounds.
     "top_left": "#D79393",
-    "middle_left": "#A3E4D7",
     "bottom_left": "#E59866",
     "top_right": "#2E7D73",
     "middle_right": "#BCC88B",
     "bottom_right": "#5B2A3C",
     # Widgets.
-    "round_label_bg": "#1A5276",
     "widget_bg": "#A50B5E",
-    "widget_fg": "#000000",
+    "widget_text": "#000000",
     # Text.
-    "text_fg": "#FFFFFF",
     "text_bg": "#1A1A1A",
+    "text_fg": "#FFFFFF",
     # Log panel.
     "log_bg": "#000000",
     "log_fg": "#FFFFFF",
@@ -92,15 +86,18 @@ CS = {
     "tournament_fg": "#E8B8D0",
     "endless_bg": "#E74C3C",
     "endless_fg": "#31A3AD",
+    # Misc.
+    "table_even": "#9627C5",
+    "table_odd": "#D7BDE2",
     "separator": "#888888",
-    "frame_fg": "#000000",
+    "round_label_bg": "#1A5276",
 }
 
 # Default delay for message logging in seconds.
 DELAY = 1.5
 
 
-# GUI WIDGET FACTORY FUNCTIONS
+# GUI WIDGET PRESET FUNCTIONS
 
 
 def create_window(root, title, bg_color, is_main_frame=False):

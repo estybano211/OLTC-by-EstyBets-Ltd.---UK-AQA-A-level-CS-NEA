@@ -26,6 +26,7 @@ from tkinter import (
 )
 from tkinter.ttk import Combobox, Treeview
 import random
+from database_management_and_logging import DB_PATH
 from search_sort_algorithms import bubble_sort, binary_search_by_id
 from gui_helpers import (
     CS,
@@ -47,11 +48,11 @@ class BaseInterface:
       - Checks for and creates the database if absent.
       - Initialises self.current_section_frame to None.
       - Binds WM_DELETE_WINDOW to a safe quit handler.
-      - Navigates to the first view via startup().
+      - Navigates to the first view through startup().
       - Starts the Tk mainloop.
 
     Subclasses must define:
-      WINDOW_TITLE  (str or property) — the window title bar text.
+      WINDOW_TITLE  (str) — the window title bar text.
       WINDOW_BG_KEY (str) — a key from the CS colour scheme dict.
       startup() — returns the view method to show on startup.
 
@@ -97,10 +98,9 @@ class BaseInterface:
 
         self.interface_root.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        from database_management_and_logging import DatabaseManagement, DB_PATH
+        from database_management_and_logging import DatabaseManagement
 
-        self.db_path = DB_PATH
-        self.dbm = DatabaseManagement(self.db_path)
+        self.dbm = DatabaseManagement(DB_PATH)
 
         if not self.dbm.check_database_exists():
             self.dbm.create_database()
@@ -286,9 +286,7 @@ class AdminConsole(BaseInterface):
         """
         if not self.dbm.check_database_exists():
             messagebox.showwarning(
-                "Warning",
-                f"'{self.db_path}' does not exist.",
-                parent=self.interface_root,
+                "Warning", f"'{DB_PATH}' does not exist.", parent=self.interface_root
             )
             return
         if messagebox.askyesno(
@@ -383,8 +381,8 @@ class AdminConsole(BaseInterface):
 
     def encryption_software_access(self):
         """
-        Opens the Encryption Software window by instantiating the
-        EncryptionSoftware class from encryption_software_V6.
+        Opens the Encryption Software window by instantiating
+        EncryptionSoftware.
         """
 
         from encryption_software import EncryptionSoftware
@@ -423,7 +421,7 @@ class AdminConsole(BaseInterface):
         """
         if messagebox.askyesno(
             "Confirm Creation",
-            f"Are you sure you want to create '{self.db_path}'?\n Note: Nothing will change if the database is already present.",
+            f"Are you sure you want to create '{DB_PATH}'?\n Note: Nothing will change if the database is already present.",
         ):
             try:
                 password = simpledialog.askstring(
@@ -437,7 +435,7 @@ class AdminConsole(BaseInterface):
                     self.dbm.create_database()
                     messagebox.showinfo(
                         "Success",
-                        f"'{self.db_path}' created successfully.",
+                        f"'{DB_PATH}' created successfully.",
                         parent=self.interface_root,
                     )
 
@@ -449,9 +447,7 @@ class AdminConsole(BaseInterface):
                     )
 
             except Exception as error:
-                messagebox.showerror(
-                    "Error", f"Failed to create '{self.db_path}': {error}"
-                )
+                messagebox.showerror("Error", f"Failed to create '{DB_PATH}': {error}")
 
     def delete_database(self):
         """
@@ -460,11 +456,11 @@ class AdminConsole(BaseInterface):
         Displays a success or error message on completion.
         """
         if not self.dbm.check_database_exists():
-            messagebox.showwarning("Warning", f"'{self.db_path}' does not exist.")
+            messagebox.showwarning("Warning", f"'{DB_PATH}' does not exist.")
             return
 
         if messagebox.askyesno(
-            "Confirm Delete", f"Are you sure you want to delete '{self.db_path}'?"
+            "Confirm Delete", f"Are you sure you want to delete '{DB_PATH}'?"
         ):
             try:
                 password = simpledialog.askstring(
@@ -475,10 +471,10 @@ class AdminConsole(BaseInterface):
                 )
 
                 if password == self.MASTER_PASSWORD:
-                    os.remove(self.db_path)
+                    os.remove(DB_PATH)
                     messagebox.showinfo(
                         "Success",
-                        f"'{self.db_path}' deleted successfully.",
+                        f"'{DB_PATH}' deleted successfully.",
                         parent=self.interface_root,
                     )
 
@@ -488,9 +484,7 @@ class AdminConsole(BaseInterface):
                     )
 
             except Exception as error:
-                messagebox.showerror(
-                    "Error", f"Failed to delete '{self.db_path}': {error}"
-                )
+                messagebox.showerror("Error", f"Failed to delete '{DB_PATH}': {error}")
 
     def show_view_database(self, frame):
         """
@@ -503,7 +497,7 @@ class AdminConsole(BaseInterface):
             frame (Frame): The parent frame to build the view into.
         """
         if not self.dbm.check_database_exists():
-            messagebox.showwarning("Warning", f"'{self.db_path}' does not exist.")
+            messagebox.showwarning("Warning", f"'{DB_PATH}' does not exist.")
             return
 
         preset_label(
@@ -525,7 +519,7 @@ class AdminConsole(BaseInterface):
 
         def view_table():
             """
-            Reads the selected table name from the dropdown, queries it via
+            Reads the selected table name from the dropdown, queries it through
             the database manager and navigates to the table display view.
             Shows an error if no table is selected or the result is empty.
             """
@@ -675,7 +669,7 @@ class AdminConsole(BaseInterface):
             frame (Frame): The parent frame to build the view into.
         """
         if not self.dbm.check_database_exists():
-            messagebox.showwarning("Warning", f"'{self.db_path}' does not exist.")
+            messagebox.showwarning("Warning", f"'{DB_PATH}' does not exist.")
             return
 
         preset_label(frame, text="User Management", font=self.styles["heading"]).pack(
@@ -1165,6 +1159,12 @@ class AdminConsole(BaseInterface):
 
 # Minimum rounds played before a user may enable Tournament Mode.
 TOURNAMENT_MIN_ROUNDS = 25
+TOURNAMENT_WIN_CRITERIA = {
+    "eliminate_all": "Eliminate all opponents",
+    "earn_target": "Earn a target amount of money",
+    "survive_rounds": "Survive a set number of rounds",
+    "last_man_blind": "Outlast opponents as blinds escalate",
+}
 
 # Max bots, difficulties randomly distributed 0-100 and reshuffled each round.
 ENDLESS_BOT_COUNT = 9
@@ -1186,13 +1186,6 @@ DEFAULT_SETTINGS = {
     "endless_mode": False,
     # General.
     "starting_balance": 10000,
-}
-
-TOURNAMENT_WIN_CRITERIA = {
-    "eliminate_all": "Eliminate all opponents",
-    "earn_target": "Earn a target amount of money",
-    "survive_rounds": "Survive a set number of rounds",
-    "last_man_blind": "Outlast opponents as blinds escalate",
 }
 
 
@@ -1226,7 +1219,7 @@ class CasinoInterface(BaseInterface):
         self._administrator = administrator
         self._user_data_init = user_data
 
-        # Personalised game settings for HHE — set before mainloop starts.
+        # Default game settings for HHE — set before mainloop starts.
         self.settings = dict(DEFAULT_SETTINGS)
 
         super().__init__()
@@ -1265,7 +1258,6 @@ class CasinoInterface(BaseInterface):
     def startup(self):
         # User data must be ready before any view is rendered.
         self.setup_user_data()
-        self.dbm.check_expired_guest_account()
         return self.casino_menu
 
     # Helpers.
@@ -1278,6 +1270,27 @@ class CasinoInterface(BaseInterface):
             bool: True if a user is linked, False otherwise.
         """
         return bool(self.user_data.get("username"))
+
+    def require_linked(self, action_label="this"):
+        """
+        Shows a warning dialog if no account is linked.
+
+        Args:
+            action_label (str): Short name for what was attempted, used in
+                                the message (e.g. "the Game Menu").
+
+        Returns:
+            bool: True if the account is linked and the caller may proceed,
+                  False if the user should be blocked.
+        """
+        if self.user_linked():
+            return True
+        messagebox.showwarning(
+            "Account Required",
+            f"You must be signed in to access {action_label}.\n\n"
+            "Please register or log in first.",
+        )
+        return False
 
     def fetch_rounds_played(self):
         """
@@ -1301,27 +1314,6 @@ class CasinoInterface(BaseInterface):
             return int(statistics["rounds_played"]) if statistics else 0
         except Exception:
             return 0
-
-    def require_linked(self, action_label="this"):
-        """
-        Shows a warning dialog if no account is linked.
-
-        Args:
-            action_label (str): Short name for what was attempted, used in
-                                the message (e.g. "the Game Menu").
-
-        Returns:
-            bool: True if the account is linked and the caller may proceed,
-                  False if the user should be blocked.
-        """
-        if self.user_linked():
-            return True
-        messagebox.showwarning(
-            "Account Required",
-            f"You must be signed in to access {action_label}.\n\n"
-            "Please register or log in first.",
-        )
-        return False
 
     def fetch_special_scores(self):
         """
@@ -1649,8 +1641,10 @@ class CasinoInterface(BaseInterface):
 
             if result.get("found") and result.get("verified"):
                 self.dbm.record_user_login(username)
-                uid = self.dbm.fetch_user_id(username)
-                self.user_data["user_id"] = uid["user_id"] if uid["found"] else None
+                user_id = self.dbm.fetch_user_id(username)
+                self.user_data["user_id"] = (
+                    user_id["user_id"] if user_id["found"] else None
+                )
                 self.user_data["username"] = username
                 self.user_data["administrator"] = False
                 messagebox.showinfo("Success", f"Welcome back, {username}.")
@@ -2225,7 +2219,7 @@ class CasinoInterface(BaseInterface):
 
     def show_special_mode_summary(self, rounds_survived):
         """
-        Shows a post-game summary dialog for available special modes (currently just Endless),
+        Shows a summary dialog for available special modes (currently just Endless),
         comparing the result to the player's stored personal best and
         updating the database if a new record was set.
 
@@ -2323,7 +2317,7 @@ class CasinoInterface(BaseInterface):
         bot_count = settings["bot_count"]
         difficulty = settings["bot_difficulty"]
 
-        from harrogate_hold_em import DEFAULT_BOT_LIST, HarrogateHoldEm
+        from harrogate_hold_em import HarrogateHoldEm, DEFAULT_BOT_LIST
 
         bot_list = list(DEFAULT_BOT_LIST)
         random.shuffle(bot_list)
@@ -2352,7 +2346,7 @@ class CasinoInterface(BaseInterface):
         settings["bot_count"] = ENDLESS_BOT_COUNT
         settings["rounds_survived"] = 0
 
-        from harrogate_hold_em import DEFAULT_BOT_LIST, HarrogateHoldEm
+        from harrogate_hold_em import HarrogateHoldEm, DEFAULT_BOT_LIST
 
         bot_list = list(DEFAULT_BOT_LIST)
         random.shuffle(bot_list)
@@ -2501,7 +2495,7 @@ class ShowGameRules:
         """
         Creates and displays a modal rules window with a scrollable read-only
         text area and a Continue button.
-        The window cannot be closed via the window manager's close button.
+        The window cannot be closed through the window manager's close button.
         Calls the callback and destroys the window when the user clicks Continue.
 
         Args:

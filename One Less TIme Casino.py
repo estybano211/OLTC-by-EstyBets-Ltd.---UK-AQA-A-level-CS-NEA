@@ -21,7 +21,6 @@ import sqlite3
 import pandas as pd
 import csv
 import json
-from typing import cast
 from tkinter import (
     BOTH,
     BOTTOM,
@@ -61,7 +60,7 @@ import random
 from itertools import combinations
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# database_management_and_logging_V6.py
+# database_management_and_logging.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -82,7 +81,7 @@ class LogHandler(logging.Handler):
     Base class for log handlers.
 
     Owns all queue, worker-thread, emit, processor and close logic.
-    Subclasses supply only the name of the table they write to via the
+    Subclasses supply only the name of the table they write to through the
     TABLE class attribute.
 
     The worker thread runs as a daemon so it never prevents the process
@@ -512,32 +511,6 @@ class DatabaseManagement:
             database_logger.exception(f"'export_table_to_csv' error. {error}")
             return False
 
-    def import_from_csv(self, file_path):
-        """
-        Reads a CSV file and returns its contents as a list of dicts.
-
-        Args:
-            file_path (str): Path to the CSV file.
-
-        Returns:
-            list: List of row dictionaries.
-        """
-        records = []
-        try:
-            with open(file_path, "r") as file:
-                headers = file.readline().strip().split(",")
-                for line in file:
-                    values = line.strip().split(",")
-                    records.append(dict(zip(headers, values)))
-
-            database_logger.info(
-                f"Successfully imported data from CSV at '{file_path}'."
-            )
-        except Exception as error:
-            database_logger.exception(f"'import_from_csv' error. {error}")
-
-        return records
-
     # USER RECORD OPERATIONS
 
     def change_user_record(
@@ -910,15 +883,15 @@ class DatabaseManagement:
                 ).fetchall()
 
                 for row in expired:
-                    uid = row["user_id"]
+                    user_id = row["user_id"]
                     conn.execute(
-                        "DELETE FROM user_poker_actions WHERE user_id = ?", (uid,)
+                        "DELETE FROM user_poker_actions WHERE user_id = ?", (user_id,)
                     )
                     conn.execute(
-                        "DELETE FROM user_poker_data WHERE user_id = ?", (uid,)
+                        "DELETE FROM user_poker_data WHERE user_id = ?", (user_id,)
                     )
-                    conn.execute("DELETE FROM users WHERE user_id = ?", (uid,))
-                    database_logger.info(f"Removed expired guest user_id={uid}.")
+                    conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+                    database_logger.info(f"Removed expired guest user_id={user_id}.")
 
                 conn.commit()
                 database_logger.info("Expired guest account check complete.")
@@ -951,7 +924,7 @@ class DatabaseManagement:
 
                 now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 for row in eligible:
-                    uid = row["user_id"]
+                    user_id = row["user_id"]
                     conn.execute(
                         """
                         UPDATE users
@@ -959,10 +932,10 @@ class DatabaseManagement:
                             last_login = ?
                         WHERE user_id = ?
                         """,
-                        (now_str, uid),
+                        (now_str, user_id),
                     )
                     database_logger.info(
-                        f"Awarded £1,000 daily login bonus to user_id={uid}."
+                        f"Awarded £1,000 daily login bonus to user_id={user_id}."
                     )
 
                 conn.commit()
@@ -1501,55 +1474,6 @@ class DatabaseManagement:
                 database_logger.exception(f"'fetch_all_players_data' error. {error}")
                 return []
 
-    def reset_player_statistics(self, user_id, keep_range=True):
-        """
-        Resets all poker statistics for a player to zero.
-
-        Args:
-            user_id (int): The user ID to reset.
-            keep_range (bool): If True, preserves the player_range.
-                               Defaults to True.
-
-        Returns:
-            bool: True on success, False on error.
-        """
-        range_clause = "" if keep_range else "player_range = NULL,"
-
-        with self.connect() as conn:
-            try:
-                database_logger.info(
-                    f"Resetting player statistics for User ID: '{user_id}'. "
-                    f"Keep range: {keep_range}"
-                )
-
-                conn.execute(
-                    f"""
-                    UPDATE user_poker_data
-                    SET
-                        {range_clause}
-                        rounds_played = 0,
-                        vpip = 0,
-                        pfr = 0,
-                        total_hands_played = 0,
-                        total_hands_raised = 0,
-                        total_bets = 0,
-                        fold_to_raise = 0,
-                        call_when_weak = 0,
-                        last_updated = CURRENT_TIMESTAMP
-                    WHERE user_id = ?
-                    """,
-                    (user_id,),
-                )
-
-                database_logger.info("User statistics reset.")
-                return True
-
-            except sqlite3.Error as error:
-                database_logger.exception(f"'reset_player_statistics' error. {error}")
-                return False
-
-    # SPECIAL GAME MODE SCORES
-
     def fetch_special_mode_scores(self, user_id):
         """
         Retrieves the Endless mode personal-best score for a user.
@@ -1617,14 +1541,13 @@ class DatabaseManagement:
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# gui_helpers_V6.py
+# gui_helpers.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 def fetch_text_styles(root):
     """
-    Creates and returns a dictionary of named tkinter Font objects for consistent
-    styling across the project.
+    Creates and returns a dictionary of named tkinter Font objects.
 
     Args:
         root: The root Tk window used to bind the font objects.
@@ -1718,7 +1641,7 @@ CS = {
 DELAY = 1.5
 
 
-# GUI WIDGET FACTORY FUNCTIONS
+# GUI WIDGET PRESET FUNCTIONS
 
 
 def create_window(root, title, bg_color, is_main_frame=False):
@@ -1876,7 +1799,7 @@ def set_view(self, view_builder):
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# search_sort_algorithms_V6.py
+# search_sort_algorithms.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -1959,7 +1882,7 @@ def binary_search_by_id(array, target_id):
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# encryption_software_V6.py
+# encryption_software.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -1972,7 +1895,7 @@ class EncryptionSoftware:
     def __init__(self):
         """
         Initialises the root window, applies GUI styles, logs the system access
-        event via DatabaseManagement, sets the AES key placeholder to None and
+        event through DatabaseManagement, sets the AES key placeholder to None and
         starts the main interface.
         """
         self.window_bg = CS["admin"]
@@ -2075,7 +1998,7 @@ class EncryptionSoftware:
     def generate_encrypted_aes_key(self):
         """
         Generates a random 256-bit AES key, encrypts it using a user-selected
-        RSA public key via PKCS1-OAEP and saves the encrypted result as a
+        RSA public key through PKCS1-OAEP and saves the encrypted result as a
         binary file to a user-selected directory. The filename includes a
         timestamp in DD-Month-YYYY format. Displays a success message with the
         saved file path, or an error message on failure.
@@ -2249,7 +2172,7 @@ class EncryptionSoftware:
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# check_systems_V6.py
+# check_systems.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -2322,12 +2245,12 @@ def verify_hash(stored_string, input_string):
 def passwords_confirmation(frame, root):
     """
     Opens a modal Toplevel dialog prompting the user to enter and confirm a
-    new password. The dialog cannot be closed via the window manager's close
+    new password. The dialog cannot be closed through the window manager's close
     button; the user must submit or cancel explicitly.
 
     Args:
         frame: The parent widget used to position the Toplevel window.
-        root: The root Tk window, used for font settings and blocking via
+        root: The root Tk window, used for font settings and blocking through
               wait_window().
 
     Returns:
@@ -2410,7 +2333,7 @@ def passwords_confirmation(frame, root):
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# system_interfaces_V6.py
+# system_interfaces.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -2424,11 +2347,11 @@ class BaseInterface:
       - Checks for and creates the database if absent.
       - Initialises self.current_section_frame to None.
       - Binds WM_DELETE_WINDOW to a safe quit handler.
-      - Navigates to the first view via startup().
+      - Navigates to the first view through startup().
       - Starts the Tk mainloop.
 
     Subclasses must define:
-      WINDOW_TITLE  (str or property) — the window title bar text.
+      WINDOW_TITLE  (str) — the window title bar text.
       WINDOW_BG_KEY (str) — a key from the CS colour scheme dict.
       startup() — returns the view method to show on startup.
 
@@ -2753,8 +2676,8 @@ class AdminConsole(BaseInterface):
 
     def encryption_software_access(self):
         """
-        Opens the Encryption Software window by instantiating the
-        EncryptionSoftware class from encryption_software_V6.
+        Opens the Encryption Software window by instantiating
+        EncryptionSoftware.
         """
 
         EncryptionSoftware()
@@ -2889,7 +2812,7 @@ class AdminConsole(BaseInterface):
 
         def view_table():
             """
-            Reads the selected table name from the dropdown, queries it via
+            Reads the selected table name from the dropdown, queries it through
             the database manager and navigates to the table display view.
             Shows an error if no table is selected or the result is empty.
             """
@@ -3527,6 +3450,12 @@ class AdminConsole(BaseInterface):
 
 # Minimum rounds played before a user may enable Tournament Mode.
 TOURNAMENT_MIN_ROUNDS = 25
+TOURNAMENT_WIN_CRITERIA = {
+    "eliminate_all": "Eliminate all opponents",
+    "earn_target": "Earn a target amount of money",
+    "survive_rounds": "Survive a set number of rounds",
+    "last_man_blind": "Outlast opponents as blinds escalate",
+}
 
 # Max bots, difficulties randomly distributed 0-100 and reshuffled each round.
 ENDLESS_BOT_COUNT = 9
@@ -3548,13 +3477,6 @@ DEFAULT_SETTINGS = {
     "endless_mode": False,
     # General.
     "starting_balance": 10000,
-}
-
-TOURNAMENT_WIN_CRITERIA = {
-    "eliminate_all": "Eliminate all opponents",
-    "earn_target": "Earn a target amount of money",
-    "survive_rounds": "Survive a set number of rounds",
-    "last_man_blind": "Outlast opponents as blinds escalate",
 }
 
 
@@ -3588,7 +3510,7 @@ class CasinoInterface(BaseInterface):
         self._administrator = administrator
         self._user_data_init = user_data
 
-        # Personalised game settings for HHE — set before mainloop starts.
+        # Default game settings for HHE — set before mainloop starts.
         self.settings = dict(DEFAULT_SETTINGS)
 
         super().__init__()
@@ -3640,6 +3562,27 @@ class CasinoInterface(BaseInterface):
         """
         return bool(self.user_data.get("username"))
 
+    def require_linked(self, action_label="this"):
+        """
+        Shows a warning dialog if no account is linked.
+
+        Args:
+            action_label (str): Short name for what was attempted, used in
+                                the message (e.g. "the Game Menu").
+
+        Returns:
+            bool: True if the account is linked and the caller may proceed,
+                  False if the user should be blocked.
+        """
+        if self.user_linked():
+            return True
+        messagebox.showwarning(
+            "Account Required",
+            f"You must be signed in to access {action_label}.\n\n"
+            "Please register or log in first.",
+        )
+        return False
+
     def fetch_rounds_played(self):
         """
         Retrieves the number of poker rounds the current user has played
@@ -3662,27 +3605,6 @@ class CasinoInterface(BaseInterface):
             return int(statistics["rounds_played"]) if statistics else 0
         except Exception:
             return 0
-
-    def require_linked(self, action_label="this"):
-        """
-        Shows a warning dialog if no account is linked.
-
-        Args:
-            action_label (str): Short name for what was attempted, used in
-                                the message (e.g. "the Game Menu").
-
-        Returns:
-            bool: True if the account is linked and the caller may proceed,
-                  False if the user should be blocked.
-        """
-        if self.user_linked():
-            return True
-        messagebox.showwarning(
-            "Account Required",
-            f"You must be signed in to access {action_label}.\n\n"
-            "Please register or log in first.",
-        )
-        return False
 
     def fetch_special_scores(self):
         """
@@ -4008,8 +3930,10 @@ class CasinoInterface(BaseInterface):
 
             if result.get("found") and result.get("verified"):
                 self.dbm.record_user_login(username)
-                uid = self.dbm.fetch_user_id(username)
-                self.user_data["user_id"] = uid["user_id"] if uid["found"] else None
+                user_id = self.dbm.fetch_user_id(username)
+                self.user_data["user_id"] = (
+                    user_id["user_id"] if user_id["found"] else None
+                )
                 self.user_data["username"] = username
                 self.user_data["administrator"] = False
                 messagebox.showinfo("Success", f"Welcome back, {username}.")
@@ -4584,7 +4508,7 @@ class CasinoInterface(BaseInterface):
 
     def show_special_mode_summary(self, rounds_survived):
         """
-        Shows a post-game summary dialog for available special modes (currently just Endless),
+        Shows a summary dialog for available special modes (currently just Endless),
         comparing the result to the player's stored personal best and
         updating the database if a new record was set.
 
@@ -4852,7 +4776,7 @@ class ShowGameRules:
         """
         Creates and displays a modal rules window with a scrollable read-only
         text area and a Continue button.
-        The window cannot be closed via the window manager's close button.
+        The window cannot be closed through the window manager's close button.
         Calls the callback and destroys the window when the user clicks Continue.
 
         Args:
@@ -4888,7 +4812,7 @@ class ShowGameRules:
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# deck_management_V6.py
+# deck_management.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -4926,24 +4850,6 @@ class CasinoDeckManager:
 
         if shuffle:
             self.deck.shuffle()
-
-    def set_game_mode(self, mode):
-        """
-        Sets the active game mode, controlling which evaluation logic is used
-        in evaluate_hand().
-
-        Args:
-            mode (str): The game mode to set. Must be 'poker' or 'blackjack'.
-
-        Raises:
-            ValueError: If mode is not 'poker' or 'blackjack'.
-        """
-        mode = mode.lower()
-
-        if mode not in ("poker", "blackjack"):
-            raise ValueError("Game mode must be 'poker' or 'blackjack'")
-
-        self.game_mode = mode
 
     def str_deck(self):
         """
@@ -5031,7 +4937,7 @@ class CasinoDeckManager:
         Returns the number of cards currently remaining in the deck.
 
         Returns:
-            int: The count of remaining cards.
+            int: The number of remaining cards.
         """
         return len(self.deck.cards)
 
@@ -5039,7 +4945,7 @@ class CasinoDeckManager:
         """
         Creates an independent copy of this deck manager instance.
         The copied deck shares the same Evaluator (which is stateless) but
-        has its own independent card list. Used to ensure Monte Carlo
+        has its own independent card list. Used to ensure
         simulations do not interfere with each other.
 
         Returns:
@@ -5187,7 +5093,7 @@ class CasinoDeckManager:
         Evaluates a hand according to the current game mode.
 
         For blackjack: converts the hand to treys integers and returns the
-        numerical hand value via blackjack_hand_value().
+        numerical hand value through blackjack_hand_value().
 
         For poker: evaluates the hand against the provided board using the
         treys Evaluator, returning a tuple of the raw score and the hand
@@ -5228,7 +5134,7 @@ class CasinoDeckManager:
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# whitejoe_V6.py
+# whitejoe.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -5298,7 +5204,7 @@ class WhiteJoe:
     def admin_modify_bet(self, frame):
         """
         Opens a modal Toplevel dialog that allows the administrator to set
-        a custom starting chip balance. The dialog cannot be dismissed via
+        a custom starting chip balance. The dialog cannot be dismissed through
         the window manager — a valid balance must be submitted.
 
         When called from __init__ (before whitejoe_screen has run) the
@@ -5430,8 +5336,8 @@ class WhiteJoe:
             label.pack(anchor="w", pady=5, padx=5)
             labels.append(label)
 
-        self.balance_label = cast(preset_label, labels[1])
-        self.current_bet_label = cast(preset_label, labels[2])
+        self.balance_label = labels[1]
+        self.current_bet_label = labels[2]
 
         # Bottom-right panel
         bottom_right_frame = Frame(frame, bd=2, relief="sunken", bg=CS["bottom_right"])
@@ -6005,7 +5911,7 @@ class WhiteJoe:
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# poker_player_management_V6.py
+# poker_player_management.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -6032,9 +5938,9 @@ MAX_OUTS = 20
 # strategy. Constants below control how much the bot deviates from optimal play.
 
 # Fold-bias constants.
-""" At difficulty 0  a bot has a FOLD_BIAS_MAX chance each decision of
-converting a marginal fold into a call.  At difficulty 100 the chance
-drops to FOLD_BIAS_MIN, keeping high-difficulty bots close to optimal."""
+# At difficulty 0  a bot has a FOLD_BIAS_MAX chance each decision of
+# converting a marginal fold into a call.  At difficulty 100 the chance
+# drops to FOLD_BIAS_MIN, keeping high-difficulty bots close to optimal.
 FOLD_BIAS_MAX = 0.40  # 40% override at difficulty 0.
 FOLD_BIAS_MIN = 0.04  # 4% override at difficulty 100.
 
@@ -6112,39 +6018,6 @@ class HumanPokerPlayer:
         # Active range starts as a session copy of base_range.
         self.active_range = self.base_range.copy()
 
-    def decide(
-        self, *, player_hand, community_cards, opponents, pot, to_call, balance, street
-    ):
-        """
-        Makes a poker decision by delegating to make_decision().
-
-        Args:
-            player_hand (list[str]): The player's two hole cards.
-            community_cards (list[str]): The current community cards (0–5).
-            opponents (list[HumanPokerPlayer | BotPokerPlayer]): The active opponent players.
-            pot (float): The current pot size.
-            to_call (float): The amount required to call.
-            balance (float): The player's remaining chips.
-            street (str): The current betting round ('preflop', 'flop', 'turn', 'river').
-
-        Returns:
-            tuple: One of ("fold",), ("call",), ("raise", amount).
-        """
-        opponent_ranges = [opp.active_range for opp in opponents]
-
-        return make_decision(
-            player_hand=player_hand,
-            player_range=self.active_range,
-            community_cards=community_cards,
-            opponent_ranges=opponent_ranges,
-            opponents=opponents,
-            pot=pot,
-            balance=balance,
-            to_call=to_call,
-            bot=None,
-            street=street,
-        )
-
     def refresh_from_db(self):
         """
         Reloads all player attributes from the database. Useful when
@@ -6184,6 +6057,32 @@ class HumanPokerPlayer:
         """
         self.active_range = self.base_range.copy()
 
+    def update_range_from_action(self, action, hand_notation):
+        """
+        Updates the player's active and stored range based on an observed action,
+        then persists the result to the database.
+
+        Args:
+            action (str): 'raise', 'call', or 'fold'
+            hand_notation (str): e.g. 'AKs', 'TT'
+        """
+        if not hand_notation or hand_notation not in self.active_range:
+            return
+
+        self.active_range = update_range(
+            self.active_range,
+            action,
+            hand_notation,
+        )
+
+        self.stored_range = update_range(
+            self.stored_range,
+            action,
+            hand_notation,
+        )
+
+        self.dbm.update_player_range(self.user_id, self.stored_range)
+
     def fetch_player_info(self):
         """
         Returns a summary dictionary of this player's characteristics.
@@ -6205,7 +6104,7 @@ class HumanPokerPlayer:
 
     def __repr__(self):
         """
-        Returns a concise string representation of the human player.
+        Returns a string representation of the human player.
         """
         return (
             f"HumanPokerPlayer(user_id={self.user_id}, "
@@ -6332,7 +6231,7 @@ class BotPokerPlayer:
 
     def __repr__(self):
         """
-        Returns a concise string representation of the bot player.
+        Returns a string representation of the bot player.
         """
         return (
             f"BotPokerPlayer(difficulty={self.difficulty}, "
@@ -6438,7 +6337,7 @@ def generate_bot_range(vpip_target, difficulty):
     """
     Generates a bot's starting hand range based on a VPIP target and
     difficulty. Higher difficulty produces more nuanced, non-linear hand
-    selection via an exponent applied to the strength ranking. The top
+    selection through an exponent applied to the strength ranking. The top
     vpip_target percent of hands by adjusted strength are included.
 
     Args:
@@ -6522,7 +6421,7 @@ def update_range(chart, action, hand, delta=DEFAULT_DELTA):
     if total > 0:
         updated = {h: v / total for h, v in updated.items()}
 
-    return updated
+    return
 
 
 def difficulty_curve(level, low, high):
@@ -6601,8 +6500,8 @@ def build_rank_index(available):
 
 def hand_equity(player_hand, community_cards, opponent_range, bot=None):
     """
-    Estimates the player's equity against a single opponent range via Monte
-    Carlo simulation.
+    Estimates the player's equity against a single opponent range through a
+    Monte Carlo simulation.
 
     Performance notes:
         - Base deck built once; player and board cards removed once.
@@ -6735,28 +6634,9 @@ def notation_to_cards_with_index(hand_notation, rank_index, dm):
     return [dm.str_to_treys(c1), dm.str_to_treys(c2)]
 
 
-def notation_to_specific_cards(hand_notation, dm):
-    """
-    Public wrapper: converts a hand notation to treys card integers using
-    the cards available in 'dm'.
-
-    Args:
-        hand_notation (str): Hand notation string.
-        dm (CasinoDeckManager): Deck manager to draw cards from.
-
-    Returns:
-        list[int] or None: Two treys card integers, or None if unavailable.
-    """
-    available = dm.str_deck()
-    if not available:
-        return None
-    rank_index = build_rank_index(available)
-    return notation_to_cards_with_index(hand_notation, rank_index, dm)
-
-
 def calculate_simulation_count(street, difficulty):
     """
-    Returns the number of Monte Carlo simulations to run for equity
+    Returns the number of simulations to run for equity
     estimation based on the current street and bot difficulty. Later
     streets and higher difficulties use more simulations.
 
@@ -6811,9 +6691,6 @@ def pot_odds(current_pot, call_amount):
     Returns:
         float: Required break-even equity (0.0–1.0).  Returns 0.0 if
                call_amount is zero or negative.
-
-    Reference:
-        https://upswingpoker.com/pot-odds-step-by-step/
     """
     if call_amount <= 0:
         return 0.0
@@ -7090,8 +6967,8 @@ def make_decision(
         scales their equity upward.
 
     **Step 2 — Equity calculation**
-        Joint equity against all active opponents is estimated via Monte
-        Carlo simulation ('collective_hand_equity'). Noise scaled by
+        Joint equity against all active opponents is estimated through
+        simulations ('collective_hand_equity'). Noise scaled by
         difficulty is applied, the range multiplier is factored in and
         risk tolerance scales the result. Low-difficulty bots may further
         misestimate equity by a random factor.
@@ -7107,7 +6984,7 @@ def make_decision(
 
     **Step 5 — Drawing hands (flop / turn only)**
         The number of outs is estimated and converted to a hit probability
-        by the river. Equity is updated to the maximum of the Monte Carlo
+        by the river. Equity is updated to the maximum of the
         estimate and the draw-based estimate.
 
     **Step 6 — Value raise**
@@ -7199,8 +7076,8 @@ def make_decision(
         hand_type = describe_hand(player_hand, community_cards)
         if bot.difficulty >= 85 and bot.risk_tolerance >= 1.0:
             if hand_type in ("Straight Flush", "Four of a Kind", "Full House"):
-                raise_amt = calculate_raise_amount(pot, equity, balance, bot)
-                return ("raise", raise_amt)
+                raise_amount = calculate_raise_amount(pot, equity, balance, bot)
+                return ("raise", raise_amount)
     else:
         hand_type = None
 
@@ -7218,9 +7095,9 @@ def make_decision(
 
     # Value raise with strong hands.
     if equity > 0.65 and balance > 0:
-        raise_amt = calculate_raise_amount(pot, equity, balance, bot)
-        if 0 < raise_amt <= balance:
-            return ("raise", raise_amt)
+        raise_amount = calculate_raise_amount(pot, equity, balance, bot)
+        if 0 < raise_amount <= balance:
+            return ("raise", raise_amount)
 
     # Clear positive-EV call.
     if bot.difficulty >= 50 and ev_call > 0:
@@ -7266,16 +7143,16 @@ def make_decision(
 
     if should_attempt_bluff:
         if bluff_action == "raise":
-            raise_amt = calculate_raise_amount(pot, equity, balance, bot)
-            return ("raise", raise_amt if raise_amt <= balance else int(balance))
+            raise_amount = calculate_raise_amount(pot, equity, balance, bot)
+            return ("raise", raise_amount if raise_amount <= balance else int(balance))
         elif bluff_action == "call" and to_call <= balance:
             return ("call",)
 
     # Fold bias
-    """ All bots have a small tendency to call rather than fold in marginal
-    spots. The bias is much stronger for easy bots
-    and diminishes toward the threshold FOLD_BIAS_MIN for hard bots.
-    Only applied when the bot can actually afford the call."""
+    # All bots have a small tendency to call rather than fold in marginal
+    # spots. The bias is much stronger for easy bots
+    # and diminishes toward the threshold FOLD_BIAS_MIN for hard bots.
+    # Only applied when the bot can actually afford the call.
     if to_call <= balance and random.random() < bot.fold_bias:
         return ("call",)
 
@@ -7284,56 +7161,14 @@ def make_decision(
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# harrogate_hold_em_V6.py
+# harrogate_hold_em.py
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 DEFAULT_BOT_LIST = [
-    "Angus",
-    "Angeban",
-    "Grey",
-    "Mr Rhodes",
-    "Leon S. Kennedy",
-    "Ada Wong",
-    "Albert Wesker",
-    "Jack Krauser",
-    "Luis Serra",
-    "Nathan Drake",
-    "Joel Miller",
-    "Tobias Rieper",
-    "Arthur Morgan",
-    "Dutch Van Der Linde",
-    "Jin Sakai",
-    "Atsu Onryo",
-    "Alfred",
-    "Danny Trejo",
-    "Bagley",
-    "Sauron",
-    "Morgoth",
-    "Han Solo",
-    "Gordon Freeman",
-    "Mr Chips",
-    "Dante from Devil May Cry",
-    "Cal Kestis",
-    "Master Chief",
-    "Lara Croft",
-    "Vector the Crocodile",
-    "Rayman",
-    "Hideo Kojima",
-    "Naked Snake",
-    "Big Boss",
-    "Venom Snake",
-    "Liquid Snake",
-    "Solidus Snake",
-    "Archimedes",
-    "Giancarlo Esposito",
-    "Kinji Hakari",
-    "Toji Fushiguro",
-    "Jon Snow",
-    "Pikmin",
-    "Hatsune Miku",
-    "Oggdo Bogdo",
-    "Spawn of Oggdo",
+    "Player1",
+    "Player2",
+    "Player3",
 ]
 
 
@@ -7717,11 +7552,11 @@ class HarrogateHoldEm:
     def admin_modify_bet(self, frame):
         """
         Opens a modal Toplevel dialog that allows the administrator to set
-        a custom starting chip balance. The dialog cannot be dismissed via
+        a custom starting chip balance. The dialog cannot be dismissed through
         the window manager — a valid balance must be submitted.
 
-        When called from __init__ (before whitejoe_screen has run) the
-        dialog navigates to whitejoe_screen on submission. When called
+        When called from __init__ (before harrogate_hold_em_screen has run) the
+        dialog navigates to harrogate_hold_em_screen on submission. When called
         from check_balance mid-game it only updates the balance label and
         closes, preserving all active game state.
 
@@ -7755,7 +7590,7 @@ class HarrogateHoldEm:
         def submit_balance():
             """
             Validates the balance entry and closes the dialog. If the main
-            game screen has not yet been built, navigates to whitejoe_screen.
+            game screen has not yet been built, navigates to harrogate_hold_em_screen.
             If the screen is already live, updates the balance label in place
             without disturbing game state.
             """
@@ -7911,9 +7746,9 @@ class HarrogateHoldEm:
             label.pack(anchor="w", pady=5, padx=5)
             labels.append(label)
 
-        self.balance_label = cast(preset_label, labels[1])
-        self.current_bet_label = cast(preset_label, labels[2])
-        self.blinds_label = cast(preset_label, labels[3])
+        self.balance_label = labels[1]
+        self.current_bet_label = labels[2]
+        self.blinds_label = labels[3]
 
         middle_right_frame = Frame(frame, bd=2, relief="sunken", bg=CS["middle_right"])
         middle_right_frame.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
@@ -7950,7 +7785,7 @@ class HarrogateHoldEm:
             ),
         )
 
-        self.build_players_panel()
+        self.update_player_status()
 
         bottom_right_outer = Frame(frame, bd=2, relief="sunken", bg=CS["bottom_right"])
         bottom_right_outer.grid(row=2, column=1, sticky="nsew", padx=5, pady=5)
@@ -8069,7 +7904,7 @@ class HarrogateHoldEm:
 
         self.update_button_states()
 
-    def build_players_panel(self):
+    def update_player_status(self):
         """
         Rebuilds the players list panel from scratch inside self.players_frame.
         Displays for each player: name with position indicators ([SB], [BB],
@@ -8222,7 +8057,7 @@ class HarrogateHoldEm:
         if not self.round_active:
             self.round_number_label.config(
                 text="Harrogate Hold 'Em"
-                + ("  —  TOURNAMENT" if self.tournament_mode else "")
+                + ("TOURNAMENT" if self.tournament_mode else "")
             )
             board_text = (
                 f"Tournament Round {self.tournament.current_round}/{self.tournament.total_rounds}"
@@ -8317,14 +8152,6 @@ class HarrogateHoldEm:
             self.action_buttons[1].config(text="Call", state="disabled")
             self.action_buttons[2].config(text="Fold", state="disabled")
 
-    def update_player_status(self):
-        """
-        Refreshes the players list panel by delegating to _build_players_panel().
-        Kept as a separate method so external callers continue to work
-        without change.
-        """
-        self.build_players_panel()
-
     def reset_players(self):
         """
         Prepares all players for a new round by clearing their hole cards,
@@ -8354,7 +8181,7 @@ class HarrogateHoldEm:
             player (dict): The player dictionary to modify.
             cards (list or None): If an empty list, clears the player's
                 cards. If a non-empty list of treys card integers,
-                converts and stores them via deck.treys_other().
+                converts and stores them through deck.treys_other().
             change_balance (float or None): Amount to add to (positive)
                 or subtract from (negative) the player's current balance.
             bet (float or None): New absolute bet amount to assign.
@@ -8376,17 +8203,6 @@ class HarrogateHoldEm:
         if refresh_player_model and not player["is_bot"] and player["model"]:
             player["model"].refresh_from_db()
             player["model"].reset_active_range()
-
-    def player_decision(self):
-        """
-        Enables the human player's action buttons and refreshes the UI,
-        signalling that it is the human's turn to act.
-
-        This is a utility stub; calling decisions() will also trigger the
-        same state when it reaches the human player.
-        """
-        self.player_turn = True
-        self.update_ui()
 
     def log_message(
         self,
@@ -8784,7 +8600,7 @@ class HarrogateHoldEm:
         who have already decided, folded, or are out.
 
         For bot players, launches an asynchronous decision in a background
-        thread via start_bot_decision_async() and returns, resuming when
+        thread through start_bot_decision_queue() and returns, resuming when
         the queue result is processed by check_bot_decision_queue().
 
         For the human player, enables input buttons and returns to await
@@ -8802,7 +8618,7 @@ class HarrogateHoldEm:
                 if player["is_bot"]:
                     self.player_turn = False
                     self.update_ui()
-                    self.start_bot_decision_async(player)
+                    self.start_bot_decision_queue(player)
                     return
                 else:
                     self.player_turn = True
@@ -8822,7 +8638,7 @@ class HarrogateHoldEm:
 
         self.advance_street()
 
-    def start_bot_decision_async(self, player):
+    def start_bot_decision_queue(self, player):
         """
         Launches a bot's decision calculation in a background daemon thread.
         Immediately displays a 'thinking' message in the log.  Calculates a
@@ -8964,7 +8780,7 @@ class HarrogateHoldEm:
         - **call**: handles check (call_amount == 0), all-in call
           (call_amount ≥ balance) and normal call; logs and updates pot.
         - **raise**: enforces the minimum raise, caps at player balance,
-          updates pot and current_bet, logs and resets other players via
+          updates pot and current_bet, logs and resets other players through
           reset_after_raise().
 
         Args:
@@ -9245,6 +9061,22 @@ class HarrogateHoldEm:
         """
         for player in self.players:
             if not player["is_bot"] and player["user_id"]:
+                model = player.get("model")
+
+                if model and self.actions_logged:
+                    for action_log in self.actions_logged:
+                        if action_log["street"] == "preflop":
+                            # Convert cards to notation
+                            try:
+                                hand_notation = cards_to_notation(player["cards"][1])
+                            except Exception:
+                                continue
+
+                            model.update_range_from_action(
+                                action_log["action"],
+                                hand_notation,
+                            )
+
                 voluntarily_entered = False
                 preflop_raised = False
                 faced_raise = False
@@ -9533,7 +9365,7 @@ class HarrogateHoldEm:
 
         Validates the entered amount against the minimum raise and the
         player's available balance. Executes the raise, resets other
-        players via reset_after_raise(), logs the action to the database,
+        players through reset_after_raise(), logs the action to the database,
         and continues the decision loop.
         """
         try:

@@ -17,6 +17,9 @@ pycryptodome>=3.20.0
 # Database table display and data handling
 pandas>=2.0.0
 
+The pip3 command to install these dependencies is:
+    pip3 install -r requirements.txt
+
 # Original Bot List
 DEFAULT_BOT_LIST = [
     "Angus",

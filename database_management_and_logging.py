@@ -26,7 +26,7 @@ class LogHandler(logging.Handler):
     Base class for log handlers.
 
     Owns all queue, worker-thread, emit, processor and close logic.
-    Subclasses supply only the name of the table they write to via the
+    Subclasses supply only the name of the table they write to through the
     TABLE class attribute.
 
     The worker thread runs as a daemon so it never prevents the process
@@ -462,32 +462,6 @@ class DatabaseManagement:
             database_logger.exception(f"'export_table_to_csv' error. {error}")
             return False
 
-    def import_from_csv(self, file_path):
-        """
-        Reads a CSV file and returns its contents as a list of dicts.
-
-        Args:
-            file_path (str): Path to the CSV file.
-
-        Returns:
-            list: List of row dictionaries.
-        """
-        records = []
-        try:
-            with open(file_path, "r") as file:
-                headers = file.readline().strip().split(",")
-                for line in file:
-                    values = line.strip().split(",")
-                    records.append(dict(zip(headers, values)))
-
-            database_logger.info(
-                f"Successfully imported data from CSV at '{file_path}'."
-            )
-        except Exception as error:
-            database_logger.exception(f"'import_from_csv' error. {error}")
-
-        return records
-
     # USER RECORD OPERATIONS
 
     def change_user_record(
@@ -822,68 +796,25 @@ class DatabaseManagement:
 
     def record_user_login(self, username):
         """
-        Records a user login event.
+        Records the current timestamp as the last login time for the given
+        user. The timestamp is stored in ISO 8601 format (YYYY-MM-DD HH:MM:SS)
+        so that SQLite's strftime functions can compare it correctly.
 
         Args:
             username (str): The username of the user who logged in.
         """
         with self.connect() as conn:
             try:
-                current_time = datetime.now().strftime("%d-%m-%Y | %H:%M:%S")
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 conn.execute(
                     "UPDATE users SET last_login = ? WHERE username = ?",
-                    (current_time, username),
+                    (now_str, username),
                 )
                 database_logger.info(
-                    f"Recorded login for User: '{username}' at {current_time}."
+                    f"Recorded login for User: '{username}' at {now_str}."
                 )
             except sqlite3.Error as error:
                 database_logger.exception(f"'record_user_login' error. {error}")
-                raise
-
-    def apply_daily_login_bonus(self):
-        """
-        Awards a £1,000 bonus to every registered user whose last_login
-        was recorded more than 24 hours ago. Resets last_login to now
-        after each award so the bonus is granted at most once every
-        24 hours.
-
-        Should be called once at program start-up.
-        """
-        with self.connect() as conn:
-            try:
-                eligible = conn.execute(
-                    """
-                        SELECT user_id FROM users
-                        WHERE registered = 1
-                        AND last_login IS NOT NULL
-                        AND strftime('%s', 'now') - strftime('%s', last_login) > ?
-                        """,
-                    (24 * 3600,),
-                ).fetchall()
-
-                now_str = datetime.now().strftime("%d-%m-%Y | %H:%M:%S")
-
-                for row in eligible:
-                    uid = row["user_id"]
-                    conn.execute(
-                        """
-                            UPDATE users
-                            SET balance    = balance + 1000,
-                                last_login = ?
-                            WHERE user_id = ?
-                            """,
-                        (now_str, uid),
-                    )
-                    database_logger.info(
-                        f"Awarded £1,000 daily login bonus to user_id={uid}."
-                    )
-
-                conn.commit()
-                database_logger.info("Daily login bonus check complete.")
-
-            except sqlite3.Error as error:
-                database_logger.exception(f"'apply_daily_login_bonus' error. {error}")
 
     def check_expired_guest_account(self):
         """
@@ -909,15 +840,15 @@ class DatabaseManagement:
                 ).fetchall()
 
                 for row in expired:
-                    uid = row["user_id"]
+                    user_id = row["user_id"]
                     conn.execute(
-                        "DELETE FROM user_poker_actions WHERE user_id = ?", (uid,)
+                        "DELETE FROM user_poker_actions WHERE user_id = ?", (user_id,)
                     )
                     conn.execute(
-                        "DELETE FROM user_poker_data WHERE user_id = ?", (uid,)
+                        "DELETE FROM user_poker_data WHERE user_id = ?", (user_id,)
                     )
-                    conn.execute("DELETE FROM users WHERE user_id = ?", (uid,))
-                    database_logger.info(f"Removed expired guest user_id={uid}.")
+                    conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+                    database_logger.info(f"Removed expired guest user_id={user_id}.")
 
                 conn.commit()
                 database_logger.info("Expired guest account check complete.")
@@ -926,6 +857,49 @@ class DatabaseManagement:
                 database_logger.exception(
                     f"'check_expired_guest_account' error. {error}"
                 )
+
+    def apply_daily_login_bonus(self):
+        """
+        Awards a £1,000 bonus to every registered user whose last_login
+        was recorded more than 24 hours ago. Resets last_login to now
+        after each award so the bonus is granted at most once every
+        24 hours.
+
+        Should be called once at program start-up.
+        """
+        with self.connect() as conn:
+            try:
+                eligible = conn.execute(
+                    """
+                    SELECT user_id FROM users
+                    WHERE registered = 1
+                    AND last_login IS NOT NULL
+                    AND strftime('%s', 'now') - strftime('%s', last_login) > ?
+                    """,
+                    (24 * 3600,),
+                ).fetchall()
+
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                for row in eligible:
+                    user_id = row["user_id"]
+                    conn.execute(
+                        """
+                        UPDATE users
+                        SET balance    = balance + 1000,
+                            last_login = ?
+                        WHERE user_id = ?
+                        """,
+                        (now_str, user_id),
+                    )
+                    database_logger.info(
+                        f"Awarded £1,000 daily login bonus to user_id={user_id}."
+                    )
+
+                conn.commit()
+                database_logger.info("Daily login bonus check complete.")
+
+            except sqlite3.Error as error:
+                database_logger.exception(f"'apply_daily_login_bonus' error. {error}")
 
     def fetch_user_id(self, username):
         """
@@ -1459,55 +1433,6 @@ class DatabaseManagement:
                 database_logger.exception(f"'fetch_all_players_data' error. {error}")
                 return []
 
-    def reset_player_statistics(self, user_id, keep_range=True):
-        """
-        Resets all poker statistics for a player to zero.
-
-        Args:
-            user_id (int): The user ID to reset.
-            keep_range (bool): If True, preserves the player_range.
-                               Defaults to True.
-
-        Returns:
-            bool: True on success, False on error.
-        """
-        range_clause = "" if keep_range else "player_range = NULL,"
-
-        with self.connect() as conn:
-            try:
-                database_logger.info(
-                    f"Resetting player statistics for User ID: '{user_id}'. "
-                    f"Keep range: {keep_range}"
-                )
-
-                conn.execute(
-                    f"""
-                    UPDATE user_poker_data
-                    SET
-                        {range_clause}
-                        rounds_played = 0,
-                        vpip = 0,
-                        pfr = 0,
-                        total_hands_played = 0,
-                        total_hands_raised = 0,
-                        total_bets = 0,
-                        fold_to_raise = 0,
-                        call_when_weak = 0,
-                        last_updated = CURRENT_TIMESTAMP
-                    WHERE user_id = ?
-                    """,
-                    (user_id,),
-                )
-
-                database_logger.info("User statistics reset.")
-                return True
-
-            except sqlite3.Error as error:
-                database_logger.exception(f"'reset_player_statistics' error. {error}")
-                return False
-
-    # SPECIAL GAME MODE SCORES
-
     def fetch_special_mode_scores(self, user_id):
         """
         Retrieves the Endless mode personal-best score for a user.
@@ -1572,15 +1497,3 @@ class DatabaseManagement:
             except sqlite3.Error as error:
                 database_logger.exception(f"'update_special_mode_score' error. {error}")
                 return False
-
-
-if __name__ == "__main__":
-    """
-    Initialises the database by creating an instance of DatabaseManagement and
-    calling create_database(). This can be run independently to set up the database
-    schema and initial administrator account, or will be automatically invoked
-    when the User_Interface is run if the database does not already exist.
-    """
-
-    dbm = DatabaseManagement()
-    dbm.create_database()

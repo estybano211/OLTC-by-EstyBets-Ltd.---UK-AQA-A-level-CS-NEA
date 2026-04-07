@@ -27,51 +27,9 @@ from gui_helpers import (
 )
 
 DEFAULT_BOT_LIST = [
-    "Angus",
-    "Angeban",
-    "Grey",
-    "Mr Rhodes",
-    "Leon S. Kennedy",
-    "Ada Wong",
-    "Albert Wesker",
-    "Jack Krauser",
-    "Luis Serra",
-    "Nathan Drake",
-    "Joel Miller",
-    "Tobias Rieper",
-    "Arthur Morgan",
-    "Dutch Van Der Linde",
-    "Jin Sakai",
-    "Atsu Onryo",
-    "Alfred",
-    "Danny Trejo",
-    "Bagley",
-    "Sauron",
-    "Morgoth",
-    "Han Solo",
-    "Gordon Freeman",
-    "Mr Chips",
-    "Dante from Devil May Cry",
-    "Cal Kestis",
-    "Master Chief",
-    "Lara Croft",
-    "Vector the Crocodile",
-    "Rayman",
-    "Hideo Kojima",
-    "Naked Snake",
-    "Big Boss",
-    "Venom Snake",
-    "Liquid Snake",
-    "Solidus Snake",
-    "Archimedes",
-    "Giancarlo Esposito",
-    "Kinji Hakari",
-    "Toji Fushiguro",
-    "Jon Snow",
-    "Pikmin",
-    "Hatsune Miku",
-    "Oggdo Bogdo",
-    "Spawn of Oggdo",
+    "Player1",
+    "Player2",
+    "Player3",
 ]
 
 
@@ -457,11 +415,11 @@ class HarrogateHoldEm:
     def admin_modify_bet(self, frame):
         """
         Opens a modal Toplevel dialog that allows the administrator to set
-        a custom starting chip balance. The dialog cannot be dismissed via
+        a custom starting chip balance. The dialog cannot be dismissed through
         the window manager — a valid balance must be submitted.
 
-        When called from __init__ (before whitejoe_screen has run) the
-        dialog navigates to whitejoe_screen on submission. When called
+        When called from __init__ (before harrogate_hold_em_screen has run) the
+        dialog navigates to harrogate_hold_em_screen on submission. When called
         from check_balance mid-game it only updates the balance label and
         closes, preserving all active game state.
 
@@ -495,7 +453,7 @@ class HarrogateHoldEm:
         def submit_balance():
             """
             Validates the balance entry and closes the dialog. If the main
-            game screen has not yet been built, navigates to whitejoe_screen.
+            game screen has not yet been built, navigates to harrogate_hold_em_screen.
             If the screen is already live, updates the balance label in place
             without disturbing game state.
             """
@@ -651,9 +609,9 @@ class HarrogateHoldEm:
             label.pack(anchor="w", pady=5, padx=5)
             labels.append(label)
 
-        self.balance_label = cast(preset_label, labels[1])
-        self.current_bet_label = cast(preset_label, labels[2])
-        self.blinds_label = cast(preset_label, labels[3])
+        self.balance_label = labels[1]
+        self.current_bet_label = labels[2]
+        self.blinds_label = labels[3]
 
         middle_right_frame = Frame(frame, bd=2, relief="sunken", bg=CS["middle_right"])
         middle_right_frame.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
@@ -690,7 +648,7 @@ class HarrogateHoldEm:
             ),
         )
 
-        self.build_players_panel()
+        self.update_player_status()
 
         bottom_right_outer = Frame(frame, bd=2, relief="sunken", bg=CS["bottom_right"])
         bottom_right_outer.grid(row=2, column=1, sticky="nsew", padx=5, pady=5)
@@ -809,7 +767,7 @@ class HarrogateHoldEm:
 
         self.update_button_states()
 
-    def build_players_panel(self):
+    def update_player_status(self):
         """
         Rebuilds the players list panel from scratch inside self.players_frame.
         Displays for each player: name with position indicators ([SB], [BB],
@@ -962,7 +920,7 @@ class HarrogateHoldEm:
         if not self.round_active:
             self.round_number_label.config(
                 text="Harrogate Hold 'Em"
-                + ("  —  TOURNAMENT" if self.tournament_mode else "")
+                + ("TOURNAMENT" if self.tournament_mode else "")
             )
             board_text = (
                 f"Tournament Round {self.tournament.current_round}/{self.tournament.total_rounds}"
@@ -1057,14 +1015,6 @@ class HarrogateHoldEm:
             self.action_buttons[1].config(text="Call", state="disabled")
             self.action_buttons[2].config(text="Fold", state="disabled")
 
-    def update_player_status(self):
-        """
-        Refreshes the players list panel by delegating to _build_players_panel().
-        Kept as a separate method so external callers continue to work
-        without change.
-        """
-        self.build_players_panel()
-
     def reset_players(self):
         """
         Prepares all players for a new round by clearing their hole cards,
@@ -1094,7 +1044,7 @@ class HarrogateHoldEm:
             player (dict): The player dictionary to modify.
             cards (list or None): If an empty list, clears the player's
                 cards. If a non-empty list of treys card integers,
-                converts and stores them via deck.treys_other().
+                converts and stores them through deck.treys_other().
             change_balance (float or None): Amount to add to (positive)
                 or subtract from (negative) the player's current balance.
             bet (float or None): New absolute bet amount to assign.
@@ -1116,17 +1066,6 @@ class HarrogateHoldEm:
         if refresh_player_model and not player["is_bot"] and player["model"]:
             player["model"].refresh_from_db()
             player["model"].reset_active_range()
-
-    def player_decision(self):
-        """
-        Enables the human player's action buttons and refreshes the UI,
-        signalling that it is the human's turn to act.
-
-        This is a utility stub; calling decisions() will also trigger the
-        same state when it reaches the human player.
-        """
-        self.player_turn = True
-        self.update_ui()
 
     def log_message(
         self,
@@ -1524,7 +1463,7 @@ class HarrogateHoldEm:
         who have already decided, folded, or are out.
 
         For bot players, launches an asynchronous decision in a background
-        thread via start_bot_decision_async() and returns, resuming when
+        thread through start_bot_decision_queue() and returns, resuming when
         the queue result is processed by check_bot_decision_queue().
 
         For the human player, enables input buttons and returns to await
@@ -1542,7 +1481,7 @@ class HarrogateHoldEm:
                 if player["is_bot"]:
                     self.player_turn = False
                     self.update_ui()
-                    self.start_bot_decision_async(player)
+                    self.start_bot_decision_queue(player)
                     return
                 else:
                     self.player_turn = True
@@ -1562,7 +1501,7 @@ class HarrogateHoldEm:
 
         self.advance_street()
 
-    def start_bot_decision_async(self, player):
+    def start_bot_decision_queue(self, player):
         """
         Launches a bot's decision calculation in a background daemon thread.
         Immediately displays a 'thinking' message in the log.  Calculates a
@@ -1704,7 +1643,7 @@ class HarrogateHoldEm:
         - **call**: handles check (call_amount == 0), all-in call
           (call_amount ≥ balance) and normal call; logs and updates pot.
         - **raise**: enforces the minimum raise, caps at player balance,
-          updates pot and current_bet, logs and resets other players via
+          updates pot and current_bet, logs and resets other players through
           reset_after_raise().
 
         Args:
@@ -1985,6 +1924,24 @@ class HarrogateHoldEm:
         """
         for player in self.players:
             if not player["is_bot"] and player["user_id"]:
+                model = player.get("model")
+
+                if model and self.actions_logged:
+                    for action_log in self.actions_logged:
+                        if action_log["street"] == "preflop":
+                            # Convert cards to notation
+                            try:
+                                from deck_management import cards_to_notation
+
+                                hand_notation = cards_to_notation(player["cards"][1])
+                            except Exception:
+                                continue
+
+                            model.update_range_from_action(
+                                action_log["action"],
+                                hand_notation,
+                            )
+
                 voluntarily_entered = False
                 preflop_raised = False
                 faced_raise = False
@@ -2063,7 +2020,8 @@ class HarrogateHoldEm:
         elif tie:
             self.log_message("It's a tie!", tie=True)
 
-        self.dbm.modify_user_balance(self.user_data["username"], human["balance"])
+        if not self.tournament_mode or win:
+            self.dbm.modify_user_balance(self.user_data["username"], human["balance"])
 
         if getattr(self, "balance_label", None) and self.balance_label.winfo_exists():
             self.balance_label.config(text=f"Balance: £{human['balance']}")
@@ -2274,7 +2232,7 @@ class HarrogateHoldEm:
 
         Validates the entered amount against the minimum raise and the
         player's available balance. Executes the raise, resets other
-        players via reset_after_raise(), logs the action to the database,
+        players through reset_after_raise(), logs the action to the database,
         and continues the decision loop.
         """
         try:

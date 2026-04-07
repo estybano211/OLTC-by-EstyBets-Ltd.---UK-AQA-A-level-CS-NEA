@@ -81,12 +81,12 @@ def verify_hash(stored_string, input_string):
 def passwords_confirmation(frame, root):
     """
     Opens a modal Toplevel dialog prompting the user to enter and confirm a
-    new password. The dialog cannot be closed via the window manager's close
+    new password. The dialog cannot be closed through the window manager's close
     button; the user must submit or cancel explicitly.
 
     Args:
         frame: The parent widget used to position the Toplevel window.
-        root: The root Tk window, used for font settings and blocking via
+        root: The root Tk window, used for font settings and blocking through
               wait_window().
 
     Returns:

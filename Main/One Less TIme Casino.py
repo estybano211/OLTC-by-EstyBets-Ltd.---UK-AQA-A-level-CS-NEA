@@ -1588,8 +1588,6 @@ CS = {
     "thinking_fg": "#D4B8E8",
     "tournament_bg": "#4A1E38",
     "tournament_fg": "#E8B8D0",
-    "endless_bg": "#E74C3C",
-    "endless_fg": "#31A3AD",
     # Misc.
     "table_even": "#000000",
     "table_odd": "#364DE2",

@@ -81,14 +81,13 @@ class LogHandler(logging.Handler):
     Base class for log handlers.
 
     Owns all queue, worker-thread, emit, processor and close logic.
-    Subclasses supply only the name of the table they write to through the
-    TABLE class attribute.
+    Subclasses supply the name of the table they write to through
+    TABLE.
 
     The worker thread runs as a daemon so it never prevents the process
     from exiting. A stop_event is used to signal clean shutdown.
     """
 
-    # Subclasses must override this with their target table name.
     TABLE = ""
 
     def __init__(self):
@@ -1471,14 +1470,12 @@ class DatabaseManagement:
                 database_logger.exception(f"'fetch_tournament_scores' error. {error}")
                 return None
 
-    def update_tournament_wins(self, user_id, new_wins):
+    def update_tournament_wins(self, user_id):
         """
-        Updates the tournament wins for a user only if new_wins is higher
-        than the currently stored value.
+        Updates the tournament wins for a user, increments its current value by one.
 
         Args:
             user_id (int): The user ID to update.
-            new_wins (int): The new tournament wins value.
 
         Returns:
             bool: True on success, False on error.
@@ -1488,13 +1485,13 @@ class DatabaseManagement:
                 conn.execute(
                     f"""
                     UPDATE user_poker_data
-                    SET tournament_wins = ?, last_updated = CURRENT_TIMESTAMP
-                    WHERE user_id = ? AND tournament_wins < ?
+                    SET tournament_wins = tournament_wins + 1, last_updated = CURRENT_TIMESTAMP
+                    WHERE user_id = ?
                     """,
-                    (new_wins, user_id, new_wins),
+                    (user_id,),
                 )
 
-                database_logger.info(f"Updated tournament_wins to {new_wins}.")
+                database_logger.info("Updated tournament_wins.")
                 return True
 
             except sqlite3.Error as error:
@@ -3608,29 +3605,7 @@ class CasinoInterface(BaseInterface):
                 text="Please sign in.\nIf you do not have an account please either register or create a guest account.",
                 font=self.styles["emphasis"],
             ).pack(pady=10)
-        else:
-            preset_label(
-                frame,
-                text=f"Welcome, {self.user_data['username']}",
-                font=self.styles["subheading"],
-            ).pack(pady=10)
 
-        preset_button(
-            frame,
-            text="Game Menu",
-            width=30,
-            state="normal" if linked else "disabled",
-            command=lambda: set_view(self, self.show_game_menu),
-        ).pack(pady=5)
-
-        if not linked:
-            preset_label(
-                frame,
-                text="Sign in to access the Game Menu.",
-                font=self.styles["emphasis"],
-            ).pack()
-
-        if not linked:
             preset_button(
                 frame,
                 text="Sign Up",
@@ -3644,21 +3619,28 @@ class CasinoInterface(BaseInterface):
                 width=30,
                 command=self.user_login_setup,
             ).pack(pady=5)
-
-        preset_button(
-            frame,
-            text="Account Information",
-            width=30,
-            state="normal" if linked else "disabled",
-            command=lambda: set_view(self, self.fetch_user_record),
-        ).pack(pady=5)
-
-        if not linked:
+        else:
             preset_label(
                 frame,
-                text="Sign in to view account information.",
-                font=self.styles["emphasis"],
-            ).pack()
+                text=f"Welcome, {self.user_data['username']}",
+                font=self.styles["subheading"],
+            ).pack(pady=10)
+
+            preset_button(
+                frame,
+                text="Account Information",
+                width=30,
+                state="normal" if linked else "disabled",
+                command=lambda: set_view(self, self.fetch_user_record),
+            ).pack(pady=5)
+
+            preset_button(
+                frame,
+                text="Game Menu",
+                width=30,
+                state="normal" if linked else "disabled",
+                command=lambda: set_view(self, self.show_game_menu),
+            ).pack(pady=5)
 
         preset_button(
             frame,
@@ -4655,7 +4637,10 @@ class ShowGameRules:
         heading.pack(pady=10)
 
         text_area = scrolledtext.ScrolledText(
-            window, wrap=WORD, font=self.styles["terms_and_conditions"], background=bg,
+            window,
+            wrap=WORD,
+            font=self.styles["terms_and_conditions"],
+            background=bg,
         )
         text_area.pack(expand=True, fill=BOTH, padx=10)
         text_area.insert(END, rules_text)
@@ -4824,18 +4809,18 @@ class CasinoDeckManager:
 
         return new_dm
 
-    def str_to_treys(self, card_str):
+    def str_to_treys(self, card):
         """
         Converts a card string to a treys integer representation.
 
         Args:
-            card_str (str): A card string in the format 'Rs' where R is the
+            card (str): A card string in the format 'Rs' where R is the
                             rank and s is the suit (e.g. 'As', 'Td', '2h').
 
         Returns:
             int: The treys integer representation of the card.
         """
-        return TreysCard.new(card_str)
+        return TreysCard.new(card)
 
     def treys_to_str(self, card):
         """
@@ -4866,7 +4851,7 @@ class CasinoDeckManager:
         suit = TreysCard.INT_SUIT_TO_CHAR_SUIT[TreysCard.get_suit_int(card)]
         return rank + REVERSE_SUIT_MAP[suit]
 
-    def treys_other(self, cards):
+    def treys_to_str_pretty(self, cards):
         """
         Converts a list of treys card integers into a pair of parallel lists:
         one containing standard string representations and one containing
@@ -5459,7 +5444,7 @@ class WhiteJoe:
                 return False
         return True
 
-    def modify_user_balance(self, balance: int):
+    def modify_user_balance(self, balance):
         """
         Updates the user's balance in the database, refreshes the balance
         label in the UI and logs the new balance to the game log.
@@ -5834,7 +5819,7 @@ class HumanPokerPlayer:
         active_range (dict): Session copy of base_range (modified in play).
     """
 
-    def __init__(self, *, user_id: int):
+    def __init__(self, *, user_id):
         """
         Initialises a human player by loading their poker data from the database.
 
@@ -5996,7 +5981,7 @@ class BotPokerPlayer:
         active_range (dict): Session copy of base_range.
     """
 
-    def __init__(self, *, difficulty: int):
+    def __init__(self, *, difficulty):
         """
         Initialises an AI bot with synthetically generated tendencies scaled by difficulty.
 
@@ -6010,9 +5995,6 @@ class BotPokerPlayer:
             raise ValueError("difficulty is required for bot players.")
 
         self.difficulty = difficulty
-        self.user_id = None
-        self.dbm = None
-        self.record = None
 
         # Tendency parameters interpolated by difficulty.
         self.vpip = difficulty_curve(self.difficulty, 35, 18)
@@ -7058,7 +7040,7 @@ class TournamentManager:
         base_big_blind (int): Starting big blind before escalation.
         current_round (int): The current round number (1-indexed).
         rounds_survived (int): How many rounds the human player has survived.
-        human_chips_at_round_start (int): Human's chip count at the start
+        human_starting_balance (int): Human's chip count at the start
                                           of the current round.
         round_wins (int): Number of rounds the human player has won.
         tournament_over (bool): True once the tournament has concluded.
@@ -7085,7 +7067,7 @@ class TournamentManager:
 
         self.current_round = 1
         self.rounds_survived = 0
-        self.human_chips_at_round_start = 0
+        self.human_starting_balance = 0
         self.round_wins = 0
         self.tournament_over = False
         self.tournament_won = False
@@ -7125,13 +7107,13 @@ class TournamentManager:
 
     def record_round_start(self, human_balance):
         """
-        Snapshots the human player's chip count at the beginning of a round
+        Snapshots the human player's balance at the beginning of a round
         for later reference (e.g. earn_target delta calculations).
 
         Args:
             human_balance (int): The human player's current chip balance.
         """
-        self.human_chips_at_round_start = human_balance
+        self.human_starting_balance = human_balance
 
     def evaluate_round_win(self, human_player, all_players):
         """
@@ -8045,7 +8027,7 @@ class HarrogateHoldEm:
             player (dict): The player dictionary to modify.
             cards (list or None): If an empty list, clears the player's
                 cards. If a non-empty list of treys card integers,
-                converts and stores them through deck.treys_other().
+                converts and stores them through deck.treys_to_str_pretty().
             change_balance (float or None): Amount to add to (positive)
                 or subtract from (negative) the player's current balance.
             bet (float or None): New absolute bet amount to assign.
@@ -8057,7 +8039,7 @@ class HarrogateHoldEm:
         if player is None:
             return
         if cards is not None:
-            player["cards"] = self.deck.treys_other(cards) if cards else cards
+            player["cards"] = self.deck.treys_to_str_pretty(cards) if cards else cards
         if change_balance is not None:
             player["balance"] += change_balance
         if bet is not None:
@@ -8408,7 +8390,7 @@ class HarrogateHoldEm:
                 self.modify_player(player, cards=[self.deck.draw(1), self.deck.draw(1)])
 
         raw_board = [self.deck.draw(1) for _ in range(5)]
-        self.board = self.deck.treys_other(raw_board)
+        self.board = self.deck.treys_to_str_pretty(raw_board)
 
         (
             self.flop[0],
@@ -9019,7 +9001,7 @@ class HarrogateHoldEm:
         elif tie:
             self.log_message("It's a tie!", tie=True)
 
-        if not self.tournament_mode or win:
+        if not self.tournament_mode:
             self.dbm.modify_user_balance(self.user_data["username"], human["balance"])
 
         if getattr(self, "balance_label", None) and self.balance_label.winfo_exists():
@@ -9065,6 +9047,8 @@ class HarrogateHoldEm:
                            tournament_over is True.
         """
         icon = "Tournament Victory!" if result["tournament_won"] else "Tournament Over"
+        if result["tournament_won"]:
+            self.dbm.update_tournament_wins(self.user_data["user_id"])
         messagebox.showinfo(icon, result["message"])
         self.return_to_menu()
 

@@ -265,7 +265,7 @@ class DatabaseManagement:
             total_bets INTEGER DEFAULT 0,
             fold_to_raise INTEGER DEFAULT 0,
             call_when_weak INTEGER DEFAULT 0,
-            endless_high_score INTEGER DEFAULT 0,
+            tournament_wins INTEGER DEFAULT 0,
             last_updated TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
@@ -1441,82 +1441,44 @@ class DatabaseManagement:
                 database_logger.exception(f"'fetch_player_statistics' error. {error}")
                 return None
 
-    def fetch_all_players_data(self):
+    def fetch_tournament_scores(self):
         """
-        Returns poker data for all players with at least one round played,
-        ordered by rounds played descending.
-
-        Returns:
-            list: List of player data dictionaries, or empty list on error.
-        """
-        with self.connect() as conn:
-            try:
-                database_logger.info("Fetching poker data for all players.")
-
-                rows = conn.execute("""
-                    SELECT user_id, rounds_played, vpip, pfr, total_bets
-                    FROM user_poker_data
-                    WHERE rounds_played > 0
-                    ORDER BY rounds_played DESC
-                    """).fetchall()
-
-                players = []
-                for row in rows:
-                    player = dict(row)
-                    rounds = max(1, player["rounds_played"])
-                    player["avg_bet_size"] = player["total_bets"] / rounds
-                    players.append(player)
-
-                database_logger.info(f"Fetched data for {len(players)} players.")
-                return players
-
-            except sqlite3.Error as error:
-                database_logger.exception(f"'fetch_all_players_data' error. {error}")
-                return []
-
-    def fetch_special_mode_scores(self, user_id):
-        """
-        Retrieves the Endless mode personal-best score for a user.
+        Retrieves the tournament wins for all users.
 
         Args:
             user_id (int): The user ID to query.
 
         Returns:
-            dict: {'endless_high_score': int}, or None if not found.
+            dict: {'tournament_wins': int}, or None if not found.
         """
         with self.connect() as conn:
             try:
-                database_logger.info(
-                    f"Fetching special-mode scores for User ID: '{user_id}'."
-                )
-
+                database_logger.info(f"Fetching tournament scores for all users.")
                 row = conn.execute(
-                    "SELECT endless_high_score FROM user_poker_data WHERE user_id = ?",
-                    (user_id,),
-                ).fetchone()
+                    """
+                    SELECT user_id, tournament_wins
+                    FROM user_poker_data
+                    """,
+                ).fetchall()
 
-                if not row:
-                    database_logger.info(
-                        f"No special-mode scores found for user_id {user_id}."
-                    )
-                    return None
-
-                database_logger.info("User special-mode scores fetched.")
-                return {"endless_high_score": int(row["endless_high_score"] or 0)}
+                database_logger.info("User tournament scores fetched.")
+                return [
+                    {"user_id": r["user_id"], "tournament_wins": r["tournament_wins"]}
+                    for r in row
+                ]
 
             except sqlite3.Error as error:
-                database_logger.exception(f"'fetch_special_mode_scores' error. {error}")
+                database_logger.exception(f"'fetch_tournament_scores' error. {error}")
                 return None
 
-    def update_special_mode_score(self, user_id, column, new_score):
+    def update_tournament_wins(self, user_id, new_wins):
         """
-        Updates a special-mode personal best only if new_score is higher
+        Updates the tournament wins for a user only if new_wins is higher
         than the currently stored value.
 
         Args:
             user_id (int): The user ID to update.
-            column (str): Column name.
-            new_score (int): Candidate new personal best.
+            new_wins (int): The new tournament wins value.
 
         Returns:
             bool: True on success, False on error.
@@ -1526,17 +1488,17 @@ class DatabaseManagement:
                 conn.execute(
                     f"""
                     UPDATE user_poker_data
-                    SET {column} = ?, last_updated = CURRENT_TIMESTAMP
-                    WHERE user_id = ? AND {column} < ?
+                    SET tournament_wins = ?, last_updated = CURRENT_TIMESTAMP
+                    WHERE user_id = ? AND tournament_wins < ?
                     """,
-                    (new_score, user_id, new_score),
+                    (new_wins, user_id, new_wins),
                 )
 
-                database_logger.info(f"Updated {column} to {new_score}.")
+                database_logger.info(f"Updated tournament_wins to {new_wins}.")
                 return True
 
             except sqlite3.Error as error:
-                database_logger.exception(f"'update_special_mode_score' error. {error}")
+                database_logger.exception(f"'update_tournament_wins' error. {error}")
                 return False
 
 
@@ -1612,6 +1574,7 @@ CS = {
     # Text.
     "text_bg": "#1A1A1A",
     "text_fg": "#FFFFFF",
+    "casino_text": "#E59866",
     # Log panel.
     "log_bg": "#000000",
     "log_fg": "#FFFFFF",
@@ -3457,9 +3420,6 @@ TOURNAMENT_WIN_CRITERIA = {
     "last_man_blind": "Outlast opponents as blinds escalate",
 }
 
-# Max bots, difficulties randomly distributed 0-100 and reshuffled each round.
-ENDLESS_BOT_COUNT = 9
-
 DEFAULT_SETTINGS = {
     # Harrogate Hold 'Em.
     "bot_count": 3,
@@ -3606,26 +3566,20 @@ class CasinoInterface(BaseInterface):
         except Exception:
             return 0
 
-    def fetch_special_scores(self):
+    def fetch_tournament_wins(self):
         """
-        Retrieves the player's personal best score for Endless mode from
-        the database.
+        Retrieves the player's total tournament wins from the database.
 
         Returns:
-            int: The maximum rounds survived in Endless mode, or 0 if no
-                 score exists or the user is not signed in.
+            int: The number of tournament wins, or 0 if no data exists or the user is not signed in.
         """
         user_id = self.user_data.get("user_id")
         if not user_id:
             return 0
 
         try:
-            scores = self.dbm.fetch_special_mode_scores(user_id)
-            if not scores:
-                return 0
-            # Endless is the only special mode currently tracked, so we can return it directly.
-            # If more modes are added, this should be refactored to specify which score is requested.
-            return scores["endless_high_score"]
+            statistics = self.dbm.fetch_player_statistics(user_id)
+            return int(statistics["tournament_wins"]) if statistics else 0
         except Exception:
             return 0
 
@@ -4070,24 +4024,39 @@ class CasinoInterface(BaseInterface):
         v_win_criteria = StringVar(value=self.settings["win_criteria"])
         v_win_target = StringVar(value=str(self.settings["win_criteria_target"]))
 
-        def row(label_text, widget_factory):
-            """
-            Packs a horizontal row consisting of a descriptive label on
-            the left and an input widget (produced by widget_factory) on
-            the right into the scrollable settings frame.
-            """
-            row = Frame(scrollable_frame)
-            row.pack(fill="x", padx=30, pady=2)
-            preset_label(row, text=label_text, width=32, anchor="w").pack(side="left")
-            widget_factory(row).pack(side="left", padx=8)
+        def section(parent, title):
+            preset_label(
+                parent, text=title, font=self.styles["subheading"], anchor="w"
+            ).pack(fill="x", padx=30, pady=(15, 5))
 
-        preset_label(
-            scrollable_frame, text="Table Settings", font=self.styles["subheading"]
-        ).pack(fill="x", padx=30, pady=10)
-        row(
+        def settings_grid(parent):
+            container = Frame(parent, bg=self.window_bg)
+            container.pack(fill="x", padx=30, pady=5)
+            return container
+
+        def grid_row(parent, row, label_text, widget):
+            preset_label(
+                parent,
+                text=label_text,
+                bg=self.window_bg,
+                fg=CS["casino_text"],
+                font=self.styles["text"],
+                relief="flat",
+                anchor="w",
+            ).grid(row=row, column=0, sticky="w", pady=4)
+
+            widget.grid(row=row, column=1, sticky="w", padx=10, pady=4)
+
+        section(scrollable_frame, "Table Settings")
+
+        grid = settings_grid(scrollable_frame)
+
+        grid_row(
+            grid,
+            0,
             "Number of bots (1–9):",
-            lambda p: Spinbox(
-                p,
+            Spinbox(
+                grid,
                 from_=1,
                 to=9,
                 textvariable=v_bot_count,
@@ -4095,56 +4064,69 @@ class CasinoInterface(BaseInterface):
                 font=self.styles["text"],
             ),
         )
-        row(
+
+        grid_row(
+            grid,
+            1,
             "Bot starting balance (£):",
-            lambda p: preset_entry(p, textvariable=v_bot_balance, width=10),
-        )
-        row(
-            "Small blind (£):",
-            lambda p: preset_entry(p, textvariable=v_small_blind, width=10),
-        )
-        row(
-            "Big blind (£):",
-            lambda p: preset_entry(p, textvariable=v_big_blind, width=10),
+            preset_entry(grid, textvariable=v_bot_balance, width=10),
         )
 
-        preset_label(
-            scrollable_frame, text="Bot Difficulty  (0 = easy, 100 = hard)", anchor="w"
-        ).pack(fill="x", padx=30, pady=10)
+        grid_row(
+            grid,
+            2,
+            "Small blind (£):",
+            preset_entry(grid, textvariable=v_small_blind, width=10),
+        )
+
+        grid_row(
+            grid,
+            3,
+            "Big blind (£):",
+            preset_entry(grid, textvariable=v_big_blind, width=10),
+        )
+
+        section(scrollable_frame, "Bot Difficulty")
+
+        difficulty_frame = Frame(scrollable_frame, bg=self.window_bg)
+        difficulty_frame.pack(fill="x", padx=30)
+
         difficulty_label = preset_label(
-            scrollable_frame,
+            difficulty_frame,
             text=f"Current: {v_bot_diff.get()}",
             font=self.styles["emphasis"],
             anchor="w",
         )
-        difficulty_label.pack(fill="x", padx=30)
+        difficulty_label.pack(anchor="w")
+
         Scale(
-            scrollable_frame,
+            difficulty_frame,
             from_=0,
             to=100,
             orient=HORIZONTAL,
             variable=v_bot_diff,
-            font=self.styles["text"],
-            length=400,
+            length=350,
             command=lambda v: difficulty_label.config(text=f"Current: {int(float(v))}"),
-        ).pack(anchor="w", padx=30, pady=2)
+        ).pack(anchor="w", pady=5)
 
-        preset_label(
-            scrollable_frame,
-            text="Tournament Mode",
-            font=self.styles["subheading"],
-            anchor="w",
-        ).pack(fill="x", padx=30, pady=10)
-        preset_label(
+        section(scrollable_frame, "Tournament Mode")
+
+        info = preset_label(
             scrollable_frame,
             text=(
-                "Play a series of rounds against bots. Win criteria and blind "
-                "escalation are configurable. Unlocks after 25 rounds played."
+                "Play multiple rounds against bots.\n"
+                "Configure win conditions and progression.\n"
+                "Unlocks after 25 rounds played."
             ),
             font=self.styles["emphasis"],
+            bg=self.window_bg,
+            fg=CS["casino_text"],
+            relief="flat",
             anchor="w",
-            wraplength=700,
-        ).pack(fill="x", padx=30, pady=(0, 6))
+            justify="left",
+            wraplength=650,
+        )
+        info.pack(fill="x", padx=30, pady=(0, 10))
         rounds_played = self.fetch_rounds_played()
         rounds_needed = max(0, TOURNAMENT_MIN_ROUNDS - rounds_played)
 
@@ -4161,27 +4143,30 @@ class CasinoInterface(BaseInterface):
             self.settings["tournament_mode"] = False
             v_tournament.set(False)
         else:
-            toggle_row = Frame(scrollable_frame)
-            toggle_row.pack(fill="x", padx=30, pady=2)
-            preset_label(
-                toggle_row,
-                text="Enable Tournament Mode:",
-                width=32,
-                anchor="w",
-            ).pack(side="left")
-            Checkbutton(toggle_row, variable=v_tournament).pack(side="left")
+            toggle_frame = Frame(scrollable_frame, bg=self.window_bg)
+            toggle_frame.pack(fill="x", padx=30)
 
-            preset_label(
-                scrollable_frame,
-                text=f"Rounds played: {rounds_played}",
-                font=self.styles["emphasis"],
-                anchor="w",
-            ).pack(fill="x", padx=30, pady=(0, 4))
+            preset_label(toggle_frame, text="Enable Tournament Mode:", anchor="w").pack(
+                side="left"
+            )
 
-            row(
+            Checkbutton(
+                toggle_frame,
+                variable=v_tournament,
+                bg=self.window_bg,
+                activebackground=self.window_bg,
+                highlightthickness=0,
+                bd=0,
+            ).pack(side="left", padx=10)
+
+            t_grid = settings_grid(scrollable_frame)
+
+            grid_row(
+                t_grid,
+                0,
                 "Number of rounds:",
-                lambda p: Spinbox(
-                    p,
+                Spinbox(
+                    t_grid,
                     from_=1,
                     to=50,
                     textvariable=v_total_rounds,
@@ -4189,10 +4174,13 @@ class CasinoInterface(BaseInterface):
                     font=self.styles["text"],
                 ),
             )
-            row(
-                "Total players (inc. you):",
-                lambda p: Spinbox(
-                    p,
+
+            grid_row(
+                t_grid,
+                1,
+                "Total players:",
+                Spinbox(
+                    t_grid,
                     from_=2,
                     to=10,
                     textvariable=v_total_players,
@@ -4201,23 +4189,22 @@ class CasinoInterface(BaseInterface):
                 ),
             )
 
-            crit_frame = Frame(scrollable_frame)
-            crit_frame.pack(fill="x", padx=30, pady=2)
-            preset_label(
-                crit_frame,
-                text="Round win criteria:",
-                width=32,
-                anchor="w",
-            ).pack(side="left")
-            crit_box = Combobox(
+            crit_frame = Frame(scrollable_frame, bg=self.window_bg)
+            crit_frame.pack(fill="x", padx=30, pady=5)
+
+            preset_label(crit_frame, text="Win condition:", anchor="w").pack(
+                side="left"
+            )
+
+            win_criteria_box = Combobox(
                 crit_frame,
                 textvariable=v_win_criteria,
                 values=list(TOURNAMENT_WIN_CRITERIA.keys()),
                 state="readonly",
-                font=self.styles["text"],
                 width=20,
+                font=self.styles["text"],
             )
-            crit_box.pack(side="left", padx=8)
+            win_criteria_box.pack(side="left", padx=10)
 
             crit_desc = preset_label(
                 scrollable_frame,
@@ -4225,76 +4212,32 @@ class CasinoInterface(BaseInterface):
                 font=self.styles["emphasis"],
                 anchor="w",
             )
-            crit_desc.pack(fill="x", padx=30)
+            crit_desc.pack(fill="x", padx=30, pady=(0, 5))
 
-            target_frame = Frame(scrollable_frame)
-            preset_label(
-                target_frame,
-                text="Earn target (£):",
-                width=32,
-                anchor="w",
-            ).pack(side="left")
-            preset_entry(
-                target_frame,
-                textvariable=v_win_target,
-                width=12,
-            ).pack(side="left", padx=8)
+            target_row_frame = Frame(scrollable_frame, bg=self.window_bg)
+
+            preset_label(target_row_frame, text="Earn target (£):", anchor="w").grid(
+                row=0, column=0, sticky="w", padx=30, pady=4
+            )
+
+            preset_entry(target_row_frame, textvariable=v_win_target, width=12).grid(
+                row=0, column=1, sticky="w", padx=10, pady=4
+            )
 
             def on_criteria_change(event=None):
                 crit_desc.config(
                     text=TOURNAMENT_WIN_CRITERIA.get(v_win_criteria.get(), "")
                 )
-                (
-                    target_frame.pack(fill="x", padx=30, pady=2)
-                    if v_win_criteria.get() == "earn_target"
-                    else target_frame.pack_forget()
-                )
 
-            crit_box.bind("<<ComboboxSelected>>", on_criteria_change)
+                if v_win_criteria.get() == "earn_target":
+                    target_row_frame.pack(fill="x", pady=5)
+                else:
+                    target_row_frame.pack_forget()
+
+            win_criteria_box.bind("<<ComboboxSelected>>", on_criteria_change)
+
             if v_win_criteria.get() == "earn_target":
-                target_frame.pack(fill="x", padx=30, pady=2)
-
-        preset_label(
-            scrollable_frame,
-            text="Endless Mode",
-            font=self.styles["subheading"],
-            anchor="w",
-        ).pack(fill="x", padx=30, pady=10)
-
-        preset_label(
-            scrollable_frame,
-            text=(
-                "Survive as long as possible against 9 bots whose difficulties "
-                "are reshuffled every round across the full 0–100 range. "
-                "There is no win condition — your score is how many rounds you last."
-            ),
-            font=self.styles["emphasis"],
-            anchor="w",
-            wraplength=700,
-        ).pack(fill="x", padx=30, pady=(0, 6))
-
-        endless_pb = self.fetch_special_scores()
-        preset_label(
-            scrollable_frame,
-            text=(
-                f"High score: {endless_pb} round"
-                f"{'s' if endless_pb != 1 else ''} survived"
-                if endless_pb > 0
-                else "No score yet."
-            ),
-            font=self.styles["emphasis"],
-            anchor="w",
-        ).pack(fill="x", padx=30)
-
-        preset_button(
-            scrollable_frame,
-            text="Start Endless",
-            width=20,
-            command=self.start_endless,
-        ).pack(anchor="w", padx=30, pady=4)
-
-        button_frame = Frame(scrollable_frame)
-        button_frame.pack(pady=12)
+                target_row_frame.pack(fill="x", pady=5)
 
         def save_settings():
             """Validates and saves Standard and Tournament settings."""
@@ -4407,6 +4350,9 @@ class CasinoInterface(BaseInterface):
                 self.settings = dict(DEFAULT_SETTINGS)
                 set_view(self, self.game_settings)
 
+        button_frame = Frame(scrollable_frame, bg=self.window_bg)
+        button_frame.pack(fill="x", pady=20)
+
         for text, command in (
             ("Save Settings", save_settings),
             ("Reset to Defaults", reset_defaults),
@@ -4415,15 +4361,14 @@ class CasinoInterface(BaseInterface):
             preset_button(
                 button_frame,
                 text=text,
-                width=20,
+                width=18,
                 command=command,
-            ).pack(side="left", padx=10)
+            ).pack(side="left", padx=15)
 
     def show_leaderboard(self, frame):
         """
-        Displays a leaderboard showing the top Endless scores
-        across all players in the database. Uses get_all_players_data()
-        to retrieve the full data set and sorts by each metric.
+        Displays a leaderboard showing the top tournament winners
+        across all players in the database. Uses fetch_tournament_scores().
 
         Args:
             frame (Frame): The parent frame to build the view into.
@@ -4435,27 +4380,27 @@ class CasinoInterface(BaseInterface):
         ).pack(pady=(15, 5))
 
         try:
-            all_data = self.dbm.fetch_all_players_data()
-        except Exception:
-            all_data = []
+            player_data = self.dbm.fetch_tournament_scores()
+        except Exception as e:
+            print(f"Error fetching tournament scores: {e}")
+            player_data = None
 
-        def board_section(title, key, unit="rounds"):
-            """Displays a titled top-5 table."""
+        if player_data is not None:
             preset_label(
                 frame,
-                text=title,
+                text="Top Tournament Winners",
                 font=self.styles["subheading"],
             ).pack(pady=(12, 2))
             Frame(frame, height=1, bg=CS["separator"]).pack(fill="x", padx=40)
 
             candidates = [
-                p for p in all_data if p.get(key, 0)
+                p for p in player_data if p.get("tournament_wins", 0)
             ]  # Filter out players with no score.
-            ranked = bubble_sort(candidates, key=key, reverse=True)[:5]
+            ranked = bubble_sort(candidates, key="tournament_wins", reverse=True)
 
             # Use binary_search_by_id for the username lookup.
             sorted_by_id = bubble_sort(
-                all_data, key="user_id", reverse=False
+                player_data, key="user_id", reverse=False
             )  # Ensure data is sorted by user_id for binary search.
             for entry in ranked:
                 index = binary_search_by_id(sorted_by_id, entry["user_id"])
@@ -4472,13 +4417,6 @@ class CasinoInterface(BaseInterface):
                 else:
                     username = f"User {entry['user_id']}"
 
-            if not ranked:
-                preset_label(
-                    frame,
-                    text="No scores recorded yet.",
-                ).pack(pady=4)
-                return
-
             for index, entry in enumerate(ranked, 1):
                 try:
                     result = self.dbm.fetch_username(entry["user_id"])
@@ -4490,14 +4428,18 @@ class CasinoInterface(BaseInterface):
                 except Exception:
                     username = f"User {entry['user_id']}"
 
-                score = int(entry[key])
+                score = int(entry["tournament_wins"])
                 preset_label(
                     frame,
-                    text=f"  {index}.  {username:<20}  {score} {unit}",
+                    text=f"  {index}.  {username:<20} with {score} wins.",
                     anchor="w",
                 ).pack(fill="x", padx=60, pady=1)
 
-        board_section("Endless — Most Rounds Survived", "endless_high_score")
+            if not ranked:
+                preset_label(
+                    frame,
+                    text="No tournament wins recorded yet.",
+                ).pack(pady=4)
 
         preset_button(
             frame,
@@ -4505,49 +4447,6 @@ class CasinoInterface(BaseInterface):
             width=25,
             command=lambda: set_view(self, self.show_game_menu),
         ).pack(pady=14)
-
-    def show_special_mode_summary(self, rounds_survived):
-        """
-        Shows a summary dialog for available special modes (currently just Endless),
-        comparing the result to the player's stored personal best and
-        updating the database if a new record was set.
-
-        Args:
-            rounds_survived (int): How many rounds the player survived.
-        """
-        user_id = self.user_data.get("user_id")
-        endless_pb = self.fetch_special_scores()
-
-        old_pb = endless_pb
-        pb_key = "endless_high_score"
-        label = "Endless"
-
-        new_record = rounds_survived > old_pb
-
-        if new_record and user_id:
-            try:
-                self.dbm.update_special_mode_score(user_id, pb_key, rounds_survived)
-            except Exception:
-                pass
-
-        if new_record:
-            title = "New Personal Best!"
-            message = (
-                f"{label} Mode — Game Over\n\n"
-                f"Rounds survived: {rounds_survived}\n"
-                f"Previous best: {old_pb}\n\n"
-                f"New personal best! Well played."
-            )
-        else:
-            title = f"{label} Mode — Game Over"
-            message = (
-                f"{label} Mode — Game Over\n\n"
-                f"Rounds survived: {rounds_survived}\n"
-                f"Personal best: {old_pb}\n\n"
-            )
-
-        messagebox.showinfo(title, message)
-        set_view(self, self.show_game_menu)
 
     def whitejoe_rules(self):
         """
@@ -4567,9 +4466,9 @@ class CasinoInterface(BaseInterface):
         user data.
         """
 
-        WhiteJoe(self.user_data)
-
         self.interface_root.destroy()
+
+        WhiteJoe(self.user_data)
 
     def harrogate_hold_em_rules(self):
         """
@@ -4610,46 +4509,9 @@ class CasinoInterface(BaseInterface):
             [bot_list[index % len(bot_list)], difficulty] for index in range(bot_count)
         ]
 
-        HarrogateHoldEm(self.user_data, settings, bots)
-
         self.interface_root.destroy()
 
-    def start_endless(self):
-        """
-        Launches Endless Mode.
-
-        Nine bots are created with randomly distributed difficulties across
-        the full 0–100 range. The settings dict carries 'endless_mode=True'
-        so the engine can reshuffle bot difficulties each round and never
-        declare a winner. Rounds survived are read back from
-        'settings["rounds_survived"]' after the game returns.
-        """
-
-        settings = dict(self.settings)
-        settings["endless_mode"] = True
-        settings["tournament_mode"] = False
-        settings["bot_count"] = ENDLESS_BOT_COUNT
-        settings["rounds_survived"] = 0
-
-        bot_list = list(DEFAULT_BOT_LIST)
-        random.shuffle(bot_list)
-
-        # Spread difficulties evenly across the range then shuffle.
-        step = 100 // ENDLESS_BOT_COUNT
-        difficulties = [min(100, index * step) for index in range(ENDLESS_BOT_COUNT)]
-        random.shuffle(difficulties)
-
-        bots = [
-            [bot_list[index % len(bot_list)], difficulties[index]]
-            for index in range(ENDLESS_BOT_COUNT)
-        ]
-
         HarrogateHoldEm(self.user_data, settings, bots)
-
-        rounds = int(settings.get("rounds_survived", 0))
-        self.show_special_mode_summary(rounds)
-
-        self.interface_root.destroy()
 
 
 # GAME RULES DISPLAY
@@ -4793,14 +4655,14 @@ class ShowGameRules:
         heading.pack(pady=10)
 
         text_area = scrolledtext.ScrolledText(
-            window, wrap=WORD, font=self.styles["terms_and_conditions"]
+            window, wrap=WORD, font=self.styles["terms_and_conditions"], background=bg,
         )
         text_area.pack(expand=True, fill=BOTH, padx=10)
         text_area.insert(END, rules_text)
         text_area.configure(state="disabled")
         text_area.yview_moveto(0)
 
-        bottom_frame = Frame(window)
+        bottom_frame = Frame(window, bg=bg)
         bottom_frame.pack(side=BOTTOM, fill=X, pady=10)
 
         continue_button = preset_button(
@@ -6672,7 +6534,8 @@ def collective_hand_equity(player_hand, community_cards, opponent_ranges, bot=No
         float: Joint equity estimate in range 0.0–1.0.
     """
     if not opponent_ranges:
-        return 0.0
+        # No opponents remain — the bot holds the pot uncontested.
+        return 1.0
 
     joint = 1.0
     for opp_range in opponent_ranges:
@@ -7131,13 +6994,14 @@ def make_decision(
             elif random.random() < 0.3:
                 should_attempt_bluff = True
                 bluff_action = "raise"
-    elif 0.2 < equity < 0.5:
+    elif 0.4 <= equity < 0.5:
         if should_bluff_call(pot, to_call, equity, avg_fold_to_raise, bot):
             should_attempt_bluff = True
             bluff_action = "call"
 
-    # Low-difficulty bots make random bluffing errors.
-    if random.random() < error_prob:
+    # Low-difficulty bots make random bluffing errors and
+    # only applied when no deliberate bluff was already chosen.
+    elif random.random() < error_prob:
         should_attempt_bluff = random.choice([True, False])
         bluff_action = random.choice(["raise", "call"])
 
@@ -9278,27 +9142,6 @@ class HarrogateHoldEm:
 
         return False
 
-    def return_to_menu(self, is_error=False, error=None):
-        """
-        Destroys the game window and returns the user to the appropriate
-        interface: AdminInterface for administrators, CasinoInterface
-        for regular users. Optionally shows an error dialog
-        before navigating.
-
-        Args:
-            is_error (bool): If True, display an error message first.
-            error (Exception or None): The error to show if is_error is
-                                       True.
-        """
-        if is_error:
-            messagebox.showerror("Error", f"{error}\n\nExiting game.")
-        self.hhe_root.destroy()
-
-        CasinoInterface(
-            administrator=True if self.user_data.get("administrator") else False,
-            user_data=self.user_data,
-        )
-
     def fold(self):
         """
         Handles the human player choosing to fold. Sets their status to
@@ -9410,6 +9253,27 @@ class HarrogateHoldEm:
                 self.update_ui()
                 self.decisions()
                 break
+
+    def return_to_menu(self, is_error=False, error=None):
+        """
+        Destroys the game window and returns the user to the appropriate
+        interface: AdminInterface for administrators, CasinoInterface
+        for regular users. Optionally shows an error dialog
+        before navigating.
+
+        Args:
+            is_error (bool): If True, display an error message first.
+            error (Exception or None): The error to show if is_error is
+                                       True.
+        """
+        if is_error:
+            messagebox.showerror("Error", f"{error}\n\nExiting game.")
+        self.hhe_root.destroy()
+
+        CasinoInterface(
+            administrator=True if self.user_data.get("administrator") else False,
+            user_data=self.user_data,
+        )
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

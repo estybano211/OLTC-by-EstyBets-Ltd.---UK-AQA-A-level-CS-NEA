@@ -1591,10 +1591,11 @@ CS = {
     "endless_bg": "#E74C3C",
     "endless_fg": "#31A3AD",
     # Misc.
-    "table_even": "#9627C5",
-    "table_odd": "#D7BDE2",
+    "table_even": "#000000",
+    "table_odd": "#364DE2",
     "separator": "#888888",
     "round_label_bg": "#1A5276",
+    "round_label_fg": "#FFFFFF",
 }
 
 # Default delay for message logging in seconds.
@@ -4510,8 +4511,7 @@ class ShowGameRules:
         To lose the game:\n
         \t1. Your hand value exceeds 21.\n
         \t2. The dealers hand has a greater value than yours at the end of the round.\n
-        You will start off with a whopping £1,000 and the buy in is already paid for.\n
-        You will then be offered to place a bet with the amount of money you have, The screen will show how much you have in your possession.\n
+        You will be offered to place a bet with the amount of money you have, The screen will show how much you have in your possession.\n
         The dealer will then deal out your cards with 2 cards facing upwards for you and 1 card facing up and another hidden for dealer.\n\n
         To play your hand, first you add the card values together and get a hand total anywhere from 4 to 21.\n
         If you’re dealt a ten-value card and an Ace as your first two cards that means you got a Blackjack.\n
@@ -5027,7 +5027,7 @@ class WhiteJoe:
         # Game state.
         self.player_hand = []
         self.dealer_hand = []
-        self.dealer = "Genghis Khan"
+        self.dealer = "Dealer"
         self.current_bet = 0
         self.round_active = False
 
@@ -7489,6 +7489,7 @@ class HarrogateHoldEm:
         self.round_number_label = preset_label(
             top_left_frame,
             bg=CS["round_label_bg"],
+            fg=CS["round_label_fg"],
             relief="groove",
             anchor="w",
         )

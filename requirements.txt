@@ -31,6 +31,7 @@ DEFAULT_BOT_LIST = [
     "Albert Wesker",
     "Jack Krauser",
     "Luis Serra",
+    "Victor Gideon",
     "Nathan Drake",
     "Joel Miller",
     "Tobias Rieper",

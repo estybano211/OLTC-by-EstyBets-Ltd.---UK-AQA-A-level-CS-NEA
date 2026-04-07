@@ -7669,11 +7669,6 @@ class HarrogateHoldEm:
         )
 
         def check_bet_input(amount=0):
-            """
-            Updates the current bet by the given amount, clamping the result
-            between 0 and the player's current balance. Updates bet_var,
-            the current-bet label, and the Start Round button state.
-            """
             try:
                 current_value = int(self.bet_var.get())
                 new_value = max(0, current_value + amount)
@@ -7684,8 +7679,8 @@ class HarrogateHoldEm:
                 new_value = 0
 
             self.bet_var.set(str(new_value))
-            self.current_bet = new_value
-            self.current_bet_label.config(text=f"Current Bet: £{new_value}")
+            self.current_bet_label.config(text=f"Raise Amount: £{new_value}")
+
             state = (
                 "normal" if (new_value > 0 and not self.round_active) else "disabled"
             )
@@ -9065,7 +9060,7 @@ class HarrogateHoldEm:
             getattr(self, "current_bet_label", None)
             and self.current_bet_label.winfo_exists()
         ):
-            self.current_bet_label.config(text="Current Bet: £0")
+            self.current_bet_label.config(text="Raise Amount: £0")
 
         for player in self.players:
             if player["is_bot"] and player["balance"] <= 0:
@@ -9201,12 +9196,15 @@ class HarrogateHoldEm:
             messagebox.showerror("Invalid Raise", "Please enter a valid number.")
             return
 
+        if raise_amount <= 0:
+            messagebox.showerror("Invalid Raise", "Raise must be greater than 0.")
+            return
+
         for player in self.players:
             if not player["is_bot"]:
-                min_raise = max(
-                    self.current_bet - player["bet"] + self.big_blind_value,
-                    self.big_blind_value,
-                )
+
+                call_amount = max(0, self.current_bet - player["bet"])
+                min_raise = call_amount + self.big_blind_value
 
                 if raise_amount < min_raise:
                     messagebox.showerror(
@@ -9222,18 +9220,26 @@ class HarrogateHoldEm:
                     )
                     return
 
+                # Apply raise
                 self.modify_player(player, change_balance=-raise_amount)
                 self.modify_player(player, bet=player["bet"] + raise_amount)
+
                 self.pot_size += raise_amount
-                self.current_bet = player["bet"]
+                self.current_bet = max(p["bet"] for p in self.players)
+
+                if raise_amount == player["balance"]:
+                    self.modify_player(player, status="All-in")
+                else:
+                    self.modify_player(player, status="Decided")
 
                 self.log_message(f"{player['player']} raises to £{self.current_bet}.")
-                self.modify_player(player, status="Decided")
                 self.log_player_action_to_db("raise", raise_amount)
+
                 self.reset_after_raise(except_player=player)
 
                 self.current_position = (self.current_position + 1) % self.player_count
                 self.player_turn = False
+
                 self.update_ui()
                 self.decisions()
                 break

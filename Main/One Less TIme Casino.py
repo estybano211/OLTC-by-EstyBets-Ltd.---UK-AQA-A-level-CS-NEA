@@ -203,7 +203,7 @@ class DatabaseManagement:
     Usage:
         dbm = DatabaseManagement(DB_PATH)
         dbm.create_database()
-        record = dbm.fetch_user_full_record(username="user1")
+        record = dbm.fetch_user_record(username="user1")
     """
 
     def __init__(self, db_path):
@@ -288,8 +288,8 @@ class DatabaseManagement:
 
     def connect(self):
         """
-        Opens and returns a connection to self.db_path with row factory (for dictionary like access)
-        and foreign key constraints enabled.
+        Opens and returns a connection to self.db_path with row factory
+        and foreign key constraints are enabled.
 
         Returns:
             sqlite3.Connection: Configured connection object.
@@ -318,13 +318,12 @@ class DatabaseManagement:
             try:
                 for name, statement in self.SCHEMA.items():
                     conn.execute(statement)
-                    database_logger.info(f"Table: '{name}' created.")
+                    database_logger.info(f"Attempting to create Table: '{name}'.")
 
                 conn.commit()
-                database_logger.info(f"File: '{self.db_path}' created.")
+                database_logger.info(f"Attempting to create File: '{self.db_path}'.")
 
                 self.admin_account()
-                database_logger.info("Administrator account added to 'users' table.")
 
             except sqlite3.Error as error:
                 database_logger.exception(f"'create_database' error. {error}")
@@ -339,6 +338,7 @@ class DatabaseManagement:
 
         with self.connect() as conn:
             try:
+                database_logger.info("Attempting to create Administrator account.")
                 cursor = conn.execute(
                     "SELECT 1 FROM users WHERE username = ?",
                     ("Administrator",),
@@ -386,7 +386,7 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info("Request for Administrator password_hash.")
+                database_logger.info("Attempting to fetch Administrator password_hash.")
 
                 cursor = conn.execute(
                     "SELECT password_hash FROM users WHERE username = ?",
@@ -399,15 +399,15 @@ class DatabaseManagement:
                 return {"found": False, "verified": False}
 
         if not row or not row["password_hash"]:
-            database_logger.debug("'password_hash' for Administrator not found.")
+            database_logger.debug("Administrator password_hash not found.")
             return {"found": False, "verified": False}
 
         verified = verify_hash(row["password_hash"], password)
 
         database_logger.info(
-            "Password verification successful."
+            "Administrator password verification successful."
             if verified
-            else "Failed password attempt."
+            else "Administrator password verification failed."
         )
 
         return {"found": True, "verified": verified}
@@ -421,8 +421,8 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                admin_logger.info("Request to change Admin Password.")
-                database_logger.info("Request to change Administrator password.")
+                admin_logger.info("Request for Administrator password change.")
+                database_logger.info("Attempting to change Administrator password.")
 
                 password_hash = hash_function(new_password)
 
@@ -431,11 +431,13 @@ class DatabaseManagement:
                     (password_hash, "Administrator"),
                 )
 
-                database_logger.info("Administrator password changed.")
-                admin_logger.info("Administrator password change request successful.")
+                database_logger.info("Administrator password changed successfully.")
+                admin_logger.info(
+                    "Request for Administrator password change successful."
+                )
 
             except sqlite3.Error as error:
-                admin_logger.error("Administrator password change request failed.")
+                admin_logger.error("Request for Administrator password change failed.")
                 database_logger.exception(f"'change_admin_password' error. {error}")
 
     # DATABASE VIEW AND EXPORT OPERATIONS
@@ -448,7 +450,7 @@ class DatabaseManagement:
             table (str): The table name to read.
 
         Returns:
-            pd.DataFrame: All rows, or an empty DataFrame on error.
+            pd.DataFrame: All rows or an empty DataFrame on error.
         """
         if not table:
             database_logger.error("No table provided for view_database().")
@@ -456,18 +458,18 @@ class DatabaseManagement:
 
         with self.connect() as conn:
             try:
-                admin_logger.info(f"Request to view Table: '{table}'")
+                admin_logger.info(f"Requesting to view Table: '{table}'.")
                 database_logger.info(f"Attempting to read data from Table: '{table}'.")
 
                 dataframe = pd.read_sql_query(f"SELECT * FROM {table}", conn)
 
-                database_logger.info(f"Data from Table: '{table}' read successfully.")
-                admin_logger.info("View table request successful.")
+                database_logger.info(f"Table: '{table}' data read successfully.")
+                admin_logger.info("Request to view table successful.")
 
                 return dataframe
 
             except sqlite3.Error as error:
-                admin_logger.error("View table request failed.")
+                admin_logger.error("Request to view table failed.")
                 database_logger.exception(f"'view_database' error. {error}")
                 return pd.DataFrame()
 
@@ -485,13 +487,13 @@ class DatabaseManagement:
         try:
             with self.connect() as conn:
                 database_logger.info(
-                    f"Exporting table '{table}' to CSV at '{file_path}'."
+                    f"Attempting to export Table: '{table}' to CSV at '{file_path}'."
                 )
 
                 rows = conn.execute(f"SELECT * FROM {table}").fetchall()
 
                 if not rows:
-                    database_logger.warning(f"Table '{table}' is empty.")
+                    database_logger.warning(f"Table: '{table}' is empty.")
                     return False
 
                 headers = list(rows[0].keys())
@@ -502,7 +504,7 @@ class DatabaseManagement:
                     writer.writerows(rows)
 
                 database_logger.info(
-                    f"Successfully exported table '{table}' to '{file_path}'."
+                    f"Table: '{table}' exported to '{file_path}' successfully."
                 )
                 return True
 
@@ -553,9 +555,11 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                admin_logger.info(f"Request to change User ID: '{user_id}' username.")
+                admin_logger.info(
+                    f"Request for username change for User ID: {user_id}."
+                )
                 database_logger.info(
-                    f"Request to change User ID: '{user_id}' username."
+                    f"Attempting to change username for User ID: {user_id}."
                 )
 
                 conn.execute(
@@ -563,11 +567,13 @@ class DatabaseManagement:
                     (new_username, user_id),
                 )
 
-                admin_logger.info("Change username request successful.")
-                database_logger.info("User username changed.")
+                database_logger.info(
+                    f"User ID: {user_id} username changed successfully."
+                )
+                admin_logger.info("Request for username change successful.")
 
             except sqlite3.Error as error:
-                admin_logger.error("Change username request failed.")
+                admin_logger.error("Request for username change failed.")
                 database_logger.exception(f"'change_user_username' error. {error}")
 
     def change_user_password(self, user_id, new_password):
@@ -580,19 +586,25 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                admin_logger.info(f"Request to change User: '{user_id}' password.")
-                database_logger.info(f"Request to change User: '{user_id}' password.")
+                admin_logger.info(
+                    f"Request for password change for User ID: {user_id}."
+                )
+                database_logger.info(
+                    f"Attempting to change password for User ID: {user_id}."
+                )
 
                 conn.execute(
                     "UPDATE users SET password_hash = ? WHERE user_id = ?",
                     (hash_function(new_password), user_id),
                 )
 
-                admin_logger.info("Change user password request successful.")
-                database_logger.info("User password changed.")
+                database_logger.info(
+                    f"User ID: {user_id} password changed successfully."
+                )
+                admin_logger.info("Request for password change successful.")
 
             except sqlite3.Error as error:
-                admin_logger.error("Change user password request failed.")
+                admin_logger.error("Request for password change failed.")
                 database_logger.exception(f"'change_user_password' error. {error}")
 
     def change_user_account_type(self, user_id, registered):
@@ -606,10 +618,10 @@ class DatabaseManagement:
         with self.connect() as conn:
             try:
                 admin_logger.info(
-                    f"Request to change User ID: '{user_id}' account type."
+                    f"Request for account type change for User ID: {user_id}."
                 )
                 database_logger.info(
-                    f"Request to change User ID: '{user_id}' account type."
+                    f"Attempting to change account type for User ID: {user_id}."
                 )
 
                 conn.execute(
@@ -617,11 +629,13 @@ class DatabaseManagement:
                     (registered, user_id),
                 )
 
-                admin_logger.info("Change user account type request successful.")
-                database_logger.info("User account type changed.")
+                database_logger.info(
+                    f"User ID: {user_id} account type changed successfully."
+                )
+                admin_logger.info("Request for account type change successful.")
 
             except sqlite3.Error as error:
-                admin_logger.error("Change user account type request failed.")
+                admin_logger.error("Request for account type change failed.")
                 database_logger.exception(f"'change_user_account_type' error. {error}")
 
     def change_user_balance(self, user_id, new_balance):
@@ -634,19 +648,23 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                admin_logger.info(f"Request to change User ID: '{user_id}' balance.")
-                database_logger.info(f"Request to change User ID: '{user_id}' balance.")
+                admin_logger.info(f"Request for balance change for User ID: {user_id}.")
+                database_logger.info(
+                    f"Attempting to change balance for User ID: {user_id}."
+                )
 
                 conn.execute(
                     "UPDATE users SET balance = ? WHERE user_id = ?",
                     (float(new_balance), user_id),
                 )
 
-                admin_logger.info("Change user balance request successful.")
-                database_logger.info("User balance changed.")
+                database_logger.info(
+                    f"User ID: {user_id} balance changed successfully."
+                )
+                admin_logger.info("Request for balance change successful.")
 
             except sqlite3.Error as error:
-                admin_logger.error("Change user balance request failed.")
+                admin_logger.error("Request for balance change failed.")
                 database_logger.exception(f"'change_user_balance' error. {error}")
 
     def delete_user_record(self, user_id):
@@ -662,8 +680,10 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                admin_logger.info(f"Request to delete User ID: '{user_id}' record.")
-                database_logger.info(f"Request to delete User ID: '{user_id}' record.")
+                admin_logger.info(f"Request for deletion of User ID: {user_id} record.")
+                database_logger.info(
+                    f"Attempting to delete record for User ID: {user_id}."
+                )
 
                 conn.execute(
                     "DELETE FROM user_poker_actions WHERE user_id = ?", (user_id,)
@@ -673,16 +693,16 @@ class DatabaseManagement:
                 )
                 conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
 
-                admin_logger.info("Delete user record request successful.")
-                database_logger.info("User record deleted.")
+                database_logger.info(f"User ID: {user_id} record deleted successfully.")
+                admin_logger.info("Request for deletion of user record successful.")
 
             except sqlite3.Error as error:
-                admin_logger.error("Delete user record request failed.")
+                admin_logger.error("Request for deletion of user record failed.")
                 database_logger.exception(f"'delete_user_record' error. {error}")
 
     # USER LOOKUP AND AUTHENTICATION
 
-    def fetch_user_full_record(self, *, user_id=None, username=None):
+    def fetch_user_record(self, *, user_id=None, username=None):
         """
         Returns all columns from the users table for the specified user.
 
@@ -691,7 +711,7 @@ class DatabaseManagement:
             username (str, optional): Username to search by.
 
         Returns:
-            dict: All user fields, or None if not found.
+            dict: All user fields or None if not found.
 
         Raises:
             ValueError: If neither user_id nor username is provided.
@@ -702,10 +722,16 @@ class DatabaseManagement:
         with self.connect() as conn:
             try:
                 if user_id is not None:
+                    database_logger.info(
+                        f"Attempting to fetch full record for User ID: {user_id}."
+                    )
                     row = conn.execute(
                         "SELECT * FROM users WHERE user_id = ?", (user_id,)
                     ).fetchone()
                 else:
+                    database_logger.info(
+                        f"Attempting to fetch full record for User: '{username}'."
+                    )
                     row = conn.execute(
                         "SELECT * FROM users WHERE username = ?", (username,)
                     ).fetchone()
@@ -713,7 +739,7 @@ class DatabaseManagement:
                 return dict(row) if row else None
 
             except sqlite3.Error as error:
-                database_logger.exception(f"'fetch_user_full_record' error. {error}")
+                database_logger.exception(f"'fetch_user_record' error. {error}")
                 return None
 
     def fetch_user_presence(self, username):
@@ -728,7 +754,9 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Searching for User: '{username}'.")
+                database_logger.info(
+                    f"Attempting to check presence of User: '{username}'."
+                )
 
                 row = conn.execute(
                     "SELECT 1 FROM users WHERE username = ?", (username,)
@@ -736,7 +764,7 @@ class DatabaseManagement:
 
                 found = row is not None
                 database_logger.info(
-                    f"User '{username}' {'found' if found else 'not found'}."
+                    f"User: '{username}' {'found' if found else 'not found'}."
                 )
 
                 return {"found": found}
@@ -752,7 +780,7 @@ class DatabaseManagement:
 
         Args:
             username (str): Unique username (must not be 'Administrator').
-            password (str or None): Plaintext password, or None for guests.
+            password (str or None): Plaintext password or None for guests.
             registered (int): 0 for guest, 1 for registered.
 
         Returns:
@@ -774,7 +802,7 @@ class DatabaseManagement:
         with self.connect() as conn:
             try:
                 database_logger.info(
-                    f"Request to make an account for User: '{username}'."
+                    f"Attempting to register account for User: '{username}'."
                 )
 
                 conn.execute(
@@ -785,11 +813,13 @@ class DatabaseManagement:
                     (username, password_hash, int(float(registered)), 10000.0),
                 )
 
-                database_logger.info(f"Created User: '{username}' record.")
+                database_logger.info(
+                    f"User: '{username}' account registered successfully."
+                )
                 return username
 
             except sqlite3.IntegrityError:
-                database_logger.warning(f"User: '{username}' record already exists.")
+                database_logger.warning(f"User: '{username}' account already exists.")
                 raise
 
             except sqlite3.Error as error:
@@ -810,7 +840,7 @@ class DatabaseManagement:
         with self.connect() as conn:
             try:
                 database_logger.info(
-                    f"Request to search for User: '{username}' 'password_hash'."
+                    f"Attempting to fetch password_hash for User: '{username}'."
                 )
 
                 row = conn.execute(
@@ -823,15 +853,15 @@ class DatabaseManagement:
                 return {"found": False, "verified": False}
 
         if not row or not row["password_hash"]:
-            database_logger.info(f"'password_hash' for User: '{username}' not found.")
+            database_logger.info(f"User: '{username}' password_hash not found.")
             return {"found": False, "verified": False}
 
         verified = verify_hash(row["password_hash"], password)
 
         database_logger.info(
-            "Password verification successful."
+            f"User: '{username}' password verification successful."
             if verified
-            else "Failed password attempt."
+            else f"User: '{username}' password verification failed."
         )
 
         return {"found": True, "verified": verified}
@@ -848,13 +878,19 @@ class DatabaseManagement:
         with self.connect() as conn:
             try:
                 now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                database_logger.info(
+                    f"Attempting to record login for User: '{username}'."
+                )
+
                 conn.execute(
                     "UPDATE users SET last_login = ? WHERE username = ?",
                     (now_str, username),
                 )
+
                 database_logger.info(
-                    f"Recorded login for User: '{username}' at {now_str}."
+                    f"User: '{username}' login recorded successfully at {now_str}."
                 )
+
             except sqlite3.Error as error:
                 database_logger.exception(f"'record_user_login' error. {error}")
 
@@ -870,7 +906,7 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info("Checking for expired guest accounts.")
+                database_logger.info("Attempting to check for expired guest accounts.")
 
                 expired = conn.execute(
                     """
@@ -890,10 +926,12 @@ class DatabaseManagement:
                         "DELETE FROM user_poker_data WHERE user_id = ?", (user_id,)
                     )
                     conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
-                    database_logger.info(f"Removed expired guest user_id={user_id}.")
+                    database_logger.info(
+                        f"User ID: {user_id} expired guest account removed."
+                    )
 
                 conn.commit()
-                database_logger.info("Expired guest account check complete.")
+                database_logger.info("Expired guest account check completed.")
 
             except sqlite3.Error as error:
                 database_logger.exception(
@@ -911,6 +949,8 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
+                database_logger.info("Attempting to apply daily login bonuses.")
+
                 eligible = conn.execute(
                     """
                     SELECT user_id FROM users
@@ -927,18 +967,18 @@ class DatabaseManagement:
                     conn.execute(
                         """
                         UPDATE users
-                        SET balance    = balance + 1000,
+                        SET balance = balance + 1000,
                             last_login = ?
                         WHERE user_id = ?
                         """,
                         (now_str, user_id),
                     )
                     database_logger.info(
-                        f"Awarded £1,000 daily login bonus to user_id={user_id}."
+                        f"User ID: {user_id} awarded £1,000 daily login bonus."
                     )
 
                 conn.commit()
-                database_logger.info("Daily login bonus check complete.")
+                database_logger.info("Daily login bonus check completed.")
 
             except sqlite3.Error as error:
                 database_logger.exception(f"'apply_daily_login_bonus' error. {error}")
@@ -955,17 +995,19 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Request to fetch User: '{username}' user_id.")
+                database_logger.info(
+                    f"Attempting to fetch user_id for User: '{username}'."
+                )
 
                 row = conn.execute(
                     "SELECT user_id FROM users WHERE username = ?", (username,)
                 ).fetchone()
 
                 if row:
-                    database_logger.info("User 'user_id' found.")
+                    database_logger.info(f"User: '{username}' user_id found.")
                     return {"found": True, "user_id": row["user_id"]}
                 else:
-                    database_logger.info("User 'user_id' not found.")
+                    database_logger.info(f"User: '{username}' user_id not found.")
                     return {"found": False, "user_id": None}
 
             except sqlite3.Error as error:
@@ -984,17 +1026,19 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Request to fetch User ID: '{user_id}' username.")
+                database_logger.info(
+                    f"Attempting to fetch username for User ID: {user_id}."
+                )
 
                 row = conn.execute(
                     "SELECT username FROM users WHERE user_id = ?", (user_id,)
                 ).fetchone()
 
                 if row:
-                    database_logger.info("User 'username' found.")
+                    database_logger.info(f"User ID: {user_id} username found.")
                     return {"found": True, "username": row["username"]}
                 else:
-                    database_logger.info("User 'username' not found.")
+                    database_logger.info(f"User ID: {user_id} username not found.")
                     return {"found": False, "username": None}
 
             except sqlite3.Error as error:
@@ -1013,17 +1057,19 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Request to fetch User: '{username}' balance.")
+                database_logger.info(
+                    f"Attempting to fetch balance for User: '{username}'."
+                )
 
                 row = conn.execute(
                     "SELECT balance FROM users WHERE username = ?", (username,)
                 ).fetchone()
 
                 if row:
-                    database_logger.info("User 'balance' found.")
+                    database_logger.info(f"User: '{username}' balance found.")
                     return {"found": True, "balance": float(row["balance"])}
                 else:
-                    database_logger.info("User 'balance' not found.")
+                    database_logger.info(f"User: '{username}' balance not found.")
                     return {"found": False, "balance": 0.0}
 
             except sqlite3.Error as error:
@@ -1040,14 +1086,18 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Request to modify User: '{username}' balance.")
+                database_logger.info(
+                    f"Attempting to modify balance for User: '{username}'."
+                )
 
                 conn.execute(
                     "UPDATE users SET balance = ? WHERE username = ?",
                     (float(new_balance), username),
                 )
 
-                database_logger.info("User balance modified.")
+                database_logger.info(
+                    f"User: '{username}' balance modified successfully."
+                )
 
             except sqlite3.Error as error:
                 database_logger.exception(f"'modify_user_balance' error. {error}")
@@ -1061,7 +1111,7 @@ class DatabaseManagement:
         with self.connect() as conn:
             try:
                 database_logger.info(
-                    f"Checking if poker data exists for User ID: '{user_id}'."
+                    f"Attempting to check poker data existence for User ID: {user_id}."
                 )
 
                 exists = conn.execute(
@@ -1069,7 +1119,8 @@ class DatabaseManagement:
                 ).fetchone()
 
                 database_logger.info(
-                    f"Poker data for User: {'found' if exists else 'not found'}."
+                    f"User ID: {user_id} poker data "
+                    f"{'found' if exists else 'not found'}."
                 )
 
                 return exists is not None
@@ -1094,7 +1145,7 @@ class DatabaseManagement:
         with self.connect() as conn:
             try:
                 database_logger.info(
-                    f"Initialising poker data for User ID: '{user_id}'."
+                    f"Attempting to initialise poker data for User ID: {user_id}."
                 )
 
                 exists = conn.execute(
@@ -1102,7 +1153,9 @@ class DatabaseManagement:
                 ).fetchone()
 
                 if exists:
-                    database_logger.info("User poker data already exists.")
+                    database_logger.info(
+                        f"User ID: {user_id} poker data already exists."
+                    )
                     return True
 
                 conn.execute(
@@ -1114,7 +1167,9 @@ class DatabaseManagement:
                     (json.dumps(generate_range_chart()), user_id),
                 )
 
-                database_logger.info("User poker data initialised.")
+                database_logger.info(
+                    f"User ID: {user_id} poker data initialised successfully."
+                )
                 return True
 
             except sqlite3.Error as error:
@@ -1132,11 +1187,13 @@ class DatabaseManagement:
             user_id (int): The user ID to load.
 
         Returns:
-            dict: All poker data fields plus avg_bet_size, or None on error.
+            dict: All poker data fields plus avg_bet_size or None on error.
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Loading poker data for User ID: '{user_id}'.")
+                database_logger.info(
+                    f"Attempting to load poker data for User ID: {user_id}."
+                )
 
                 row = conn.execute(
                     """
@@ -1159,7 +1216,9 @@ class DatabaseManagement:
                 ).fetchone()
 
                 if not row:
-                    database_logger.warning("User not found in poker data.")
+                    database_logger.warning(
+                        f"User ID: {user_id} not found in poker data."
+                    )
                     return None
 
                 record = dict(row)
@@ -1182,7 +1241,7 @@ class DatabaseManagement:
                     record["call_when_weak"] = 0.5
 
                 database_logger.info(
-                    f"Poker data for User ID: '{user_id}' loaded successfully."
+                    f"User ID: {user_id} poker data loaded successfully."
                 )
 
                 return record
@@ -1204,7 +1263,9 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Updating player range for User ID: '{user_id}'.")
+                database_logger.info(
+                    f"Attempting to update player range for User ID: {user_id}."
+                )
 
                 conn.execute(
                     """
@@ -1215,7 +1276,9 @@ class DatabaseManagement:
                     (json.dumps(player_range), user_id),
                 )
 
-                database_logger.info("User player range updated.")
+                database_logger.info(
+                    f"User ID: {user_id} player range updated successfully."
+                )
                 return True
 
             except (sqlite3.Error, json.JSONDecodeError) as error:
@@ -1238,8 +1301,8 @@ class DatabaseManagement:
         Args:
             user_id (int): The acting user's ID.
             round_number (int): The hand/round identifier.
-            street (str): 'preflop', 'flop', 'turn', or 'river'.
-            action (str): 'fold', 'call', or 'raise'.
+            street (str): 'preflop', 'flop', 'turn' or 'river'.
+            action (str): 'fold', 'call' or 'raise'.
             bet_size (float): Amount bet or raised.
             pot_size (float): Total pot at the time of the action.
 
@@ -1248,7 +1311,9 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Logging action for User ID: '{user_id}'.")
+                database_logger.info(
+                    f"Attempting to log action for User ID: {user_id}."
+                )
 
                 conn.execute(
                     """
@@ -1259,7 +1324,7 @@ class DatabaseManagement:
                     (user_id, round_number, street, action, bet_size, pot_size),
                 )
 
-                database_logger.info("Action logged for User.")
+                database_logger.info(f"User ID: {user_id} action logged successfully.")
                 return True
 
             except sqlite3.Error as error:
@@ -1279,7 +1344,9 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Resolving actions for User ID: '{user_id}'.")
+                database_logger.info(
+                    f"Attempting to resolve actions for User ID: {user_id}."
+                )
 
                 conn.execute(
                     """
@@ -1290,7 +1357,9 @@ class DatabaseManagement:
                     (user_id, round_number),
                 )
 
-                database_logger.info("User actions resolved.")
+                database_logger.info(
+                    f"User ID: {user_id} actions resolved successfully."
+                )
                 return True
 
             except sqlite3.Error as error:
@@ -1326,7 +1395,7 @@ class DatabaseManagement:
         with self.connect() as conn:
             try:
                 database_logger.info(
-                    f"Updating hand statistics for User ID: '{user_id}'."
+                    f"Attempting to update hand statistics for User ID: {user_id}."
                 )
 
                 conn.execute(
@@ -1354,7 +1423,9 @@ class DatabaseManagement:
 
                 self.recalculate_frequencies(conn, user_id)
 
-                database_logger.info("User hand statistics updated.")
+                database_logger.info(
+                    f"User ID: {user_id} hand statistics updated successfully."
+                )
                 return True
 
             except sqlite3.Error as error:
@@ -1371,7 +1442,9 @@ class DatabaseManagement:
             user_id (int): The user ID to recalculate for.
         """
         try:
-            database_logger.info(f"Recalculating frequencies for User ID: '{user_id}'.")
+            database_logger.info(
+                f"Attempting to recalculate frequencies for User ID: {user_id}."
+            )
 
             row = conn.execute(
                 """
@@ -1394,7 +1467,9 @@ class DatabaseManagement:
                 (vpip, pfr, user_id),
             )
 
-            database_logger.info("User frequencies recalculated.")
+            database_logger.info(
+                f"User ID: {user_id} frequencies recalculated successfully."
+            )
 
         except sqlite3.Error as error:
             database_logger.exception(f"'recalculate_frequencies' error. {error}")
@@ -1407,12 +1482,12 @@ class DatabaseManagement:
             user_id (int): The user ID to retrieve statistics for.
 
         Returns:
-            dict: Statistics dictionary, or None if not found.
+            dict: Statistics dictionary or None if not found.
         """
         with self.connect() as conn:
             try:
                 database_logger.info(
-                    f"Fetching player statistics for User ID: '{user_id}'."
+                    f"Attempting to fetch player statistics for User ID: {user_id}."
                 )
 
                 row = conn.execute(
@@ -1433,7 +1508,9 @@ class DatabaseManagement:
                 rounds = max(1, statistics["rounds_played"])
                 statistics["avg_bet_size"] = statistics["total_bets"] / rounds
 
-                database_logger.info("User player statistics fetched.")
+                database_logger.info(
+                    f"User ID: {user_id} player statistics fetched successfully."
+                )
                 return statistics
 
             except sqlite3.Error as error:
@@ -1444,15 +1521,15 @@ class DatabaseManagement:
         """
         Retrieves the tournament wins for all users.
 
-        Args:
-            user_id (int): The user ID to query.
-
         Returns:
-            dict: {'tournament_wins': int}, or None if not found.
+            list: List of dicts with 'user_id' and 'tournament_wins', or None on error.
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Fetching tournament scores for all users.")
+                database_logger.info(
+                    "Attempting to fetch tournament scores for all users."
+                )
+
                 row = conn.execute(
                     """
                     SELECT user_id, tournament_wins
@@ -1460,7 +1537,7 @@ class DatabaseManagement:
                     """,
                 ).fetchall()
 
-                database_logger.info("User tournament scores fetched.")
+                database_logger.info("Tournament scores fetched successfully.")
                 return [
                     {"user_id": r["user_id"], "tournament_wins": r["tournament_wins"]}
                     for r in row
@@ -1482,8 +1559,12 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
+                database_logger.info(
+                    f"Attempting to update tournament wins for User ID: {user_id}."
+                )
+
                 conn.execute(
-                    f"""
+                    """
                     UPDATE user_poker_data
                     SET tournament_wins = tournament_wins + 1, last_updated = CURRENT_TIMESTAMP
                     WHERE user_id = ?
@@ -1491,7 +1572,9 @@ class DatabaseManagement:
                     (user_id,),
                 )
 
-                database_logger.info("Updated tournament_wins.")
+                database_logger.info(
+                    f"User ID: {user_id} tournament wins updated successfully."
+                )
                 return True
 
             except sqlite3.Error as error:
@@ -1529,12 +1612,10 @@ def fetch_text_styles(root):
         "subheading": font.Font(
             root=root, family="Bodoni 72 Smallcaps", size=30, weight="bold"
         ),
+        "rules": font.Font(root=root, family="Helvetica", size=20, weight="bold"),
         "text": font.Font(root=root, family="Verdana", size=26),
         "button": font.Font(root=root, family="Tahoma", size=22, weight="bold"),
         "label": font.Font(root=root, family="Didot", size=20),
-        "terms_and_conditions": font.Font(
-            root=root, family="American Typewriter", size=26
-        ),  # or Snell Roundhand
         "emphasis": font.Font(
             root=root, family="Georgia", size=16, weight="bold", slant="italic"
         ),
@@ -1552,7 +1633,7 @@ CS = {
     "admin": "#BB756D",
     "casino": "#1F6053",
     "rules": "#000000",
-    # Label, entry and button backgrounds.
+    # Labels, entrys and buttons.
     "label_bg": "#D7CBB4",
     "label_text": "#000000",
     "entry_bg": "#FDFEFE",
@@ -1589,7 +1670,9 @@ CS = {
     "tournament_bg": "#4A1E38",
     "tournament_fg": "#E8B8D0",
     # Misc.
-    "table_even": "#000000",
+    "correct": "#13DF00",
+    "error": "#FF0000",
+    "table_even": "#0C0C0C",
     "table_odd": "#364DE2",
     "separator": "#888888",
     "round_label_bg": "#1A5276",
@@ -1605,8 +1688,7 @@ DELAY = 1.5
 
 def create_window(root, title, bg_color, is_main_frame=False):
     """
-    Creates and configures a standardised Tkinter window with consistent
-    styling.
+    Creates and configures a standardised Tkinter window.
 
     Args:
         root (Tk or Toplevel): The Tkinter root window to configure.
@@ -1774,7 +1856,7 @@ def linear_search(array, key, value):
         value (any): The value to search for.
 
     Returns:
-        int: Index of the first matching element, or -1 if not found.
+        int: Index of the first matching element or -1 if not found.
     """
     for index in range(len(array)):
         if array[index].get(key) == value:
@@ -1813,31 +1895,6 @@ def bubble_sort(array, key, reverse):
         if not swapped:  # No swaps means the array is already sorted.
             break
     return array
-
-
-def binary_search_by_id(array, target_id):
-    """
-    Binary search on a list of dictionaries sorted ascending by 'user_id'.
-    Time complexity: O(log n). List must be sorted first.
-
-    Args:
-        array (list): List of dictionaries sorted by 'user_id' ascending.
-        target_id (int): The user_id to find.
-
-    Returns:
-        int: Index of the matching element, or -1 if not found.
-    """
-    low, high = 0, len(array) - 1
-    while low <= high:
-        mid = (low + high) // 2
-        mid_id = array[mid].get("user_id", -1)
-        if mid_id == target_id:
-            return mid  # Target found.
-        elif mid_id < target_id:
-            low = mid + 1  # Target is in the upper half.
-        else:
-            high = mid - 1  # Target is in the lower half.
-    return -1
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1921,7 +1978,7 @@ class EncryptionSoftware:
         Generates a 2048-bit RSA keypair and saves both the private and public
         keys as PEM files to a user-selected directory. Filenames include a
         timestamp in DD-Month-YYYY format. Displays a success message with the
-        saved file paths, or an error message if generation or saving fails.
+        saved file paths or an error message if generation or saving fails.
         """
         save_dir = filedialog.askdirectory(title="Select folder to save RSA keys")
         if not save_dir:
@@ -1960,7 +2017,7 @@ class EncryptionSoftware:
         RSA public key through PKCS1-OAEP and saves the encrypted result as a
         binary file to a user-selected directory. The filename includes a
         timestamp in DD-Month-YYYY format. Displays a success message with the
-        saved file path, or an error message on failure.
+        saved file path or an error message on failure.
         """
         rsa_pub_file = filedialog.askopenfilename(
             title="Select RSA Public Key",
@@ -2005,7 +2062,7 @@ class EncryptionSoftware:
         Prompts the user to select an RSA private key file and an encrypted AES
         key file and then decrypts the AES key using PKCS1-OAEP and stores it in
         memory as self.aes_key. The loaded key is used for subsequent encrypt
-        and decrypt operations. Displays a success message on completion, or an
+        and decrypt operations. Displays a success message on completion or an
         error message if decryption fails.
         """
         rsa_private_file = filedialog.askopenfilename(
@@ -2045,7 +2102,7 @@ class EncryptionSoftware:
         mode. The encrypted output is saved to the same location with a .enc
         extension appended. The file contains the nonce, authentication tag and
         ciphertext concatenated in that order. Displays a warning if no AES key
-        is loaded, a success message with the output path on completion, or an
+        is loaded, a success message with the output path on completion or an
         error message on failure.
         """
         if not self.aes_key:
@@ -2088,9 +2145,9 @@ class EncryptionSoftware:
         in EAX mode. Reads the nonce, authentication tag and ciphertext from
         the file, verifies the authentication tag and writes the decrypted
         plaintext to disk. The output path is the input path with the .enc
-        extension removed, or with .dec appended if the file does not end in
+        extension removed or with .dec appended if the file does not end in
         .enc. Displays a warning if no AES key is loaded, a success message
-        with the output path on completion, or an error message if decryption
+        with the output path on completion or an error message if decryption
         or tag verification fails.
         """
         if not self.aes_key:
@@ -2173,7 +2230,6 @@ def hash_function(string):
 def verify_hash(stored_string, input_string):
     """
     Verifies a plaintext string against a stored PBKDF2-HMAC-SHA256 hash.
-    Uses a constant-time comparison to prevent timing attacks.
 
     Args:
         stored_string (str): The previously stored hash string in the format
@@ -2201,11 +2257,60 @@ def verify_hash(stored_string, input_string):
     return hmac.compare_digest(input_hash, stored_hash)
 
 
+PASSWORD_CRITERIA = [
+    # (description_string, rule_function) pair
+    (
+        "At least 8 characters",
+        lambda pwd: len(pwd) >= 8,
+    ),
+    (
+        "At least one uppercase letter (A–Z)",
+        lambda pwd: any(char.isupper() for char in pwd),
+    ),
+    (
+        "At least one lowercase letter (a–z)",
+        lambda pwd: any(char.islower() for char in pwd),
+    ),
+    (
+        "At least one digit (0–9)",
+        lambda pwd: any(char.isdigit() for char in pwd),
+    ),
+    (
+        "At least one special character (!@#$%^&* etc.)",
+        lambda pwd: any(not char.isalnum() for char in pwd),
+    ),
+]
+
+
+def validate_password(password):
+    """
+    Checks a plaintext password against every rule in PASSWORD_CRITERIA.
+
+    Args:
+        password (str): The password to validate.
+
+    Returns:
+        tuple[bool, list[str]]:
+            - passed (bool): True only when every rule is satisfied.
+            - failures (list[str]): Descriptions of rules that were not met.
+              Empty when passed is True.
+    """
+    failures = [
+        description for description, rule in PASSWORD_CRITERIA if not rule(password)
+    ]
+    return (len(failures) == 0), failures
+
+
 def passwords_confirmation(frame, root):
     """
     Opens a modal Toplevel dialog prompting the user to enter and confirm a
-    new password. The dialog cannot be closed through the window manager's close
-    button; the user must submit or cancel explicitly.
+    new password. The dialog cannot be closed through the window manager's
+    close button; the user must submit or cancel explicitly.
+
+    A requirements checklist is displayed beneath the first entry field
+    and updates on every keystroke. Each rule is drawn from PASSWORD_CRITERIA
+    so the displayed criteria always match the enforced criteria. The Submit
+    button is kept disabled until all rules pass and both fields match.
 
     Args:
         frame: The parent widget used to position the Toplevel window.
@@ -2214,10 +2319,10 @@ def passwords_confirmation(frame, root):
 
     Returns:
         dict: A dictionary with two keys:
-              - 'confirmed' (bool): True if the user submitted matching
-                non-empty passwords, False otherwise.
+              - 'confirmed' (bool): True if the user submitted a password that
+                satisfies PASSWORD_CRITERIA and whose confirmation field matches.
               - 'password' (str or None): The confirmed password string, or
-                None if the dialog was cancelled or passwords did not match.
+                None if the dialog was cancelled or validation failed.
     """
     styles = fetch_text_styles(root)
 
@@ -2231,58 +2336,115 @@ def passwords_confirmation(frame, root):
     preset_label(
         password_window,
         text="Enter password:",
-        font=styles["text"],
-        bg=CS["pwd_prompt"],
-    ).pack(pady=5)
+    ).pack(pady=(10, 2))
 
     password_entry_1 = preset_entry(password_window, show="*", width=30)
-    password_entry_1.pack(pady=5)
+    password_entry_1.pack(pady=(0, 4))
+
+    rule_labels = []
+    for description, _ in PASSWORD_CRITERIA:
+        label = preset_label(
+            password_window,
+            text=f"Needs: {description}",
+            fg=CS["error"],
+            font=styles["emphasis"],
+            justify="center",
+        )
+        label.pack(pady=1)
+        rule_labels.append(label)
 
     preset_label(
         password_window,
         text="Confirm password:",
-        font=styles["text"],
-        bg=CS["pwd_prompt"],
-    ).pack(pady=5)
+    ).pack(pady=(4, 2))
 
     password_entry_2 = preset_entry(password_window, show="*", width=30)
-    password_entry_2.pack(pady=5)
+    password_entry_2.pack(pady=(0, 6))
+
+    button_frame = Frame(password_window)
+    button_frame.pack(pady=10)
+
+    submit_button = preset_button(
+        button_frame,
+        text="Submit",
+        state="disabled",
+    )
+    submit_button.pack(side="left", padx=5)
+
+    def refresh_checklist(*_):
+        """
+        Called on every keystroke in either entry field.
+
+        Re-evaluates PASSWORD_CRITERIA against the current first-field value,
+        updates each rule label's text and colour, and enables or disables
+        the Submit button depending on whether all rules pass and both fields
+        are identical.
+        """
+        candidate = password_entry_1.get()
+        _, failures = validate_password(candidate)
+        failure_set = set(failures)
+
+        for label, (description, _) in zip(rule_labels, PASSWORD_CRITERIA):
+            if description in failure_set:
+                label.config(text=f"Needs: {description}", fg=CS["error"])
+            else:
+                label.config(text=f"Requirement fulfilled.", fg=CS["correct"])
+
+        all_rules_pass = len(failures) == 0
+        passwords_match = candidate == password_entry_2.get() and bool(candidate)
+
+        submit_button.config(
+            state="normal" if (all_rules_pass and passwords_match) else "disabled"
+        )
+
+    password_entry_1.bind("<KeyRelease>", refresh_checklist)
+    password_entry_2.bind("<KeyRelease>", refresh_checklist)
 
     def validate_passwords():
         """
-        Validates that both password fields are non-empty and identical.
-        On success, updates the shared password dict and closes the dialog.
-        On failure, displays an error message inside the dialog.
+        Final check on Submit. Validates the policy and match a second time
+        then updates the shared password dict and closes the dialog.
         """
         password_1 = password_entry_1.get().strip()
         password_2 = password_entry_2.get().strip()
 
-        if password_1 and password_1 == password_2:
-            password["confirmed"] = True
-            password["password"] = password_1
-            password_window.destroy()
-        else:
+        passed, failures = validate_password(password_1)
+
+        if not password_1:
             messagebox.showerror(
                 "Error",
-                "Passwords do not match or are empty. Please try again.",
+                "Password cannot be empty.",
                 parent=password_window,
             )
+            return
 
-    def cancel_password():
-        """
-        Closes the password dialog without confirming, leaving the shared
-        password dict in its default unconfirmed state.
-        """
+        if not passed:
+            messagebox.showerror(
+                "Password Requirements Not Met",
+                "Your password does not meet the following requirements:\n\n"
+                + "\n".join(f"• {f}" for f in failures),
+                parent=password_window,
+            )
+            return
+
+        if password_1 != password_2:
+            messagebox.showerror(
+                "Error",
+                "Passwords do not match. Please try again.",
+                parent=password_window,
+            )
+            return
+
+        password["confirmed"] = True
+        password["password"] = password_1
         password_window.destroy()
 
-    button = Frame(password_window)
-    button.pack(pady=10)
+    submit_button.config(command=validate_passwords)
 
-    preset_button(button, text="Submit", command=validate_passwords).pack(
-        side="left", padx=5
-    )
+    def cancel_password():
+        password_window.destroy()
 
-    preset_button(button, text="Cancel", command=cancel_password).pack(
+    preset_button(button_frame, text="Cancel", command=cancel_password).pack(
         side="left", padx=5
     )
 
@@ -2299,7 +2461,7 @@ def passwords_confirmation(frame, root):
 class BaseInterface:
     """
     Base class for all top-level Tkinter interface windows.
-    Handles common setup tasks and defines the contract for subclasses.
+    Handles common setup tasks.
       - Creates and configures the Tk root window.
       - Stores self.window_bg, self.styles, self.main_frame.
       - Instantiates self.dbm (DatabaseManagement).
@@ -2324,10 +2486,10 @@ class BaseInterface:
     def startup(self):
         """
         Returns the view method that should be shown immediately after
-        the window opens. Subclasses should override this method.
+        the window opens.
 
         Returns:
-            callable: A bound method that accepts a Frame argument, or None if not overridden.
+            callable: A bound method that accepts a Frame argument or None if not overridden.
         """
         return None
 
@@ -2335,11 +2497,6 @@ class BaseInterface:
         """
         Builds the window, sets up shared state, navigates to the first
         view and starts the mainloop.
-
-        Subclasses that need additional setup (e.g. CasinoInterface
-        accepting constructor arguments) should do that work before
-        calling super().__init__(), or override __init__ and call
-        super().__init__() at the end once their own state is ready.
         """
         self.window_bg = CS[self.WINDOW_BG_KEY]
 
@@ -2373,7 +2530,7 @@ class BaseInterface:
     def on_close(self):
         """
         Default window-close handler: stops the mainloop and exits the
-        process. Subclasses may override this for custom behaviour.
+        process.
         """
         self.interface_root.quit()
         sys.exit(0)
@@ -2438,7 +2595,7 @@ class AdminInterface(BaseInterface):
     def interface_menu(self, frame):
         """
         Renders the main administrator navigation menu with options to access
-        the Admin Console, the Casino Interface, or exit the application.
+        the Admin Console, the Casino Interface or exit the application.
         Also logs the administrator login event to the database.
 
         Args:
@@ -2605,7 +2762,7 @@ class AdminConsole(BaseInterface):
 
                     preset_button(
                         frame,
-                        text="next",
+                        text="Next",
                         width=25,
                         command=submit,
                     ).pack(pady=10)
@@ -2644,7 +2801,7 @@ class AdminConsole(BaseInterface):
     def show_database_management(self, frame):
         """
         Renders the database management submenu with options to create or
-        delete the database, view table contents, or return to the main menu.
+        delete the database, view table contents or return to the main menu.
 
         Args:
             frame (Frame): The parent frame to build the view into.
@@ -2941,7 +3098,7 @@ class AdminConsole(BaseInterface):
 
     def fetch_user_record(self, frame):
         """
-        Renders a search form allowing lookup by user ID, username, or both.
+        Renders a search form allowing lookup by user ID, username or both.
         When both are provided, verifies that they refer to the same user
         before proceeding. Navigates to the record display view on a
         successful lookup.
@@ -2967,7 +3124,7 @@ class AdminConsole(BaseInterface):
             Resolves the entered user ID and/or username to a full user record.
             Validates cross-referencing when both are provided and then navigates
             to the record display view. Shows appropriate errors for mismatches,
-            non-numeric IDs, or missing users.
+            non-numeric IDs or missing users.
             """
             if user_id_entry.get().strip() and username_entry.get().strip():
                 user_id = user_id_entry.get().strip()
@@ -2982,7 +3139,7 @@ class AdminConsole(BaseInterface):
                             "Error", "User ID and Username do not match."
                         )
                         return
-                    record = self.dbm.fetch_user_full_record(user_id=int(user_id))
+                    record = self.dbm.fetch_user_record(user_id=int(user_id))
                     if not record:
                         messagebox.showinfo("Not Found", "User not found.")
                         return
@@ -2994,7 +3151,7 @@ class AdminConsole(BaseInterface):
             elif user_id_entry.get().strip():
                 user_id = user_id_entry.get().strip()
                 if user_id.isdigit():
-                    record = self.dbm.fetch_user_full_record(user_id=int(user_id))
+                    record = self.dbm.fetch_user_record(user_id=int(user_id))
                     if not record:
                         messagebox.showinfo("Not Found", "User not found.")
                         return
@@ -3005,7 +3162,7 @@ class AdminConsole(BaseInterface):
 
             elif username_entry.get().strip():
                 username = username_entry.get().strip()
-                record = self.dbm.fetch_user_full_record(username=username)
+                record = self.dbm.fetch_user_record(username=username)
                 if not record:
                     messagebox.showinfo("Not Found", "User not found.")
                     return
@@ -3038,7 +3195,7 @@ class AdminConsole(BaseInterface):
         Args:
             frame (Frame): The parent frame to build the view into.
             record (dict): The user record dictionary as returned by
-                           fetch_user_full_record().
+                           fetch_user_record().
         """
         preset_label(
             frame,
@@ -3111,7 +3268,7 @@ class AdminConsole(BaseInterface):
         """
         Presents a choice between creating a registered account (with password)
         or a temporary guest account (without password). Navigates to password
-        creation for registered accounts, or creates the guest account
+        creation for registered accounts or creates the guest account
         immediately and returns to user management.
 
         Args:
@@ -3186,7 +3343,7 @@ class AdminConsole(BaseInterface):
     def edit_user(self, frame):
         """
         Renders a search form for locating a user to edit, accepting a user ID,
-        username, or both. Cross-validates when both are provided. Navigates to
+        username or both. Cross-validates when both are provided. Navigates to
         the edit form on a successful lookup.
 
         Args:
@@ -3210,7 +3367,7 @@ class AdminConsole(BaseInterface):
             """
             Resolves the entered user ID and/or username to a full user record,
             cross-validating when both are provided and then navigates to the edit
-            form. Shows appropriate errors for mismatches, non-numeric IDs, or
+            form. Shows appropriate errors for mismatches, non-numeric IDs or
             missing users.
             """
             if user_id_entry.get().strip() and username_entry.get().strip():
@@ -3227,7 +3384,7 @@ class AdminConsole(BaseInterface):
                         )
                         return
 
-                    record = self.dbm.fetch_user_full_record(user_id=int(user_id))
+                    record = self.dbm.fetch_user_record(user_id=int(user_id))
 
                     if not record:
                         messagebox.showinfo("Not Found", "User not found.")
@@ -3242,7 +3399,7 @@ class AdminConsole(BaseInterface):
             elif user_id_entry.get().strip():
                 user_id = user_id_entry.get().strip()
                 if user_id.isdigit():
-                    record = self.dbm.fetch_user_full_record(user_id=int(user_id))
+                    record = self.dbm.fetch_user_record(user_id=int(user_id))
 
                     if not record:
                         messagebox.showinfo("Not Found", "User not found.")
@@ -3259,7 +3416,7 @@ class AdminConsole(BaseInterface):
                     messagebox.showerror("Error", "No input provided.")
                     return
 
-                record = self.dbm.fetch_user_full_record(username=username)
+                record = self.dbm.fetch_user_record(username=username)
 
                 if not record:
                     messagebox.showinfo("Not Found", "User not found.")
@@ -3546,7 +3703,7 @@ class CasinoInterface(BaseInterface):
         cannot be fetched.
 
         Returns:
-            int: Rounds played, or 0 on failure / admin session.
+            int: Rounds played or 0 on failure / admin session.
         """
         if self.user_data.get("administrator"):
             # Administrators are never blocked by the rounds threshold.
@@ -3567,7 +3724,7 @@ class CasinoInterface(BaseInterface):
         Retrieves the player's total tournament wins from the database.
 
         Returns:
-            int: The number of tournament wins, or 0 if no data exists or the user is not signed in.
+            int: The number of tournament wins or 0 if no data exists or the user is not signed in.
         """
         user_id = self.user_data.get("user_id")
         if not user_id:
@@ -3582,7 +3739,7 @@ class CasinoInterface(BaseInterface):
     def casino_menu(self, frame):
         """
         Displays the main casino menu. Displays a sign-in prompt if no user
-        is logged in, or a personalised welcome message if one is.
+        is logged in or a personalised welcome message if one is.
 
         Game Menu and Game Settings buttons are disabled with an explanatory
         note when no account is linked.  All other buttons are always active.
@@ -3910,7 +4067,7 @@ class CasinoInterface(BaseInterface):
             set_view(self, self.casino_menu)
             return
 
-        record = self.dbm.fetch_user_full_record(username=self.user_data["username"])
+        record = self.dbm.fetch_user_record(username=self.user_data["username"])
         if not record:
             messagebox.showinfo("Not Found", "User record not found.")
             return
@@ -4379,25 +4536,6 @@ class CasinoInterface(BaseInterface):
             ]  # Filter out players with no score.
             ranked = bubble_sort(candidates, key="tournament_wins", reverse=True)
 
-            # Use binary_search_by_id for the username lookup.
-            sorted_by_id = bubble_sort(
-                player_data, key="user_id", reverse=False
-            )  # Ensure data is sorted by user_id for binary search.
-            for entry in ranked:
-                index = binary_search_by_id(sorted_by_id, entry["user_id"])
-                if index != -1:
-                    try:
-                        result = self.dbm.fetch_username(sorted_by_id[index]["user_id"])
-                        username = (
-                            result["username"]
-                            if result["found"]
-                            else f"User {entry['user_id']}"
-                        )
-                    except Exception:
-                        username = f"User {entry['user_id']}"
-                else:
-                    username = f"User {entry['user_id']}"
-
             for index, entry in enumerate(ranked, 1):
                 try:
                     result = self.dbm.fetch_username(entry["user_id"])
@@ -4535,7 +4673,7 @@ class ShowGameRules:
         \t*2nd stage is called the 'Turn'.
         \t*3rd stage is called the 'River'.
         Your goal is to construct your five-card poker hands using the best available five cards out of the seven total cards (your two hole cards and the five community cards).
-        You can do that by using both your hole cards in combination with three community cards, one hole card in combination with four community cards, or no hole cards.
+        You can do that by using both your hole cards in combination with three community cards, one hole card in combination with four community cards or no hole cards.
         If the cards on the table lead to a better combination, you can also play all five community cards and forget about yours.
         In a game of Texas hold'em you can do whatever works to make the best five-card hand.
         If the betting causes all but one player to fold, the lone remaining player wins the pot without having to show any cards.
@@ -4556,19 +4694,19 @@ class ShowGameRules:
         \t*Raise: increase the bet within the specific limits of the game
         \t*Fold: throw the hand away. If the player chooses to fold, they are out of the game and no longer eligible to win the current hand
         \tThe amount a player can raise to depends on the game that is being played. This setting can be changed depending on what you choose to play.
-        \tAfter the first player acts, the play proceeds down the list with each player also having the same three options — to call, to raise, or fold.
+        \tAfter the first player acts, the play proceeds down the list with each player also having the same three options — to call, to raise or fold.
         \tOnce the last bet is called and the action is 'closed', the preflop round is over and play moves on to the flop.
         *The Flop:
         \tAfter the first preflop betting round has been completed, the first three community cards are dealt and a second betting round follows involving only the players who have not folded already.
         \tIn this betting round (and subsequent ones), the action starts with the first active player to the left of the button.
-        \tAlong with the options to bet, call, fold, or raise, a player now has the option to 'check' if no betting action has occurred beforehand. A check simply means to pass the action to the next player in the hand.
+        \tAlong with the options to bet, call, fold or raise, a player now has the option to 'check' if no betting action has occurred beforehand. A check simply means to pass the action to the next player in the hand.
         \tAgain betting continues until the last bet or raise has been called (which closes the action). It also can happen that every player simply chooses not to bet and checks around the 'table', which also ends the betting round.
         *The Turn:
         \tThe fourth community card, called the turn, is dealt face-up following all betting action on the flop.
-        \tOnce this has been completed, another round of betting occurs, similar to that on the previous round of play. Again players have the option to check, bet, call, fold, or raise.
+        \tOnce this has been completed, another round of betting occurs, similar to that on the previous round of play. Again players have the option to check, bet, call, fold or raise.
         *The River:
         \tThe fifth community card, called the river, is dealt face-up following all betting action on the turn.
-        \tOnce this has been completed, another round of betting occurs, similar to what took play on the previous round of play. Once more the remaining players have the option to options to check, bet, call, fold, or raise.
+        \tOnce this has been completed, another round of betting occurs, similar to what took play on the previous round of play. Once more the remaining players have the option to options to check, bet, call, fold or raise.
         \tAfter all betting action has been completed, the remaining players in the hand with hole cards now expose their holdings to determine a winner. This is called the showdown.
         *The Showdown:
         \tThe remaining players show their hole cards and with the assistance of the dealer, a winning hand is determined.
@@ -4637,7 +4775,7 @@ class ShowGameRules:
         text_area = scrolledtext.ScrolledText(
             window,
             wrap=WORD,
-            font=self.styles["terms_and_conditions"],
+            font=self.styles["rules"],
             background=bg,
         )
         text_area.pack(expand=True, fill=BOTH, padx=10)
@@ -4714,13 +4852,13 @@ class CasinoDeckManager:
         """
         Draws n cards from the deck. If the deck has fewer than n cards
         remaining, resets and reshuffles the deck before drawing. Returns a
-        single card integer when n=1, or a list of card integers when n>1.
+        single card integer when n=1 or a list of card integers when n>1.
 
         Args:
             n (int): The number of cards to draw. Defaults to 1.
 
         Returns:
-            int or list[int]: A single treys card integer if n=1, or a list
+            int or list[int]: A single treys card integer if n=1 or a list
                               of treys card integers if n>1.
         """
         if self.remaining() < n:
@@ -5192,7 +5330,7 @@ class WhiteJoe:
             """
             Updates the current bet by the given amount, clamping the result
             between 0 and the player's current balance. Updates bet_var,
-            the current-bet label, and the Start Round button state.
+            the current-bet label and the Start Round button state.
             """
             try:
                 current_value = int(self.bet_var.get())
@@ -5373,7 +5511,7 @@ class WhiteJoe:
                     else (
                         CS["loss_fg"]
                         if is_loss
-                        else (CS["tie_bg"] if is_push else CS["log_fg"])
+                        else (CS["tie_fg"] if is_push else CS["log_fg"])
                     )
                 )
             ),
@@ -5397,7 +5535,7 @@ class WhiteJoe:
         None. Returns 0 as a fallback to prevent arithmetic errors.
 
         Returns:
-            float: The current balance, or 0 if an error occurred.
+            float: The current balance or 0 if an error occurred.
         """
         balance_data = self.dbm.fetch_user_balance(self.user_data["username"])
 
@@ -5908,7 +6046,7 @@ class HumanPokerPlayer:
         then persists the result to the database.
 
         Args:
-            action (str): 'raise', 'call', or 'fold'
+            action (str): 'raise', 'call' or 'fold'
             hand_notation (str): e.g. 'AKs', 'TT'
         """
         if not hand_notation or hand_notation not in self.active_range:
@@ -6236,7 +6374,7 @@ def update_range(chart, action, hand, delta=DEFAULT_DELTA):
     Args:
         chart (dict): Current range chart mapping hand notations to
                       probabilities.
-        action (str): Observed action — 'raise', 'call', or 'fold'.
+        action (str): Observed action — 'raise', 'call' or 'fold'.
         hand (str): Hand notation to update.
         delta (float): Base adjustment magnitude. Defaults to
                        DEFAULT_DELTA (0.05).
@@ -6263,7 +6401,7 @@ def update_range(chart, action, hand, delta=DEFAULT_DELTA):
     if total > 0:
         updated = {h: v / total for h, v in updated.items()}
 
-    return
+    return updated
 
 
 def difficulty_curve(level, low, high):
@@ -6313,7 +6451,7 @@ def describe_hand(player_hand, community_cards):
         community_cards (list[str]): The current community cards.
 
     Returns:
-        str: Hand category (e.g. 'Flush', 'Two Pair'), or 'Unknown' on
+        str: Hand category (e.g. 'Flush', 'Two Pair') or 'Unknown' on
              evaluation failure.
     """
     dm = CasinoDeckManager(game_mode="poker")
@@ -6446,7 +6584,7 @@ def notation_to_cards_with_index(hand_notation, rank_index, dm):
         dm (CasinoDeckManager): The simulation deck manager.
 
     Returns:
-        list[int] or None: Two treys card integers, or None.
+        list[int] or None: Two treys card integers or None.
     """
     if len(hand_notation) == 2:
         cards = rank_index.get(hand_notation[0], [])
@@ -6764,7 +6902,7 @@ def cards_to_notation(player_hand):
 
     Returns:
         str: Notation string — pocket pair (e.g. ''AA''), suited
-             (e.g. ''AKs''), or offsuit (e.g. ''AKo'').
+             (e.g. ''AKs'') or offsuit (e.g. ''AKo'').
     """
     ranks = "23456789TJQKA"
 
@@ -6818,7 +6956,7 @@ def make_decision(
 
     **Step 3 — Premium river hands (difficulty ≥ 85)**
         At the river, if the bot is highly skilled and holds a Straight
-        Flush, Four of a Kind, or Full House with risk tolerance ≥ 1.0 it
+        Flush, Four of a Kind or Full House with risk tolerance ≥ 1.0 it
         raises immediately.
 
     **Step 4 — Pot-odds maths**
@@ -8202,7 +8340,7 @@ class HarrogateHoldEm:
         None. Returns 0 as a fallback to prevent arithmetic errors.
 
         Returns:
-            float: The current balance, or 0 if an error occurred.
+            float: The current balance or 0 if an error occurred.
         """
         balance_data = self.dbm.fetch_user_balance(self.user_data["username"])
 
@@ -8437,7 +8575,7 @@ class HarrogateHoldEm:
         """
         Processes decisions for all players who still need to act on the
         current street. Iterates from current_position, skipping players
-        who have already decided, folded, or are out.
+        who have already decided, folded or are out.
 
         For bot players, launches an asynchronous decision in a background
         thread through start_bot_decision_queue() and returns, resuming when
@@ -8566,7 +8704,7 @@ class HarrogateHoldEm:
             player (dict): The bot player dictionary.
 
         Returns:
-            tuple: One of '("fold",)', '("call",)', or
+            tuple: One of '("fold",)', '("call",)' or
                    '("raise", amount)'.
         """
         model = player["model"]
@@ -8675,7 +8813,7 @@ class HarrogateHoldEm:
         """
         Determines whether the current betting round has concluded.
 
-        Betting is complete when fewer than two active players remain, or
+        Betting is complete when fewer than two active players remain or
         when all active players have the status 'Decided' and each has
         either matched the current bet or has no remaining chips.
 
@@ -9086,7 +9224,7 @@ class HarrogateHoldEm:
     def check_game_over(self):
         """
         Checks whether the game has ended. The game ends if the human
-        player's status is 'OUT' (loss), or if all bots are 'OUT'
+        player's status is 'OUT' (loss) or if all bots are 'OUT'
         (victory).
 
         When balance reaches zero, a message is shown and the player is

@@ -8,8 +8,6 @@ from tkinter import (
     Canvas,
     Scrollbar,
 )
-from typing import cast
-from deck_management import CasinoDeckManager
 from gui_helpers import (
     DELAY,
     CS,
@@ -23,15 +21,15 @@ from gui_helpers import (
 
 class WhiteJoe:
     """
-    Handles all game state, betting logic, card dealing, dealer resolution,
-    and balance management. Supports both regular user and administrator
-    sessions.
+    Handles all game flow, betting logic, card dealing, dealer resolution
+    and logging for WhiteJoe. Runs its own tkinter mainloop and returns to
+    the menu on exit.
     """
 
     def __init__(self, user_data):
         """
-        Initialises the WhiteJoe game window, sets up external resources,
-        initialises game state variables and builds the main game interface.
+        Initialises the WhiteJoe game window, sets up external resources and
+        initialises game state variables.
 
         Args:
             user_data (dict): Dictionary containing at minimum 'username'
@@ -65,7 +63,7 @@ class WhiteJoe:
         # Game state.
         self.player_hand = []
         self.dealer_hand = []
-        self.dealer = "Genghis Khan"
+        self.dealer = "Dealer"
         self.current_bet = 0
         self.round_active = False
 
@@ -89,13 +87,7 @@ class WhiteJoe:
     def admin_modify_bet(self, frame):
         """
         Opens a modal Toplevel dialog that allows the administrator to set
-        a custom starting chip balance. The dialog cannot be dismissed through
-        the window manager — a valid balance must be submitted.
-
-        When called from __init__ (before whitejoe_screen has run) the
-        dialog navigates to whitejoe_screen on submission. When called
-        from check_balance mid-game it only updates the balance label and
-        closes, preserving all active game state.
+        a custom starting balance.
 
         Args:
             frame (Frame or Tk): The parent widget used to anchor the
@@ -126,10 +118,7 @@ class WhiteJoe:
 
         def submit_balance():
             """
-            Validates the balance entry and closes the dialog. If the main
-            game screen has not yet been built, navigates to whitejoe_screen.
-            If the screen is already live, updates the balance label in place
-            without disturbing game state.
+            Validates the balance entry and closes the dialog.
             """
             try:
                 balance = int(balance_entry.get().strip())
@@ -232,7 +221,7 @@ class WhiteJoe:
             """
             Updates the current bet by the given amount, clamping the result
             between 0 and the player's current balance. Updates bet_var,
-            the current-bet label, and the Start Round button state.
+            the current-bet label and the Start Round button state.
             """
             try:
                 current_value = int(self.bet_var.get())
@@ -413,7 +402,7 @@ class WhiteJoe:
                     else (
                         CS["loss_fg"]
                         if is_loss
-                        else (CS["tie_bg"] if is_push else CS["log_fg"])
+                        else (CS["tie_fg"] if is_push else CS["log_fg"])
                     )
                 )
             ),
@@ -437,7 +426,7 @@ class WhiteJoe:
         None. Returns 0 as a fallback to prevent arithmetic errors.
 
         Returns:
-            float: The current balance, or 0 if an error occurred.
+            float: The current balance or 0 if an error occurred.
         """
         balance_data = self.dbm.fetch_user_balance(self.user_data["username"])
 
@@ -452,7 +441,7 @@ class WhiteJoe:
             self.return_to_menu(
                 is_error=True, error=Exception("Fetched balance returns 'None'")
             )
-            return 0  # In order to prevent errors regarding 'None' errors in mathematical operations.
+            return 0  # In order to prevent errors regarding 'None' errors.
 
     def check_balance(self):
         """
@@ -482,7 +471,7 @@ class WhiteJoe:
                 return False
         return True
 
-    def modify_user_balance(self, balance: int):
+    def modify_user_balance(self, balance):
         """
         Updates the user's balance in the database, refreshes the balance
         label in the UI and logs the new balance to the game log.
@@ -504,7 +493,8 @@ class WhiteJoe:
         if self.round_active:
             return
 
-        self.check_balance()
+        if not self.check_balance():
+            return
 
         try:
             bet = int(self.bet_var.get())
@@ -529,6 +519,8 @@ class WhiteJoe:
         self.dealer_hand.clear()
 
         # Create and shuffle a new deck at the start of each round.
+        from deck_management import CasinoDeckManager
+
         self.deck = CasinoDeckManager(shuffle=True, game_mode="blackjack")
         self.log_message(text="The deck is being shuffled...")
 
@@ -540,6 +532,8 @@ class WhiteJoe:
             balance = self.return_balance()
             balance += int(self.current_bet * 2.5)
             self.modify_user_balance(balance)
+            # Prevents a second payout.
+            self.current_bet = 0
             self.end_round(win=True)
             return
 
@@ -568,7 +562,7 @@ class WhiteJoe:
         """
         Draws one card for the player, logs the result and checks for a
         bust. If the player busts, ends the round as a loss. Otherwise logs
-        a prompt to continue. Does nothing if no round is active.
+        a prompt to continue.
         """
         if not self.round_active:
             return
@@ -596,8 +590,7 @@ class WhiteJoe:
 
     def stand(self):
         """
-        Ends the player's turn and triggers dealer resolution. Does nothing
-        if no round is active.
+        Ends the player's turn and triggers dealer resolution.
         """
         if not self.round_active:
             return
@@ -609,9 +602,8 @@ class WhiteJoe:
     def double_down(self):
         """
         Doubles the current bet (deducting the additional amount from the
-        user's balance), draws exactly one card and resolves the dealer.
-        Prevents doubling if the user has insufficient balance. Does nothing
-        if no round is active.
+        user's balance), draws one card and resolves the dealer.
+        Prevents doubling if the user has insufficient balance.
         """
         if not self.round_active:
             return
@@ -662,7 +654,7 @@ class WhiteJoe:
     def surrender(self):
         """
         Ends the current round immediately, returning half the current bet to
-        the user's balance. Does nothing if no round is active.
+        the user's balance.
         """
         if not self.round_active:
             return
@@ -688,8 +680,6 @@ class WhiteJoe:
         Reveals the dealer's hidden card and draws additional cards until the
         dealer's hand value reaches 17 or more. Then compares the final hand
         values to determine the round outcome and calls end_round accordingly.
-        Handles WhiteJoe (natural blackjack on first two cards) as a special
-        winning case paying 2.5x the bet.
         """
         self.log_message(
             text=f"{self.dealer} reveals their hidden card: "
@@ -748,10 +738,6 @@ class WhiteJoe:
         elif loss:
             self.log_message(
                 text="You've lost this round. Better luck next time.", is_loss=True
-            )
-            self.log_message(
-                text="Did you know that most gambling losses are due to chasing "
-                "losses? Remember to gamble responsibly!"
             )
         elif push:
             self.log_message(

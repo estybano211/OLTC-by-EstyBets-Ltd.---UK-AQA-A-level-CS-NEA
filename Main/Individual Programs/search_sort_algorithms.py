@@ -10,7 +10,7 @@ def linear_search(array, key, value):
         value (any): The value to search for.
 
     Returns:
-        int: Index of the first matching element, or -1 if not found.
+        int: Index of the first matching element or -1 if not found.
     """
     for index in range(len(array)):
         if array[index].get(key) == value:
@@ -49,28 +49,3 @@ def bubble_sort(array, key, reverse):
         if not swapped:  # No swaps means the array is already sorted.
             break
     return array
-
-
-def binary_search_by_id(array, target_id):
-    """
-    Binary search on a list of dictionaries sorted ascending by 'user_id'.
-    Time complexity: O(log n). List must be sorted first.
-
-    Args:
-        array (list): List of dictionaries sorted by 'user_id' ascending.
-        target_id (int): The user_id to find.
-
-    Returns:
-        int: Index of the matching element, or -1 if not found.
-    """
-    low, high = 0, len(array) - 1
-    while low <= high:
-        mid = (low + high) // 2
-        mid_id = array[mid].get("user_id", -1)
-        if mid_id == target_id:
-            return mid  # Target found.
-        elif mid_id < target_id:
-            low = mid + 1  # Target is in the upper half.
-        else:
-            high = mid - 1  # Target is in the lower half.
-    return -1

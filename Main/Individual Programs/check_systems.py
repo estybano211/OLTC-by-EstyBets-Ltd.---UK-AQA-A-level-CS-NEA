@@ -2,7 +2,7 @@ import os
 import hashlib
 import hmac
 import binascii
-from tkinter import Entry, Label, Button, Frame, Toplevel, messagebox
+from tkinter import Frame, Toplevel, messagebox
 from gui_helpers import (
     fetch_text_styles,
     CS,
@@ -50,7 +50,6 @@ def hash_function(string):
 def verify_hash(stored_string, input_string):
     """
     Verifies a plaintext string against a stored PBKDF2-HMAC-SHA256 hash.
-    Uses a constant-time comparison to prevent timing attacks.
 
     Args:
         stored_string (str): The previously stored hash string in the format
@@ -78,11 +77,60 @@ def verify_hash(stored_string, input_string):
     return hmac.compare_digest(input_hash, stored_hash)
 
 
+PASSWORD_CRITERIA = [
+    # (description_string, rule_function) pair
+    (
+        "At least 8 characters",
+        lambda pwd: len(pwd) >= 8,
+    ),
+    (
+        "At least one uppercase letter (A–Z)",
+        lambda pwd: any(char.isupper() for char in pwd),
+    ),
+    (
+        "At least one lowercase letter (a–z)",
+        lambda pwd: any(char.islower() for char in pwd),
+    ),
+    (
+        "At least one digit (0–9)",
+        lambda pwd: any(char.isdigit() for char in pwd),
+    ),
+    (
+        "At least one special character (!@#$%^&* etc.)",
+        lambda pwd: any(not char.isalnum() for char in pwd),
+    ),
+]
+
+
+def validate_password(password):
+    """
+    Checks a plaintext password against every rule in PASSWORD_CRITERIA.
+
+    Args:
+        password (str): The password to validate.
+
+    Returns:
+        tuple[bool, list[str]]:
+            - passed (bool): True only when every rule is satisfied.
+            - failures (list[str]): Descriptions of rules that were not met.
+              Empty when passed is True.
+    """
+    failures = [
+        description for description, rule in PASSWORD_CRITERIA if not rule(password)
+    ]
+    return (len(failures) == 0), failures
+
+
 def passwords_confirmation(frame, root):
     """
     Opens a modal Toplevel dialog prompting the user to enter and confirm a
-    new password. The dialog cannot be closed through the window manager's close
-    button; the user must submit or cancel explicitly.
+    new password. The dialog cannot be closed through the window manager's
+    close button; the user must submit or cancel explicitly.
+
+    A requirements checklist is displayed beneath the first entry field
+    and updates on every keystroke. Each rule is drawn from PASSWORD_CRITERIA
+    so the displayed criteria always match the enforced criteria. The Submit
+    button is kept disabled until all rules pass and both fields match.
 
     Args:
         frame: The parent widget used to position the Toplevel window.
@@ -91,10 +139,10 @@ def passwords_confirmation(frame, root):
 
     Returns:
         dict: A dictionary with two keys:
-              - 'confirmed' (bool): True if the user submitted matching
-                non-empty passwords, False otherwise.
+              - 'confirmed' (bool): True if the user submitted a password that
+                satisfies PASSWORD_CRITERIA and whose confirmation field matches.
               - 'password' (str or None): The confirmed password string, or
-                None if the dialog was cancelled or passwords did not match.
+                None if the dialog was cancelled or validation failed.
     """
     styles = fetch_text_styles(root)
 
@@ -108,58 +156,115 @@ def passwords_confirmation(frame, root):
     preset_label(
         password_window,
         text="Enter password:",
-        font=styles["text"],
-        bg=CS["pwd_prompt"],
-    ).pack(pady=5)
+    ).pack(pady=(10, 2))
 
     password_entry_1 = preset_entry(password_window, show="*", width=30)
-    password_entry_1.pack(pady=5)
+    password_entry_1.pack(pady=(0, 4))
+
+    rule_labels = []
+    for description, _ in PASSWORD_CRITERIA:
+        label = preset_label(
+            password_window,
+            text=f"Needs: {description}",
+            fg=CS["error"],
+            font=styles["emphasis"],
+            justify="center",
+        )
+        label.pack(pady=1)
+        rule_labels.append(label)
 
     preset_label(
         password_window,
         text="Confirm password:",
-        font=styles["text"],
-        bg=CS["pwd_prompt"],
-    ).pack(pady=5)
+    ).pack(pady=(4, 2))
 
     password_entry_2 = preset_entry(password_window, show="*", width=30)
-    password_entry_2.pack(pady=5)
+    password_entry_2.pack(pady=(0, 6))
+
+    button_frame = Frame(password_window)
+    button_frame.pack(pady=10)
+
+    submit_button = preset_button(
+        button_frame,
+        text="Submit",
+        state="disabled",
+    )
+    submit_button.pack(side="left", padx=5)
+
+    def refresh_checklist(*_):
+        """
+        Called on every keystroke in either entry field.
+
+        Re-evaluates PASSWORD_CRITERIA against the current first-field value,
+        updates each rule label's text and colour, and enables or disables
+        the Submit button depending on whether all rules pass and both fields
+        are identical.
+        """
+        candidate = password_entry_1.get()
+        _, failures = validate_password(candidate)
+        failure_set = set(failures)
+
+        for label, (description, _) in zip(rule_labels, PASSWORD_CRITERIA):
+            if description in failure_set:
+                label.config(text=f"Needs: {description}", fg=CS["error"])
+            else:
+                label.config(text=f"Requirement fulfilled.", fg=CS["correct"])
+
+        all_rules_pass = len(failures) == 0
+        passwords_match = candidate == password_entry_2.get() and bool(candidate)
+
+        submit_button.config(
+            state="normal" if (all_rules_pass and passwords_match) else "disabled"
+        )
+
+    password_entry_1.bind("<KeyRelease>", refresh_checklist)
+    password_entry_2.bind("<KeyRelease>", refresh_checklist)
 
     def validate_passwords():
         """
-        Validates that both password fields are non-empty and identical.
-        On success, updates the shared password dict and closes the dialog.
-        On failure, displays an error message inside the dialog.
+        Final check on Submit then updates the shared password dict
+        and closes the dialog.
         """
         password_1 = password_entry_1.get().strip()
         password_2 = password_entry_2.get().strip()
 
-        if password_1 and password_1 == password_2:
-            password["confirmed"] = True
-            password["password"] = password_1
-            password_window.destroy()
-        else:
+        passed, failures = validate_password(password_1)
+
+        if not password_1:
             messagebox.showerror(
                 "Error",
-                "Passwords do not match or are empty. Please try again.",
+                "Password cannot be empty.",
                 parent=password_window,
             )
+            return
 
-    def cancel_password():
-        """
-        Closes the password dialog without confirming, leaving the shared
-        password dict in its default unconfirmed state.
-        """
+        if not passed:
+            messagebox.showerror(
+                "Password Requirements Not Met",
+                "Your password does not meet the following requirements:\n\n"
+                + "\n".join(f"• {f}" for f in failures),
+                parent=password_window,
+            )
+            return
+
+        if password_1 != password_2:
+            messagebox.showerror(
+                "Error",
+                "Passwords do not match. Please try again.",
+                parent=password_window,
+            )
+            return
+
+        password["confirmed"] = True
+        password["password"] = password_1
         password_window.destroy()
 
-    button = Frame(password_window)
-    button.pack(pady=10)
+    submit_button.config(command=validate_passwords)
 
-    preset_button(button, text="Submit", command=validate_passwords).pack(
-        side="left", padx=5
-    )
+    def cancel_password():
+        password_window.destroy()
 
-    preset_button(button, text="Cancel", command=cancel_password).pack(
+    preset_button(button_frame, text="Cancel", command=cancel_password).pack(
         side="left", padx=5
     )
 

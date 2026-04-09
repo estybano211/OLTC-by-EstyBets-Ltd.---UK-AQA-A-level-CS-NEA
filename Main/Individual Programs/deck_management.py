@@ -1,11 +1,5 @@
 from treys import Card as TreysCard, Deck as TreysDeck, Evaluator
 
-SUITS = ["♠", "♣", "♥", "♦"]
-SUIT_MAP = {"♠": "s", "♣": "c", "♥": "h", "♦": "d"}
-REVERSE_SUIT_MAP = {v: k for k, v in SUIT_MAP.items()}
-
-VALUES = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
-
 
 class CasinoDeckManager:
     """
@@ -46,20 +40,20 @@ class CasinoDeckManager:
         return [self.treys_to_str(c) for c in self.deck.cards]
 
     def shuffle(self):
-        """Shuffles the current deck in place."""
+        """Shuffles the current deck."""
         self.deck.shuffle()
 
     def draw(self, n=1):
         """
         Draws n cards from the deck. If the deck has fewer than n cards
         remaining, resets and reshuffles the deck before drawing. Returns a
-        single card integer when n=1, or a list of card integers when n>1.
+        single card integer when n=1 or a list of card integers when n>1.
 
         Args:
             n (int): The number of cards to draw. Defaults to 1.
 
         Returns:
-            int or list[int]: A single treys card integer if n=1, or a list
+            int or list[int]: A single treys card integer if n=1 or a list
                               of treys card integers if n>1.
         """
         if self.remaining() < n:
@@ -141,54 +135,45 @@ class CasinoDeckManager:
         # Copy deck state.
         new_dm.deck.cards = self.deck.cards.copy()
 
-        # Evaluator is stateless and safe to reuse.
         new_dm.evaluator = self.evaluator
 
         return new_dm
 
-    def str_to_treys(self, card_str):
+    def str_to_treys(self, card):
         """
         Converts a card string to a treys integer representation.
 
         Args:
-            card_str (str): A card string in the format 'Rs' where R is the
+            card (str): A card string in the format 'Rs' where R is the
                             rank and s is the suit (e.g. 'As', 'Td', '2h').
 
         Returns:
             int: The treys integer representation of the card.
         """
-        return TreysCard.new(card_str)
+        return TreysCard.new(card)
 
     def treys_to_str(self, card):
         """
         Converts a treys card integer to a standard string representation.
-
         Args:
             card (int): A treys card integer.
-
         Returns:
             str: The card as a string (e.g. 'As', 'Td', '2h').
         """
-        rank = TreysCard.STR_RANKS[TreysCard.get_rank_int(card)]
-        suit = TreysCard.INT_SUIT_TO_CHAR_SUIT[TreysCard.get_suit_int(card)]
-        return rank + suit
+        return TreysCard.int_to_str(card)
 
     def treys_to_pretty(self, card):
         """
         Converts a treys card integer to a pretty-printed string using Unicode
         suit symbols.
-
         Args:
             card (int): A treys card integer.
-
         Returns:
             str: The card as a pretty string (e.g. 'A♠', 'T♦', '2♥').
         """
-        rank = TreysCard.STR_RANKS[TreysCard.get_rank_int(card)]
-        suit = TreysCard.INT_SUIT_TO_CHAR_SUIT[TreysCard.get_suit_int(card)]
-        return rank + REVERSE_SUIT_MAP[suit]
+        return TreysCard.int_to_pretty_str(card)
 
-    def treys_other(self, cards):
+    def treys_to_str_pretty(self, cards):
         """
         Converts a list of treys card integers into a pair of parallel lists:
         one containing standard string representations and one containing

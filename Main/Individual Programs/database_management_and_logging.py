@@ -26,14 +26,13 @@ class LogHandler(logging.Handler):
     Base class for log handlers.
 
     Owns all queue, worker-thread, emit, processor and close logic.
-    Subclasses supply only the name of the table they write to through the
-    TABLE class attribute.
+    Subclasses supply the name of the table they write to through
+    TABLE.
 
     The worker thread runs as a daemon so it never prevents the process
     from exiting. A stop_event is used to signal clean shutdown.
     """
 
-    # Subclasses must override this with their target table name.
     TABLE = ""
 
     def __init__(self):
@@ -142,19 +141,18 @@ class DatabaseManagement:
     """
     Manages all database creation, connection and data operations.
 
-    Accepts a db_path at construction time and stores it as instance
-    state. Provides methods for creating and viewing the database, registering users, verifying
+    Provides methods for creating and viewing the database, registering users, verifying
     passwords, fetching user records, modifying user data.
 
     Usage:
         dbm = DatabaseManagement(DB_PATH)
         dbm.create_database()
-        record = dbm.fetch_user_full_record(username="user1")
+        record = dbm.fetch_user_record(username="user1")
     """
 
     def __init__(self, db_path):
         """
-        Stores the database file path as instance state.
+        Stores the database file path.
 
         Args:
             db_path (str): Absolute path to the SQLite database file.
@@ -210,7 +208,7 @@ class DatabaseManagement:
             total_bets INTEGER DEFAULT 0,
             fold_to_raise INTEGER DEFAULT 0,
             call_when_weak INTEGER DEFAULT 0,
-            endless_high_score INTEGER DEFAULT 0,
+            tournament_wins INTEGER DEFAULT 0,
             last_updated TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
@@ -234,8 +232,8 @@ class DatabaseManagement:
 
     def connect(self):
         """
-        Opens and returns a connection to self.db_path with row factory (for dictionary like access)
-        and foreign key constraints enabled.
+        Opens and returns a connection to self.db_path with row factory
+        and foreign key constraints are enabled.
 
         Returns:
             sqlite3.Connection: Configured connection object.
@@ -264,13 +262,12 @@ class DatabaseManagement:
             try:
                 for name, statement in self.SCHEMA.items():
                     conn.execute(statement)
-                    database_logger.info(f"Table: '{name}' created.")
+                    database_logger.info(f"Attempting to create Table: '{name}'.")
 
                 conn.commit()
-                database_logger.info(f"File: '{self.db_path}' created.")
+                database_logger.info(f"Attempting to create File: '{self.db_path}'.")
 
                 self.admin_account()
-                database_logger.info("Administrator account added to 'users' table.")
 
             except sqlite3.Error as error:
                 database_logger.exception(f"'create_database' error. {error}")
@@ -287,6 +284,7 @@ class DatabaseManagement:
 
         with self.connect() as conn:
             try:
+                database_logger.info("Attempting to create Administrator account.")
                 cursor = conn.execute(
                     "SELECT 1 FROM users WHERE username = ?",
                     ("Administrator",),
@@ -334,7 +332,7 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info("Request for Administrator password_hash.")
+                database_logger.info("Attempting to fetch Administrator password_hash.")
 
                 cursor = conn.execute(
                     "SELECT password_hash FROM users WHERE username = ?",
@@ -347,7 +345,7 @@ class DatabaseManagement:
                 return {"found": False, "verified": False}
 
         if not row or not row["password_hash"]:
-            database_logger.debug("'password_hash' for Administrator not found.")
+            database_logger.debug("Administrator password_hash not found.")
             return {"found": False, "verified": False}
 
         from check_systems import verify_hash
@@ -355,9 +353,9 @@ class DatabaseManagement:
         verified = verify_hash(row["password_hash"], password)
 
         database_logger.info(
-            "Password verification successful."
+            "Administrator password verification successful."
             if verified
-            else "Failed password attempt."
+            else "Administrator password verification failed."
         )
 
         return {"found": True, "verified": verified}
@@ -371,8 +369,8 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                admin_logger.info("Request to change Admin Password.")
-                database_logger.info("Request to change Administrator password.")
+                admin_logger.info("Request for Administrator password change.")
+                database_logger.info("Attempting to change Administrator password.")
 
                 from check_systems import hash_function
 
@@ -383,11 +381,13 @@ class DatabaseManagement:
                     (password_hash, "Administrator"),
                 )
 
-                database_logger.info("Administrator password changed.")
-                admin_logger.info("Administrator password change request successful.")
+                database_logger.info("Administrator password changed successfully.")
+                admin_logger.info(
+                    "Request for Administrator password change successful."
+                )
 
             except sqlite3.Error as error:
-                admin_logger.error("Administrator password change request failed.")
+                admin_logger.error("Request for Administrator password change failed.")
                 database_logger.exception(f"'change_admin_password' error. {error}")
 
     # DATABASE VIEW AND EXPORT OPERATIONS
@@ -400,7 +400,7 @@ class DatabaseManagement:
             table (str): The table name to read.
 
         Returns:
-            pd.DataFrame: All rows, or an empty DataFrame on error.
+            pd.DataFrame: All rows or an empty DataFrame on error.
         """
         if not table:
             database_logger.error("No table provided for view_database().")
@@ -408,18 +408,18 @@ class DatabaseManagement:
 
         with self.connect() as conn:
             try:
-                admin_logger.info(f"Request to view Table: '{table}'")
+                admin_logger.info(f"Requesting to view Table: '{table}'.")
                 database_logger.info(f"Attempting to read data from Table: '{table}'.")
 
                 dataframe = pd.read_sql_query(f"SELECT * FROM {table}", conn)
 
-                database_logger.info(f"Data from Table: '{table}' read successfully.")
-                admin_logger.info("View table request successful.")
+                database_logger.info(f"Table: '{table}' data read successfully.")
+                admin_logger.info("Request to view table successful.")
 
                 return dataframe
 
             except sqlite3.Error as error:
-                admin_logger.error("View table request failed.")
+                admin_logger.error("Request to view table failed.")
                 database_logger.exception(f"'view_database' error. {error}")
                 return pd.DataFrame()
 
@@ -437,13 +437,13 @@ class DatabaseManagement:
         try:
             with self.connect() as conn:
                 database_logger.info(
-                    f"Exporting table '{table}' to CSV at '{file_path}'."
+                    f"Attempting to export Table: '{table}' to CSV at '{file_path}'."
                 )
 
                 rows = conn.execute(f"SELECT * FROM {table}").fetchall()
 
                 if not rows:
-                    database_logger.warning(f"Table '{table}' is empty.")
+                    database_logger.warning(f"Table: '{table}' is empty.")
                     return False
 
                 headers = list(rows[0].keys())
@@ -454,7 +454,7 @@ class DatabaseManagement:
                     writer.writerows(rows)
 
                 database_logger.info(
-                    f"Successfully exported table '{table}' to '{file_path}'."
+                    f"Table: '{table}' exported to '{file_path}' successfully."
                 )
                 return True
 
@@ -505,9 +505,11 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                admin_logger.info(f"Request to change User ID: '{user_id}' username.")
+                admin_logger.info(
+                    f"Request for username change for User ID: {user_id}."
+                )
                 database_logger.info(
-                    f"Request to change User ID: '{user_id}' username."
+                    f"Attempting to change username for User ID: {user_id}."
                 )
 
                 conn.execute(
@@ -515,11 +517,13 @@ class DatabaseManagement:
                     (new_username, user_id),
                 )
 
-                admin_logger.info("Change username request successful.")
-                database_logger.info("User username changed.")
+                database_logger.info(
+                    f"User ID: {user_id} username changed successfully."
+                )
+                admin_logger.info("Request for username change successful.")
 
             except sqlite3.Error as error:
-                admin_logger.error("Change username request failed.")
+                admin_logger.error("Request for username change failed.")
                 database_logger.exception(f"'change_user_username' error. {error}")
 
     def change_user_password(self, user_id, new_password):
@@ -532,8 +536,12 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                admin_logger.info(f"Request to change User: '{user_id}' password.")
-                database_logger.info(f"Request to change User: '{user_id}' password.")
+                admin_logger.info(
+                    f"Request for password change for User ID: {user_id}."
+                )
+                database_logger.info(
+                    f"Attempting to change password for User ID: {user_id}."
+                )
 
                 from check_systems import hash_function
 
@@ -542,11 +550,13 @@ class DatabaseManagement:
                     (hash_function(new_password), user_id),
                 )
 
-                admin_logger.info("Change user password request successful.")
-                database_logger.info("User password changed.")
+                database_logger.info(
+                    f"User ID: {user_id} password changed successfully."
+                )
+                admin_logger.info("Request for password change successful.")
 
             except sqlite3.Error as error:
-                admin_logger.error("Change user password request failed.")
+                admin_logger.error("Request for password change failed.")
                 database_logger.exception(f"'change_user_password' error. {error}")
 
     def change_user_account_type(self, user_id, registered):
@@ -560,10 +570,10 @@ class DatabaseManagement:
         with self.connect() as conn:
             try:
                 admin_logger.info(
-                    f"Request to change User ID: '{user_id}' account type."
+                    f"Request for account type change for User ID: {user_id}."
                 )
                 database_logger.info(
-                    f"Request to change User ID: '{user_id}' account type."
+                    f"Attempting to change account type for User ID: {user_id}."
                 )
 
                 conn.execute(
@@ -571,11 +581,13 @@ class DatabaseManagement:
                     (registered, user_id),
                 )
 
-                admin_logger.info("Change user account type request successful.")
-                database_logger.info("User account type changed.")
+                database_logger.info(
+                    f"User ID: {user_id} account type changed successfully."
+                )
+                admin_logger.info("Request for account type change successful.")
 
             except sqlite3.Error as error:
-                admin_logger.error("Change user account type request failed.")
+                admin_logger.error("Request for account type change failed.")
                 database_logger.exception(f"'change_user_account_type' error. {error}")
 
     def change_user_balance(self, user_id, new_balance):
@@ -588,19 +600,23 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                admin_logger.info(f"Request to change User ID: '{user_id}' balance.")
-                database_logger.info(f"Request to change User ID: '{user_id}' balance.")
+                admin_logger.info(f"Request for balance change for User ID: {user_id}.")
+                database_logger.info(
+                    f"Attempting to change balance for User ID: {user_id}."
+                )
 
                 conn.execute(
                     "UPDATE users SET balance = ? WHERE user_id = ?",
                     (float(new_balance), user_id),
                 )
 
-                admin_logger.info("Change user balance request successful.")
-                database_logger.info("User balance changed.")
+                database_logger.info(
+                    f"User ID: {user_id} balance changed successfully."
+                )
+                admin_logger.info("Request for balance change successful.")
 
             except sqlite3.Error as error:
-                admin_logger.error("Change user balance request failed.")
+                admin_logger.error("Request for balance change failed.")
                 database_logger.exception(f"'change_user_balance' error. {error}")
 
     def delete_user_record(self, user_id):
@@ -616,8 +632,10 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                admin_logger.info(f"Request to delete User ID: '{user_id}' record.")
-                database_logger.info(f"Request to delete User ID: '{user_id}' record.")
+                admin_logger.info(f"Request for deletion of User ID: {user_id} record.")
+                database_logger.info(
+                    f"Attempting to delete record for User ID: {user_id}."
+                )
 
                 conn.execute(
                     "DELETE FROM user_poker_actions WHERE user_id = ?", (user_id,)
@@ -627,16 +645,16 @@ class DatabaseManagement:
                 )
                 conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
 
-                admin_logger.info("Delete user record request successful.")
-                database_logger.info("User record deleted.")
+                database_logger.info(f"User ID: {user_id} record deleted successfully.")
+                admin_logger.info("Request for deletion of user record successful.")
 
             except sqlite3.Error as error:
-                admin_logger.error("Delete user record request failed.")
+                admin_logger.error("Request for deletion of user record failed.")
                 database_logger.exception(f"'delete_user_record' error. {error}")
 
     # USER LOOKUP AND AUTHENTICATION
 
-    def fetch_user_full_record(self, *, user_id=None, username=None):
+    def fetch_user_record(self, *, user_id=None, username=None):
         """
         Returns all columns from the users table for the specified user.
 
@@ -645,7 +663,7 @@ class DatabaseManagement:
             username (str, optional): Username to search by.
 
         Returns:
-            dict: All user fields, or None if not found.
+            dict: All user fields or None if not found.
 
         Raises:
             ValueError: If neither user_id nor username is provided.
@@ -656,10 +674,16 @@ class DatabaseManagement:
         with self.connect() as conn:
             try:
                 if user_id is not None:
+                    database_logger.info(
+                        f"Attempting to fetch full record for User ID: {user_id}."
+                    )
                     row = conn.execute(
                         "SELECT * FROM users WHERE user_id = ?", (user_id,)
                     ).fetchone()
                 else:
+                    database_logger.info(
+                        f"Attempting to fetch full record for User: '{username}'."
+                    )
                     row = conn.execute(
                         "SELECT * FROM users WHERE username = ?", (username,)
                     ).fetchone()
@@ -667,7 +691,7 @@ class DatabaseManagement:
                 return dict(row) if row else None
 
             except sqlite3.Error as error:
-                database_logger.exception(f"'fetch_user_full_record' error. {error}")
+                database_logger.exception(f"'fetch_user_record' error. {error}")
                 return None
 
     def fetch_user_presence(self, username):
@@ -682,7 +706,9 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Searching for User: '{username}'.")
+                database_logger.info(
+                    f"Attempting to check presence of User: '{username}'."
+                )
 
                 row = conn.execute(
                     "SELECT 1 FROM users WHERE username = ?", (username,)
@@ -690,7 +716,7 @@ class DatabaseManagement:
 
                 found = row is not None
                 database_logger.info(
-                    f"User '{username}' {'found' if found else 'not found'}."
+                    f"User: '{username}' {'found' if found else 'not found'}."
                 )
 
                 return {"found": found}
@@ -706,7 +732,7 @@ class DatabaseManagement:
 
         Args:
             username (str): Unique username (must not be 'Administrator').
-            password (str or None): Plaintext password, or None for guests.
+            password (str or None): Plaintext password or None for guests.
             registered (int): 0 for guest, 1 for registered.
 
         Returns:
@@ -730,7 +756,7 @@ class DatabaseManagement:
         with self.connect() as conn:
             try:
                 database_logger.info(
-                    f"Request to make an account for User: '{username}'."
+                    f"Attempting to register account for User: '{username}'."
                 )
 
                 conn.execute(
@@ -741,11 +767,13 @@ class DatabaseManagement:
                     (username, password_hash, int(float(registered)), 10000.0),
                 )
 
-                database_logger.info(f"Created User: '{username}' record.")
+                database_logger.info(
+                    f"User: '{username}' account registered successfully."
+                )
                 return username
 
             except sqlite3.IntegrityError:
-                database_logger.warning(f"User: '{username}' record already exists.")
+                database_logger.warning(f"User: '{username}' account already exists.")
                 raise
 
             except sqlite3.Error as error:
@@ -766,7 +794,7 @@ class DatabaseManagement:
         with self.connect() as conn:
             try:
                 database_logger.info(
-                    f"Request to search for User: '{username}' 'password_hash'."
+                    f"Attempting to fetch password_hash for User: '{username}'."
                 )
 
                 row = conn.execute(
@@ -779,7 +807,7 @@ class DatabaseManagement:
                 return {"found": False, "verified": False}
 
         if not row or not row["password_hash"]:
-            database_logger.info(f"'password_hash' for User: '{username}' not found.")
+            database_logger.info(f"User: '{username}' password_hash not found.")
             return {"found": False, "verified": False}
 
         from check_systems import verify_hash
@@ -787,9 +815,9 @@ class DatabaseManagement:
         verified = verify_hash(row["password_hash"], password)
 
         database_logger.info(
-            "Password verification successful."
+            f"User: '{username}' password verification successful."
             if verified
-            else "Failed password attempt."
+            else f"User: '{username}' password verification failed."
         )
 
         return {"found": True, "verified": verified}
@@ -806,29 +834,30 @@ class DatabaseManagement:
         with self.connect() as conn:
             try:
                 now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                database_logger.info(
+                    f"Attempting to record login for User: '{username}'."
+                )
+
                 conn.execute(
                     "UPDATE users SET last_login = ? WHERE username = ?",
                     (now_str, username),
                 )
+
                 database_logger.info(
-                    f"Recorded login for User: '{username}' at {now_str}."
+                    f"User: '{username}' login recorded successfully at {now_str}."
                 )
+
             except sqlite3.Error as error:
                 database_logger.exception(f"'record_user_login' error. {error}")
 
     def check_expired_guest_account(self):
         """
         Deletes guest accounts (registered = 0) and all their associated
-        poker data if their created_at timestamp is more than 24 hours in
-        the past. Should be called once at program start-up.
-
-        Child rows in user_poker_actions and user_poker_data are removed
-        before the parent row in users so that the foreign key constraints
-        are satisfied.
+        poker data if they are older than 24 hours.
         """
         with self.connect() as conn:
             try:
-                database_logger.info("Checking for expired guest accounts.")
+                database_logger.info("Attempting to check for expired guest accounts.")
 
                 expired = conn.execute(
                     """
@@ -848,10 +877,12 @@ class DatabaseManagement:
                         "DELETE FROM user_poker_data WHERE user_id = ?", (user_id,)
                     )
                     conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
-                    database_logger.info(f"Removed expired guest user_id={user_id}.")
+                    database_logger.info(
+                        f"User ID: {user_id} expired guest account removed."
+                    )
 
                 conn.commit()
-                database_logger.info("Expired guest account check complete.")
+                database_logger.info("Expired guest account check completed.")
 
             except sqlite3.Error as error:
                 database_logger.exception(
@@ -869,6 +900,8 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
+                database_logger.info("Attempting to apply daily login bonuses.")
+
                 eligible = conn.execute(
                     """
                     SELECT user_id FROM users
@@ -885,18 +918,18 @@ class DatabaseManagement:
                     conn.execute(
                         """
                         UPDATE users
-                        SET balance    = balance + 1000,
+                        SET balance = balance + 1000,
                             last_login = ?
                         WHERE user_id = ?
                         """,
                         (now_str, user_id),
                     )
                     database_logger.info(
-                        f"Awarded £1,000 daily login bonus to user_id={user_id}."
+                        f"User ID: {user_id} awarded £1,000 daily login bonus."
                     )
 
                 conn.commit()
-                database_logger.info("Daily login bonus check complete.")
+                database_logger.info("Daily login bonus check completed.")
 
             except sqlite3.Error as error:
                 database_logger.exception(f"'apply_daily_login_bonus' error. {error}")
@@ -913,17 +946,19 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Request to fetch User: '{username}' user_id.")
+                database_logger.info(
+                    f"Attempting to fetch user_id for User: '{username}'."
+                )
 
                 row = conn.execute(
                     "SELECT user_id FROM users WHERE username = ?", (username,)
                 ).fetchone()
 
                 if row:
-                    database_logger.info("User 'user_id' found.")
+                    database_logger.info(f"User: '{username}' user_id found.")
                     return {"found": True, "user_id": row["user_id"]}
                 else:
-                    database_logger.info("User 'user_id' not found.")
+                    database_logger.info(f"User: '{username}' user_id not found.")
                     return {"found": False, "user_id": None}
 
             except sqlite3.Error as error:
@@ -942,17 +977,19 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Request to fetch User ID: '{user_id}' username.")
+                database_logger.info(
+                    f"Attempting to fetch username for User ID: {user_id}."
+                )
 
                 row = conn.execute(
                     "SELECT username FROM users WHERE user_id = ?", (user_id,)
                 ).fetchone()
 
                 if row:
-                    database_logger.info("User 'username' found.")
+                    database_logger.info(f"User ID: {user_id} username found.")
                     return {"found": True, "username": row["username"]}
                 else:
-                    database_logger.info("User 'username' not found.")
+                    database_logger.info(f"User ID: {user_id} username not found.")
                     return {"found": False, "username": None}
 
             except sqlite3.Error as error:
@@ -971,17 +1008,19 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Request to fetch User: '{username}' balance.")
+                database_logger.info(
+                    f"Attempting to fetch balance for User: '{username}'."
+                )
 
                 row = conn.execute(
                     "SELECT balance FROM users WHERE username = ?", (username,)
                 ).fetchone()
 
                 if row:
-                    database_logger.info("User 'balance' found.")
+                    database_logger.info(f"User: '{username}' balance found.")
                     return {"found": True, "balance": float(row["balance"])}
                 else:
-                    database_logger.info("User 'balance' not found.")
+                    database_logger.info(f"User: '{username}' balance not found.")
                     return {"found": False, "balance": 0.0}
 
             except sqlite3.Error as error:
@@ -998,14 +1037,18 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Request to modify User: '{username}' balance.")
+                database_logger.info(
+                    f"Attempting to modify balance for User: '{username}'."
+                )
 
                 conn.execute(
                     "UPDATE users SET balance = ? WHERE username = ?",
                     (float(new_balance), username),
                 )
 
-                database_logger.info("User balance modified.")
+                database_logger.info(
+                    f"User: '{username}' balance modified successfully."
+                )
 
             except sqlite3.Error as error:
                 database_logger.exception(f"'modify_user_balance' error. {error}")
@@ -1019,7 +1062,7 @@ class DatabaseManagement:
         with self.connect() as conn:
             try:
                 database_logger.info(
-                    f"Checking if poker data exists for User ID: '{user_id}'."
+                    f"Attempting to check poker data existence for User ID: {user_id}."
                 )
 
                 exists = conn.execute(
@@ -1027,7 +1070,8 @@ class DatabaseManagement:
                 ).fetchone()
 
                 database_logger.info(
-                    f"Poker data for User: {'found' if exists else 'not found'}."
+                    f"User ID: {user_id} poker data "
+                    f"{'found' if exists else 'not found'}."
                 )
 
                 return exists is not None
@@ -1052,7 +1096,7 @@ class DatabaseManagement:
         with self.connect() as conn:
             try:
                 database_logger.info(
-                    f"Initialising poker data for User ID: '{user_id}'."
+                    f"Attempting to initialise poker data for User ID: {user_id}."
                 )
 
                 exists = conn.execute(
@@ -1060,21 +1104,21 @@ class DatabaseManagement:
                 ).fetchone()
 
                 if exists:
-                    database_logger.info("User poker data already exists.")
+                    database_logger.info(
+                        f"User ID: {user_id} poker data already exists."
+                    )
                     return True
-
-                conn.execute(
-                    "INSERT INTO user_poker_data (user_id) VALUES (?)", (user_id,)
-                )
 
                 from poker_player_management import generate_range_chart
 
                 conn.execute(
-                    "UPDATE user_poker_data SET player_range = ? WHERE user_id = ?",
-                    (json.dumps(generate_range_chart()), user_id),
+                    "INSERT INTO user_poker_data (user_id, player_range) VALUES (?, ?)",
+                    (user_id, json.dumps(generate_range_chart())),
                 )
 
-                database_logger.info("User poker data initialised.")
+                database_logger.info(
+                    f"User ID: {user_id} poker data initialised successfully."
+                )
                 return True
 
             except sqlite3.Error as error:
@@ -1085,18 +1129,20 @@ class DatabaseManagement:
 
     def load_user_poker_data(self, user_id):
         """
-        Loads the complete poker data record for a user, including derived
+        Loads the necessary poker data record for a user, including derived
         statistics and a deserialised range chart.
 
         Args:
             user_id (int): The user ID to load.
 
         Returns:
-            dict: All poker data fields plus avg_bet_size, or None on error.
+            dict: All poker data fields plus avg_bet_size or None on error.
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Loading poker data for User ID: '{user_id}'.")
+                database_logger.info(
+                    f"Attempting to load poker data for User ID: {user_id}."
+                )
 
                 row = conn.execute(
                     """
@@ -1119,7 +1165,9 @@ class DatabaseManagement:
                 ).fetchone()
 
                 if not row:
-                    database_logger.warning("User not found in poker data.")
+                    database_logger.warning(
+                        f"User ID: {user_id} not found in poker data."
+                    )
                     return None
 
                 record = dict(row)
@@ -1142,7 +1190,7 @@ class DatabaseManagement:
                     record["call_when_weak"] = 0.5
 
                 database_logger.info(
-                    f"Poker data for User ID: '{user_id}' loaded successfully."
+                    f"User ID: {user_id} poker data loaded successfully."
                 )
 
                 return record
@@ -1164,7 +1212,9 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Updating player range for User ID: '{user_id}'.")
+                database_logger.info(
+                    f"Attempting to update player range for User ID: {user_id}."
+                )
 
                 conn.execute(
                     """
@@ -1175,7 +1225,9 @@ class DatabaseManagement:
                     (json.dumps(player_range), user_id),
                 )
 
-                database_logger.info("User player range updated.")
+                database_logger.info(
+                    f"User ID: {user_id} player range updated successfully."
+                )
                 return True
 
             except (sqlite3.Error, json.JSONDecodeError) as error:
@@ -1198,8 +1250,8 @@ class DatabaseManagement:
         Args:
             user_id (int): The acting user's ID.
             round_number (int): The hand/round identifier.
-            street (str): 'preflop', 'flop', 'turn', or 'river'.
-            action (str): 'fold', 'call', or 'raise'.
+            street (str): 'preflop', 'flop', 'turn' or 'river'.
+            action (str): 'fold', 'call' or 'raise'.
             bet_size (float): Amount bet or raised.
             pot_size (float): Total pot at the time of the action.
 
@@ -1208,7 +1260,9 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Logging action for User ID: '{user_id}'.")
+                database_logger.info(
+                    f"Attempting to log action for User ID: {user_id}."
+                )
 
                 conn.execute(
                     """
@@ -1219,7 +1273,7 @@ class DatabaseManagement:
                     (user_id, round_number, street, action, bet_size, pot_size),
                 )
 
-                database_logger.info("Action logged for User.")
+                database_logger.info(f"User ID: {user_id} action logged successfully.")
                 return True
 
             except sqlite3.Error as error:
@@ -1239,7 +1293,9 @@ class DatabaseManagement:
         """
         with self.connect() as conn:
             try:
-                database_logger.info(f"Resolving actions for User ID: '{user_id}'.")
+                database_logger.info(
+                    f"Attempting to resolve actions for User ID: {user_id}."
+                )
 
                 conn.execute(
                     """
@@ -1250,7 +1306,9 @@ class DatabaseManagement:
                     (user_id, round_number),
                 )
 
-                database_logger.info("User actions resolved.")
+                database_logger.info(
+                    f"User ID: {user_id} actions resolved successfully."
+                )
                 return True
 
             except sqlite3.Error as error:
@@ -1268,7 +1326,7 @@ class DatabaseManagement:
         faced_raise,
     ):
         """
-        Increments aggregate poker statistics after a hand and
+        Increments poker statistics after a hand and
         recalculates VPIP/PFR percentages.
 
         Args:
@@ -1286,20 +1344,20 @@ class DatabaseManagement:
         with self.connect() as conn:
             try:
                 database_logger.info(
-                    f"Updating hand statistics for User ID: '{user_id}'."
+                    f"Attempting to update hand statistics for User ID: {user_id}."
                 )
 
                 conn.execute(
                     """
                     UPDATE user_poker_data
                     SET
-                        rounds_played       = rounds_played + 1,
-                        total_hands_played  = total_hands_played + ?,
-                        total_hands_raised  = total_hands_raised + ?,
-                        total_bets          = total_bets + ?,
-                        fold_to_raise       = fold_to_raise + ?,
-                        call_when_weak      = call_when_weak + ?,
-                        last_updated        = CURRENT_TIMESTAMP
+                        rounds_played = rounds_played + 1,
+                        total_hands_played = total_hands_played + ?,
+                        total_hands_raised = total_hands_raised + ?,
+                        total_bets = total_bets + ?,
+                        fold_to_raise = fold_to_raise + ?,
+                        call_when_weak = call_when_weak + ?,
+                        last_updated = CURRENT_TIMESTAMP
                     WHERE user_id = ?
                     """,
                     (
@@ -1314,7 +1372,9 @@ class DatabaseManagement:
 
                 self.recalculate_frequencies(conn, user_id)
 
-                database_logger.info("User hand statistics updated.")
+                database_logger.info(
+                    f"User ID: {user_id} hand statistics updated successfully."
+                )
                 return True
 
             except sqlite3.Error as error:
@@ -1324,14 +1384,16 @@ class DatabaseManagement:
     def recalculate_frequencies(self, conn, user_id):
         """
         Recalculates and stores VPIP and PFR percentages from the raw
-        counters. Called internally after updating hand statistics.
+        counters.
 
         Args:
             conn (sqlite3.Connection): Active connection to reuse.
             user_id (int): The user ID to recalculate for.
         """
         try:
-            database_logger.info(f"Recalculating frequencies for User ID: '{user_id}'.")
+            database_logger.info(
+                f"Attempting to recalculate frequencies for User ID: {user_id}."
+            )
 
             row = conn.execute(
                 """
@@ -1354,146 +1416,127 @@ class DatabaseManagement:
                 (vpip, pfr, user_id),
             )
 
-            database_logger.info("User frequencies recalculated.")
+            database_logger.info(
+                f"User ID: {user_id} frequencies recalculated successfully."
+            )
 
         except sqlite3.Error as error:
             database_logger.exception(f"'recalculate_frequencies' error. {error}")
 
-    def fetch_player_statistics(self, user_id):
+    def fetch_total_rounds(self, user_id):
         """
-        Returns a summary of poker statistics for a player.
+        Returns the total of rounds played by a player.
 
         Args:
-            user_id (int): The user ID to retrieve statistics for.
+            user_id (int): The user ID to retrieve the total rounds played for.
 
         Returns:
-            dict: Statistics dictionary, or None if not found.
+            dict: Statistics dictionary or None if not found.
         """
         with self.connect() as conn:
             try:
                 database_logger.info(
-                    f"Fetching player statistics for User ID: '{user_id}'."
+                    f"Attempting to fetch player total rounds for User ID: {user_id}."
                 )
 
-                row = conn.execute(
+                rounds = conn.execute(
                     """
-                    SELECT
-                        user_id, rounds_played, vpip, pfr,
-                        total_bets, fold_to_raise, call_when_weak
+                    SELECT rounds_played
                     FROM user_poker_data
                     WHERE user_id = ?
                     """,
                     (user_id,),
                 ).fetchone()
 
-                if not row:
+                if not rounds:
                     return None
 
-                statistics = dict(row)
-                rounds = max(1, statistics["rounds_played"])
-                statistics["avg_bet_size"] = statistics["total_bets"] / rounds
-
-                database_logger.info("User player statistics fetched.")
-                return statistics
+                database_logger.info(
+                    f"User ID: {user_id} player total rounds fetched successfully."
+                )
+                return rounds
 
             except sqlite3.Error as error:
-                database_logger.exception(f"'fetch_player_statistics' error. {error}")
+                database_logger.exception(f"'fetch_total_rounds' error. {error}")
                 return None
 
-    def fetch_all_players_data(self):
+    def fetch_tournament_scores(self):
         """
-        Returns poker data for all players with at least one round played,
-        ordered by rounds played descending.
+        Retrieves the tournament wins for all users.
 
         Returns:
-            list: List of player data dictionaries, or empty list on error.
-        """
-        with self.connect() as conn:
-            try:
-                database_logger.info("Fetching poker data for all players.")
-
-                rows = conn.execute("""
-                    SELECT user_id, rounds_played, vpip, pfr, total_bets
-                    FROM user_poker_data
-                    WHERE rounds_played > 0
-                    ORDER BY rounds_played DESC
-                    """).fetchall()
-
-                players = []
-                for row in rows:
-                    player = dict(row)
-                    rounds = max(1, player["rounds_played"])
-                    player["avg_bet_size"] = player["total_bets"] / rounds
-                    players.append(player)
-
-                database_logger.info(f"Fetched data for {len(players)} players.")
-                return players
-
-            except sqlite3.Error as error:
-                database_logger.exception(f"'fetch_all_players_data' error. {error}")
-                return []
-
-    def fetch_special_mode_scores(self, user_id):
-        """
-        Retrieves the Endless mode personal-best score for a user.
-
-        Args:
-            user_id (int): The user ID to query.
-
-        Returns:
-            dict: {'endless_high_score': int}, or None if not found.
+            list: List of dicts with 'user_id' and 'tournament_wins', or None on error.
         """
         with self.connect() as conn:
             try:
                 database_logger.info(
-                    f"Fetching special-mode scores for User ID: '{user_id}'."
+                    "Attempting to fetch tournament scores for all users."
                 )
 
                 row = conn.execute(
-                    "SELECT endless_high_score FROM user_poker_data WHERE user_id = ?",
-                    (user_id,),
-                ).fetchone()
+                    """
+                    SELECT user_id, tournament_wins
+                    FROM user_poker_data
+                    """,
+                ).fetchall()
 
-                if not row:
-                    database_logger.info(
-                        f"No special-mode scores found for user_id {user_id}."
-                    )
-                    return None
-
-                database_logger.info("User special-mode scores fetched.")
-                return {"endless_high_score": int(row["endless_high_score"] or 0)}
+                database_logger.info("Tournament scores fetched successfully.")
+                return [
+                    {"user_id": r["user_id"], "tournament_wins": r["tournament_wins"]}
+                    for r in row
+                ]
 
             except sqlite3.Error as error:
-                database_logger.exception(f"'fetch_special_mode_scores' error. {error}")
+                database_logger.exception(f"'fetch_tournament_scores' error. {error}")
                 return None
 
-    def update_special_mode_score(self, user_id, column, new_score):
+    def update_tournament_best(self, user_id, rounds_survived):
         """
-        Updates a special-mode personal best only if new_score is higher
-        than the currently stored value.
+        Updates tournament_wins  with the best number of
+        consecutive rounds survived in a single tournament run.
 
         Args:
             user_id (int): The user ID to update.
-            column (str): Column name.
-            new_score (int): Candidate new personal best.
+            rounds_survived (int): Rounds survived in the completed tournament.
 
         Returns:
             bool: True on success, False on error.
         """
         with self.connect() as conn:
             try:
-                conn.execute(
-                    f"""
-                    UPDATE user_poker_data
-                    SET {column} = ?, last_updated = CURRENT_TIMESTAMP
-                    WHERE user_id = ? AND {column} < ?
-                    """,
-                    (new_score, user_id, new_score),
+                database_logger.info(
+                    f"Attempting to update tournament best for User ID: {user_id}."
                 )
 
-                database_logger.info(f"Updated {column} to {new_score}.")
+                row = conn.execute(
+                    "SELECT tournament_wins FROM user_poker_data WHERE user_id = ?",
+                    (user_id,),
+                ).fetchone()
+
+                current_best = row["tournament_wins"] if row else 0
+
+                if rounds_survived > current_best:
+                    conn.execute(
+                        """
+                        UPDATE user_poker_data
+                        SET tournament_wins = ?,
+                            last_updated = CURRENT_TIMESTAMP
+                        WHERE user_id = ?
+                        """,
+                        (rounds_survived, user_id),
+                    )
+                    database_logger.info(
+                        f"User ID: {user_id} tournament best updated to "
+                        f"{rounds_survived} (was {current_best})."
+                    )
+                else:
+                    database_logger.info(
+                        f"User ID: {user_id} tournament best unchanged "
+                        f"({rounds_survived} did not beat {current_best})."
+                    )
+
                 return True
 
             except sqlite3.Error as error:
-                database_logger.exception(f"'update_special_mode_score' error. {error}")
+                database_logger.exception(f"'update_tournament_best' error. {error}")
                 return False

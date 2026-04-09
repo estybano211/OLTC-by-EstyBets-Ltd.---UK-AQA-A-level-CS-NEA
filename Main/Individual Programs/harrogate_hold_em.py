@@ -8,14 +8,10 @@ from tkinter import (
     Canvas,
     Scrollbar,
 )
-from typing import cast
 from threading import Thread
 from queue import Queue, Empty
 from time import time, sleep
 import random
-from deck_management import CasinoDeckManager
-from poker_player_management import HumanPokerPlayer, BotPokerPlayer
-from search_sort_algorithms import linear_search
 from gui_helpers import (
     DELAY,
     CS,
@@ -25,6 +21,14 @@ from gui_helpers import (
     preset_entry,
     set_view,
 )
+from system_interfaces import (
+    TOURNAMENT_SMALL_BLIND_CAP,
+    TOURNAMENT_BIG_BLIND_CAP,
+    TOURNAMENT_BOT_COUNT,
+    TOURNAMENT_USER_START_BALANCE,
+    TOURNAMENT_BOT_START_BALANCE,
+)
+from search_sort_algorithms import linear_search
 
 DEFAULT_BOT_LIST = [
     "Player1",
@@ -33,148 +37,43 @@ DEFAULT_BOT_LIST = [
 ]
 
 
-WIN_CRITERIA_ELIMINATE_ALL = "eliminate_all"
-WIN_CRITERIA_EARN_TARGET = "earn_target"
-WIN_CRITERIA_SURVIVE_ROUNDS = "survive_rounds"
-WIN_CRITERIA_LAST_MAN_BLIND = "last_man_blind"
-
-
 class TournamentManager:
     """
     Manages multi-round tournaments for Harrogate Hold 'Em.
-
-    Stores settings such as rounds, player count and win criteria and
-    tracks progression, blinds and results.
-
-    Attributes:
-        total_rounds (int): Total rounds in the tournament.
-        total_players (int): Total player count (human player + bots).
-        win_criteria (str): Active win-criteria key constant.
-        target_amount (int): Chip target for WIN_CRITERIA_EARN_TARGET.
-        base_small_blind (int): Starting small blind before escalation.
-        base_big_blind (int): Starting big blind before escalation.
-        current_round (int): The current round number (1-indexed).
-        rounds_survived (int): How many rounds the human player has survived.
-        human_chips_at_round_start (int): Human's chip count at the start
-                                          of the current round.
-        round_wins (int): Number of rounds the human player has won.
-        tournament_over (bool): True once the tournament has concluded.
-        tournament_won (bool): True if the human player won the tournament.
     """
 
     def __init__(self, settings):
-        """
-        Initialises TournamentManager from the casino settings dictionary.
-
-        Args:
-            settings (dict): Casino settings dict. Keys read:
-                             tournament_rounds, tournament_players,
-                             win_criteria, win_criteria_target,
-                             small_blind, big_blind.
-        """
         self.total_rounds = settings.get("tournament_rounds", 5)
-        self.total_players = settings.get("tournament_players", 4)
-        self.win_criteria = settings.get("win_criteria", WIN_CRITERIA_ELIMINATE_ALL)
-        self.target_amount = settings.get("win_criteria_target", 1000)
-
         self.base_small_blind = settings.get("small_blind", 50)
         self.base_big_blind = settings.get("big_blind", 100)
 
         self.current_round = 1
         self.rounds_survived = 0
-        self.human_chips_at_round_start = 0
         self.round_wins = 0
         self.tournament_over = False
         self.tournament_won = False
 
-    # Blind escalation properties.
-
     @property
     def current_small_blind(self):
-        """
-        Returns the small blind for the current round. For
-        WIN_CRITERIA_LAST_MAN_BLIND the blind doubles every round; all
-        other modes escalate by 50 % every three rounds.
-
-        Returns:
-            int: The current small blind amount.
-        """
-        if self.win_criteria == WIN_CRITERIA_LAST_MAN_BLIND:
-            return self.base_small_blind * (2 ** (self.current_round - 1))
         escalation = max(1, (self.current_round - 1) // 3)
-        return int(self.base_small_blind * (1.5**escalation))
+        raw = int(self.base_small_blind * (1.5**escalation))
+        return min(raw, TOURNAMENT_SMALL_BLIND_CAP)
 
     @property
     def current_big_blind(self):
-        """
-        Returns the big blind for the current round using the same
-        escalation logic as current_small_blind.
-
-        Returns:
-            int: The current big blind amount.
-        """
-        if self.win_criteria == WIN_CRITERIA_LAST_MAN_BLIND:
-            return self.base_big_blind * (2 ** (self.current_round - 1))
         escalation = max(1, (self.current_round - 1) // 3)
-        return int(self.base_big_blind * (1.5**escalation))
-
-    # State mutators.
-
-    def record_round_start(self, human_balance):
-        """
-        Snapshots the human player's chip count at the beginning of a round
-        for later reference (e.g. earn_target delta calculations).
-
-        Args:
-            human_balance (int): The human player's current chip balance.
-        """
-        self.human_chips_at_round_start = human_balance
-
-    def evaluate_round_win(self, human_player, all_players):
-        """
-        Checks whether the human player has satisfied the active win criteria
-        for the round that just completed.
-
-        Args:
-            human_player (dict): The human player dictionary.
-            all_players (list[dict]): All player dictionaries in the game.
-
-        Returns:
-            bool: True if the human player has won this round.
-        """
-        if self.win_criteria == WIN_CRITERIA_ELIMINATE_ALL:
-            active_bots = [
-                p
-                for p in all_players
-                if p["is_bot"] and p["status"] not in ("Folded", "OUT")
-            ]
-            return len(active_bots) == 0
-
-        if self.win_criteria == WIN_CRITERIA_EARN_TARGET:
-            return human_player["balance"] >= self.target_amount
-
-        if self.win_criteria in (
-            WIN_CRITERIA_SURVIVE_ROUNDS,
-            WIN_CRITERIA_LAST_MAN_BLIND,
-        ):
-            return human_player["status"] != "OUT"
-
-        return False
+        raw = int(self.base_big_blind * (1.5**escalation))
+        return min(raw, TOURNAMENT_BIG_BLIND_CAP)
 
     def advance_round(self, human_won_round):
         """
-        Advances the tournament state after a round ends, updating win and
-        survival counters and checking for tournament completion.
+        Advances the tournament state after a round ends.
 
         Args:
-            human_won_round (bool): Whether the human player met the win criteria
-                                    for the round that just finished.
-
+            human_won_round (bool): True if the human won the betting round
+                                    (i.e. end_round was called with win=True).
         Returns:
-            dict: A result dictionary with keys:
-                  - 'tournament_over' (bool)
-                  - 'tournament_won' (bool)
-                  - 'message' (str) — outcome message.
+            dict: tournament_over, tournament_won, message.
         """
         if human_won_round:
             self.round_wins += 1
@@ -199,70 +98,38 @@ class TournamentManager:
                 "message": message,
             }
 
-        criteria_desc = {
-            WIN_CRITERIA_ELIMINATE_ALL: "Eliminate all opponents",
-            WIN_CRITERIA_EARN_TARGET: f"Earn £{self.target_amount}",
-            WIN_CRITERIA_SURVIVE_ROUNDS: "Survive the round",
-            WIN_CRITERIA_LAST_MAN_BLIND: "Survive as blinds escalate",
-        }.get(self.win_criteria, "")
-
-        message = (
-            f"Round {self.current_round - 1} complete.  "
-            f"{'Round won!' if human_won_round else 'Round lost.'}\n"
-            f"Round {self.current_round} of {self.total_rounds}.\n"
-            f"Win criteria: {criteria_desc}\n"
-            f"Blinds: £{self.current_small_blind} / £{self.current_big_blind}"
-        )
         return {
             "tournament_over": False,
             "tournament_won": False,
-            "message": message,
+            "message": (
+                f"Round {self.current_round - 1} complete.  "
+                f"{'Round won!' if human_won_round else 'Round lost.'}\n"
+                f"Round {self.current_round} of {self.total_rounds}.\n"
+                f"Win condition: Win the betting round (pot).\n"
+                f"Blinds: £{self.current_small_blind} / £{self.current_big_blind}"
+            ),
         }
 
     def fetch_status_text(self):
-        """
-        Returns a single-line status string suitable for display in the
-        tournament status label during active gameplay.
-
-        Returns:
-            str: Status text describing round, wins and current blinds.
-        """
         if not self.tournament_over:
             return (
                 f"Tournament  |  Round {self.current_round}/{self.total_rounds}  |  "
-                f"Wins: {self.round_wins}  |  "
+                f"Round Wins: {self.round_wins}  |  "
                 f"Blinds: £{self.current_small_blind} / £{self.current_big_blind}"
             )
-        return f"Tournament Over  |  Wins: {self.round_wins}/{self.total_rounds}"
+        return f"Tournament Over  |  Round Wins: {self.round_wins}/{self.total_rounds}"
 
 
 class HarrogateHoldEm:
     """
-    GUI implementation of Harrogate Hold 'Em poker. Handles game flow,
-    bot interactions, tournament management and logging. Runs its own
+    Handles all game flow, betting logic, card dealing, bot interactions,
+    tournament management and logging for Harrogate Hold'em. Runs its own
     tkinter mainloop and returns to the menu on exit.
     """
 
     def __init__(self, user_data, settings, bots):
         """
-        Initialises the Harrogate Hold 'Em window, game state, player list
-        (human player + bots), UI layout and the background bot-decision queue
-        checker.
-
-        Args:
-            user_data (dict): Must contain at minimum:
-                              'username' (str), 'user_id',
-                              'administrator' (bool).
-            settings (dict): Game configuration.  Keys used:
-                             'bot_count', 'bot_balance',
-                             'small_blind', 'big_blind',
-                             'bot_difficulty', 'tournament_mode',
-                             'tournament_rounds', 'tournament_players',
-                             'win_criteria', 'win_criteria_target'.
-            bots (list or None): List of '[name, difficulty]' pairs for
-                                 bot opponents.  If None, bots are
-                                 auto-generated from settings and
-                                 DEFAULT_BOT_LIST.
+        Sets up external resources and initialises game state variables.
         """
         self.user_data = user_data
 
@@ -289,20 +156,13 @@ class HarrogateHoldEm:
 
         self.dbm = DatabaseManagement(DB_PATH)
 
-        if not self.dbm.check_user_poker_data_exists(user_data["user_id"]):
+        if (
+            not user_data.get("administrator")
+            and user_data.get("user_id") is not None
+            and not self.dbm.check_user_poker_data_exists(user_data["user_id"])
+        ):
             self.dbm.initialise_user_poker_data(user_data["user_id"])
 
-        # Auto-generate bots if not supplied.
-        if bots is None:
-            bot_count = settings.get("bot_count", 3)
-            roster = list(DEFAULT_BOT_LIST)
-            random.shuffle(roster)
-            bots = [
-                [roster[index % len(roster)], random.randint(20, 60)]
-                for index in range(bot_count)
-            ]
-
-        # Tournament setup.
         self.tournament_mode = settings.get("tournament_mode", False)
         if self.tournament_mode:
             self.tournament = TournamentManager(settings)
@@ -313,10 +173,22 @@ class HarrogateHoldEm:
             self.small_blind_value = settings.get("small_blind", 50)
             self.big_blind_value = settings.get("big_blind", 100)
 
+        # Determine how many bots will be seated.
+        seated_bot_count = (
+            TOURNAMENT_BOT_COUNT
+            if self.tournament_mode
+            else settings.get("bot_count", len(bots))
+        )
+
         # Build bot lookup.
         self.bots = {}
-        for index, bot in enumerate(bots[: settings.get("bot_count", len(bots))]):
+        for index, bot in enumerate(bots[:seated_bot_count]):
             self.bots[index] = {"name": bot[0], "difficulty": bot[1]}
+
+        if self.tournament_mode:
+            tournament_balance = TOURNAMENT_USER_START_BALANCE
+        else:
+            tournament_balance = None
 
         # Build player list.
         self.players = []
@@ -324,6 +196,9 @@ class HarrogateHoldEm:
         player_model = None
         if self.user_data.get("user_id"):
             try:
+
+                from poker_player_management import HumanPokerPlayer
+
                 player_model = HumanPokerPlayer(user_id=self.user_data["user_id"])
             except Exception as exception:
                 messagebox.showerror(
@@ -336,7 +211,11 @@ class HarrogateHoldEm:
                 "player": user_data["username"] + " (You)",
                 "position": None,
                 "cards": [],
-                "balance": self.return_balance(),
+                "balance": (
+                    tournament_balance
+                    if tournament_balance is not None
+                    else self.return_balance()
+                ),
                 "bet": 0,
                 "status": "Waiting",
                 "is_bot": False,
@@ -348,13 +227,21 @@ class HarrogateHoldEm:
         self.current_round_number = 1
         self.actions_logged = []
 
-        for index in range(settings.get("bot_count", len(self.bots))):
+        bot_balance = (
+            TOURNAMENT_BOT_START_BALANCE
+            if self.tournament_mode
+            else settings.get("bot_balance", 1000)
+        )
+
+        from poker_player_management import BotPokerPlayer
+
+        for index in range(seated_bot_count):
             self.players.append(
                 {
                     "player": self.bots[index]["name"],
                     "position": None,
                     "cards": [],
-                    "balance": settings.get("bot_balance", 1000),
+                    "balance": bot_balance,
                     "bet": 0,
                     "status": "Waiting",
                     "is_bot": True,
@@ -394,9 +281,11 @@ class HarrogateHoldEm:
 
         self.action_buttons = []
 
-        self.start_balance = 0
-
-        if not self.user_data.get("administrator"):
+        if self.tournament_mode:
+            self.start_balance = TOURNAMENT_USER_START_BALANCE
+            set_view(self, self.hhe_screen)
+            self.check_bot_decision_queue()
+        elif not self.user_data.get("administrator"):
             balance_data = self.dbm.fetch_user_balance(self.user_data["username"])
             if not balance_data["found"]:
                 self.return_to_menu(
@@ -404,10 +293,10 @@ class HarrogateHoldEm:
                 )
                 return
             self.start_balance = balance_data["balance"]
-
-            set_view(self, self.harrogate_hold_em_screen)
+            set_view(self, self.hhe_screen)
             self.check_bot_decision_queue()
         else:
+            self.start_balance = 0
             set_view(self, self.admin_modify_bet)
 
         self.hhe_root.mainloop()
@@ -416,10 +305,10 @@ class HarrogateHoldEm:
         """
         Opens a modal Toplevel dialog that allows the administrator to set
         a custom starting chip balance. The dialog cannot be dismissed through
-        the window manager — a valid balance must be submitted.
+        the window manager, a valid balance must be submitted.
 
-        When called from __init__ (before harrogate_hold_em_screen has run) the
-        dialog navigates to harrogate_hold_em_screen on submission. When called
+        When called from __init__ (before hhe_screen has run) the
+        dialog navigates to hhe_screen on submission. When called
         from check_balance mid-game it only updates the balance label and
         closes, preserving all active game state.
 
@@ -453,7 +342,7 @@ class HarrogateHoldEm:
         def submit_balance():
             """
             Validates the balance entry and closes the dialog. If the main
-            game screen has not yet been built, navigates to harrogate_hold_em_screen.
+            game screen has not yet been built, navigates to hhe_screen.
             If the screen is already live, updates the balance label in place
             without disturbing game state.
             """
@@ -467,7 +356,7 @@ class HarrogateHoldEm:
                 if screen_built:
                     self.balance_label.config(text=f"Balance: £{balance}")
                 else:
-                    set_view(self, self.harrogate_hold_em_screen)
+                    set_view(self, self.hhe_screen)
                     self.check_bot_decision_queue()
 
             except Exception:
@@ -480,7 +369,7 @@ class HarrogateHoldEm:
             command=submit_balance,
         ).pack(pady=10)
 
-    def harrogate_hold_em_screen(self, frame):
+    def hhe_screen(self, frame):
         """
         Builds the main five-panel game layout using a grid:
 
@@ -489,7 +378,7 @@ class HarrogateHoldEm:
         - Bottom-left: scrollable colour-coded game log.
         - Top-right: user information, balance and Return to Menu button.
         - Middle-right: scrollable players list.
-        - Bottom-right: bet entry controls and action buttons.
+        - Bottom-right: scrollable bet entry controls and action buttons.
 
         Args:
             frame (Frame): The parent frame to build the view into.
@@ -506,6 +395,7 @@ class HarrogateHoldEm:
         self.round_number_label = preset_label(
             top_left_frame,
             bg=CS["round_label_bg"],
+            fg=CS["round_label_fg"],
             relief="groove",
             anchor="w",
         )
@@ -686,11 +576,6 @@ class HarrogateHoldEm:
         )
 
         def check_bet_input(amount=0):
-            """
-            Updates the current bet by the given amount, clamping the result
-            between 0 and the player's current balance. Updates bet_var,
-            the current-bet label, and the Start Round button state.
-            """
             try:
                 current_value = int(self.bet_var.get())
                 new_value = max(0, current_value + amount)
@@ -701,8 +586,8 @@ class HarrogateHoldEm:
                 new_value = 0
 
             self.bet_var.set(str(new_value))
-            self.current_bet = new_value
-            self.current_bet_label.config(text=f"Current Bet: £{new_value}")
+            self.current_bet_label.config(text=f"Raise Amount: £{new_value}")
+
             state = (
                 "normal" if (new_value > 0 and not self.round_active) else "disabled"
             )
@@ -769,10 +654,10 @@ class HarrogateHoldEm:
 
     def update_player_status(self):
         """
-        Rebuilds the players list panel from scratch inside self.players_frame.
+        Rebuilds the players list panel inside self.players_frame.
         Displays for each player: name with position indicators ([SB], [BB],
         current-turn arrow <), hole cards (visible for the human player and at
-        showdown; face-down [?] [?] for bots otherwise), chip balance,
+        showdown; face-down [?] [?] for bots otherwise), balance,
         current-round bet and status string.
 
         Called both on initial layout and by update_player_status() on every
@@ -877,8 +762,8 @@ class HarrogateHoldEm:
 
     def update_ui(self):
         """
-        Convenience wrapper that refreshes all three UI components —
-        labels, button states and the players list panel — in one call.
+        Refreshes all three UI components,
+        labels, button states and the players list panel in one call.
         """
         self.update_labels()
         self.update_button_states()
@@ -897,7 +782,9 @@ class HarrogateHoldEm:
         ):
             return
 
-        self.balance_label.config(text=f"Balance: £{self.return_balance()}")
+        human_index = linear_search(self.players, "is_bot", False)
+        human_balance = self.players[human_index]["balance"] if human_index != -1 else 0
+        self.balance_label.config(text=f"Balance: £{human_balance}")
 
         if getattr(self, "blinds_label", None) and self.blinds_label.winfo_exists():
             self.blinds_label.config(
@@ -943,8 +830,8 @@ class HarrogateHoldEm:
                 text=f"The Board:  {' '.join(str(c) for c in self.flop[1])}  |?|  |?|"
             )
         elif self.street == "turn":
-            flop_cards = self.flop[1] if isinstance(self.flop, list) else []
-            turn_cards = self.turn[1] if isinstance(self.turn, list) else []
+            flop_cards = self.flop[1] if self.flop[1] else []
+            turn_cards = self.turn[1] if self.turn[1] else []
             self.board_label.config(
                 text=f"The Board:  {' '.join(str(card) for card in flop_cards + turn_cards)}  |?|"
             )
@@ -993,7 +880,7 @@ class HarrogateHoldEm:
                     self.current_bet - human["bet"] + self.big_blind_value,
                     self.big_blind_value,
                 )
-                raise_state = "normal" if min_raise <= human["balance"] else "disabled"
+                raise_state = "normal" if human["balance"] > 0 else "disabled"
                 self.action_buttons[0].config(
                     text=f"Raise  (min £{min_raise})", state=raise_state
                 )
@@ -1044,7 +931,7 @@ class HarrogateHoldEm:
             player (dict): The player dictionary to modify.
             cards (list or None): If an empty list, clears the player's
                 cards. If a non-empty list of treys card integers,
-                converts and stores them through deck.treys_other().
+                converts and stores them through deck.treys_to_str_pretty().
             change_balance (float or None): Amount to add to (positive)
                 or subtract from (negative) the player's current balance.
             bet (float or None): New absolute bet amount to assign.
@@ -1056,7 +943,7 @@ class HarrogateHoldEm:
         if player is None:
             return
         if cards is not None:
-            player["cards"] = self.deck.treys_other(cards) if cards else cards
+            player["cards"] = self.deck.treys_to_str_pretty(cards) if cards else cards
         if change_balance is not None:
             player["balance"] += change_balance
         if bet is not None:
@@ -1121,14 +1008,7 @@ class HarrogateHoldEm:
             self.log_active = True
             item = self.log_queue.pop(0)
 
-            # Accept both 6-tuple and 7-tuple entries.
-            if len(item) == 6:
-                text, round_start, is_win, is_loss, tie, is_thinking = item
-                is_tournament = False
-            else:
-                text, round_start, is_win, is_loss, tie, is_thinking, is_tournament = (
-                    item
-                )
+            text, round_start, is_win, is_loss, tie, is_thinking, is_tournament = item
 
             self.render_log(
                 text, round_start, is_win, is_loss, tie, is_thinking, is_tournament
@@ -1142,8 +1022,7 @@ class HarrogateHoldEm:
     ):
         """
         Creates and packs a colour-coded Label into the log frame for the
-        given message and then scrolls the log canvas to the bottom.  Guards
-        against rendering into a destroyed frame.
+        given message and then scrolls the log canvas to the bottom.
 
         Args:
             text (str): The message text to display.
@@ -1220,19 +1099,24 @@ class HarrogateHoldEm:
 
     def return_balance(self):
         """
-        Retrieves the current user balance from the database. Redirects to
-        the menu with an error if the user is not found or the balance is
-        None. Returns 0 as a fallback to prevent arithmetic errors.
+        Returns the current balance for the player.
 
         Returns:
-            float: The current balance, or 0 if an error occurred.
+            float: The current balance, or 0 on error.
         """
+        if self.tournament_mode:
+            human_index = linear_search(self.players, "is_bot", False)
+            if human_index != -1:
+                return self.players[human_index]["balance"]
+            return 0
+
         balance_data = self.dbm.fetch_user_balance(self.user_data["username"])
 
         if not balance_data["found"]:
             self.return_to_menu(
                 is_error=True, error=Exception("User not found in database.")
             )
+            return 0
 
         if balance_data["balance"] is not None:
             return balance_data["balance"]
@@ -1240,7 +1124,7 @@ class HarrogateHoldEm:
             self.return_to_menu(
                 is_error=True, error=Exception("Fetched balance returns 'None'")
             )
-            return 0  # In order to prevent errors regarding 'None' errors in mathematical operations.
+            return 0
 
     def check_balance(self):
         """
@@ -1272,7 +1156,7 @@ class HarrogateHoldEm:
 
     def modify_user_balance(self, balance):
         """
-        Persists a new chip balance for the human player to the database
+        Updates a new balance for the player to the database
         and updates the balance label in the UI if it still exists.
 
         Args:
@@ -1292,7 +1176,7 @@ class HarrogateHoldEm:
         """
         Logs the human player's action for the current street and round
         to the database and appends it to the in-memory actions_logged
-        list for end-of-round statistics aggregation.
+        list for end-of-round statistics updating.
 
         Args:
             action (str): The action taken — 'fold', 'call', 'raise',
@@ -1332,6 +1216,7 @@ class HarrogateHoldEm:
 
         self.log_message(f"Starting Round {self.round_number}.", round_start=True)
         self.reset_players()
+        self.pot_size = 0
         self.update_ui()
         self.play_round()
 
@@ -1396,10 +1281,12 @@ class HarrogateHoldEm:
 
     def distribute_cards(self):
         """
-        Creates a freshly shuffled deck, deals two hole cards to each
-        active (non-OUT) player and then deals and stores five community
+        Creates a newly shuffled deck, deals two hole cards to each
+        active player and then deals and stores five community
         cards split into flop (3), turn (1) and river (1) components.
         """
+        from deck_management import CasinoDeckManager
+
         self.deck = CasinoDeckManager(shuffle=True, game_mode="poker")
 
         for player in self.players:
@@ -1407,7 +1294,7 @@ class HarrogateHoldEm:
                 self.modify_player(player, cards=[self.deck.draw(1), self.deck.draw(1)])
 
         raw_board = [self.deck.draw(1) for _ in range(5)]
-        self.board = self.deck.treys_other(raw_board)
+        self.board = self.deck.treys_to_str_pretty(raw_board)
 
         (
             self.flop[0],
@@ -1426,21 +1313,9 @@ class HarrogateHoldEm:
         )
 
     def play_round(self):
-        """
-        Executes a complete poker round: updates blinds from the
-        TournamentManager if active, records the tournament round-start
-        snapshot, posts blinds, deals cards, logs the human player's hole
-        cards, refreshes the UI and begins the street sequence at
-        preflop.
-        """
         if self.tournament_mode and self.tournament:
             self.small_blind_value = self.tournament.current_small_blind
             self.big_blind_value = self.tournament.current_big_blind
-
-            human_index = linear_search(self.players, "is_bot", False)
-            human = self.players[human_index] if human_index != -1 else None
-            if human:
-                self.tournament.record_round_start(human["balance"])
 
         self.blind_management()
         self.distribute_cards()
@@ -1457,25 +1332,10 @@ class HarrogateHoldEm:
         self.next_street()
 
     def decisions(self):
-        """
-        Processes decisions for all players who still need to act on the
-        current street. Iterates from current_position, skipping players
-        who have already decided, folded, or are out.
-
-        For bot players, launches an asynchronous decision in a background
-        thread through start_bot_decision_queue() and returns, resuming when
-        the queue result is processed by check_bot_decision_queue().
-
-        For the human player, enables input buttons and returns to await
-        interaction.
-
-        Advances the street when all players have acted (is_betting_complete()
-        returns True after a full cycle).
-        """
         for attempt in range(self.player_count):
             player = self.players[self.current_position]
 
-            if player["status"] not in ("Decided", "Folded", "OUT"):
+            if player["status"] not in ("Decided", "Folded", "OUT", "All-in"):
                 self.player_go = player["player"]
 
                 if player["is_bot"]:
@@ -1511,7 +1371,7 @@ class HarrogateHoldEm:
         Does nothing if a bot decision is already in progress.
 
         Args:
-            player (dict): The bot player dictionary whose AI model will
+            player (dict): The bot player dictionary whose bot model will
                            produce the decision.
         """
         if self.bot_thinking:
@@ -1581,15 +1441,14 @@ class HarrogateHoldEm:
 
     def bot_decision(self, player):
         """
-        Invokes the bot player's AI model to produce a decision for the
-        current game state, gathering the required context (hole cards,
-        community cards, opponents, pot, call amount, balance, street).
+        Triggers the bot player's bot model to make a decision for the
+        current game state.
 
         Args:
             player (dict): The bot player dictionary.
 
         Returns:
-            tuple: One of '("fold",)', '("call",)', or
+            tuple: One of '("fold",)', '("call",)' or
                    '("raise", amount)'.
         """
         model = player["model"]
@@ -1613,26 +1472,6 @@ class HarrogateHoldEm:
             street=self.street,
         )
 
-    def get_community_cards(self):
-        """
-        Returns the community cards visible on the current street as a list
-        of standard string card representations.
-
-        Returns:
-            list[str]: Community cards for the current street.
-                       Empty list for preflop; 3 cards for flop;
-                       4 for turn; 5 for river/showdown.
-        """
-        if self.street == "preflop":
-            return []
-        if self.street == "flop":
-            return list(self.flop[0]) if self.flop else []
-        if self.street == "turn":
-            return list(self.flop[0] or []) + list(self.turn[0] or [])
-        if self.street in ("river", "showdown"):
-            return list(self.board[0]) if self.board else []
-        return []
-
     def execute_bot_decision(self, player, decision):
         """
         Applies a bot's decision to the game state.
@@ -1641,7 +1480,7 @@ class HarrogateHoldEm:
 
         - **fold**: sets status to 'Folded' and logs the action.
         - **call**: handles check (call_amount == 0), all-in call
-          (call_amount ≥ balance) and normal call; logs and updates pot.
+          (call_amount >= balance) and normal call; logs and updates pot.
         - **raise**: enforces the minimum raise, caps at player balance,
           updates pot and current_bet, logs and resets other players through
           reset_after_raise().
@@ -1668,7 +1507,7 @@ class HarrogateHoldEm:
                 self.modify_player(player, bet=player["bet"] + all_in)
                 self.pot_size += all_in
                 self.log_message(f"{name} calls £{all_in} (ALL-IN).")
-                self.modify_player(player, status="Decided")
+                self.modify_player(player, status="All-in")
             else:
                 self.modify_player(player, change_balance=-call_amount)
                 self.modify_player(player, bet=player["bet"] + call_amount)
@@ -1691,35 +1530,33 @@ class HarrogateHoldEm:
             self.current_bet = player["bet"]
 
             self.log_message(f"{name} raises to £{self.current_bet}.")
-            self.modify_player(player, status="Decided")
+
+            # Mark as All-in if they committed their entire stack.
+            if player["balance"] == 0:
+                self.modify_player(player, status="All-in")
+            else:
+                self.modify_player(player, status="Decided")
+
             self.reset_after_raise(except_player=player)
 
     def is_betting_complete(self):
-        """
-        Determines whether the current betting round has concluded.
-
-        Betting is complete when fewer than two active players remain, or
-        when all active players have the status 'Decided' and each has
-        either matched the current bet or has no remaining chips.
-
-        Returns:
-            bool: True if betting is complete.
-        """
         active = [p for p in self.players if p["status"] not in ("Folded", "OUT")]
         if len(active) < 2:
             return True
         for player in active:
             if player["status"] == "Waiting":
                 return False
+            if player["status"] == "All-in":
+                continue
             if player["bet"] < self.current_bet and player["balance"] > 0:
                 return False
         return True
 
     def reset_after_raise(self, except_player):
         """
-        Resets all active players (except the raiser) to 'Waiting' so
-        they must act again after a raise. Sets action_position to the
-        player immediately after the raiser.
+        Resets all active players (except the raiser) that are not 'All-in'
+        to 'Waiting' so they must act again after a raise. Sets action_position
+        to the player immediately after the raiser.
 
         Args:
             except_player (dict): The player who made the raise.
@@ -1729,12 +1566,12 @@ class HarrogateHoldEm:
         for player in self.players:
             if player is except_player:
                 continue
-            if player["status"] not in ("Folded", "OUT"):
+            if player["status"] not in ("Folded", "OUT", "All-in"):
                 player["status"] = "Waiting"
 
     def bot_error(self, player, error):
         """
-        Handles a bot decision error gracefully. Displays a messagebox,
+        Handles a bot decision error. Displays a messagebox,
         logs the event and marks the bot as 'OUT'.
 
         Args:
@@ -1753,10 +1590,30 @@ class HarrogateHoldEm:
         )
         self.modify_player(player, status="OUT")
 
+    def get_community_cards(self):
+        """
+        Returns the community cards visible on the current street as a list
+        of standard string card representations.
+
+        Returns:
+            list[str]: Community cards for the current street.
+                       Empty list for preflop; 3 cards for flop;
+                       4 for turn; 5 for river/showdown.
+        """
+        if self.street == "preflop":
+            return []
+        if self.street == "flop":
+            return list(self.flop[0]) if self.flop else []
+        if self.street == "turn":
+            return list(self.flop[0] or []) + list(self.turn[0] or [])
+        if self.street in ("river", "showdown"):
+            return list(self.board[0]) if self.board else []
+        return []
+
     def next_street(self):
         """
-        Advances to the next street in the street sequence (preflop →
-        flop → turn → river → showdown).
+        Advances to the next street in the street sequence (preflop ->
+        flop -> turn -> river -> showdown).
 
         For preflop, preserves blind 'Decided' statuses and sets action
         to start after the big blind. For all post-flop streets, resets
@@ -1774,14 +1631,15 @@ class HarrogateHoldEm:
 
         if self.street == "preflop":
             for player in self.players:
-                if player["status"] not in ("Folded", "OUT", "Decided"):
+                if player["status"] not in ("Folded", "OUT", "Decided", "All-in"):
                     player["status"] = "Waiting"
             self.current_position = (self.initial_position + 3) % self.player_count
             self.action_position = self.current_position
 
         else:
             for player in self.players:
-                if player["status"] not in ("Folded", "OUT"):
+                # Reset to Waiting only if they can still act this street.
+                if player["status"] not in ("Folded", "OUT", "All-in"):
                     player["status"] = "Waiting"
             self.current_bet = 0
             for player in self.players:
@@ -1828,15 +1686,14 @@ class HarrogateHoldEm:
     def showdown(self):
         """
         Evaluates all remaining active players' hands against the full
-        board using the treys evaluator (lower score = stronger hand),
-        determines the winner(s), logs each player's hand and the
-        outcome and schedules end_round() after the log queue has
-        finished rendering.
+        board using the treys evaluator then determines the winner(s),
+        logs each player's hand and the outcome and schedules end_round()
+        after the log queue has finished rendering.
 
         Handles split pots when multiple players tie.
         """
         self.log_message("— SHOWDOWN —", round_start=True)
-        self.log_message("Board cards: " + " ".join(self.board[0]))
+        self.log_message("Board cards: " + " ".join(self.board[1]))
         self.update_ui()
 
         active = [p for p in self.players if p["status"] not in ("Folded", "OUT")]
@@ -1917,7 +1774,7 @@ class HarrogateHoldEm:
 
     def update_user_poker_data(self):
         """
-        Aggregates the human player's in-round action log and updates
+        Reads the player's in-round action log and updates
         their poker statistics in the database. Derives VPIP, PFR and
         faced-raise flags from actions_logged and then calls
         update_hand_statistics and resolve_player_actions.
@@ -1927,16 +1784,15 @@ class HarrogateHoldEm:
                 model = player.get("model")
 
                 if model and self.actions_logged:
+                    try:
+                        from poker_player_management import cards_to_notation
+
+                        hand_notation = cards_to_notation(player["cards"][0])
+                    except Exception:
+                        hand_notation = None
+
                     for action_log in self.actions_logged:
-                        if action_log["street"] == "preflop":
-                            # Convert cards to notation
-                            try:
-                                from deck_management import cards_to_notation
-
-                                hand_notation = cards_to_notation(player["cards"][1])
-                            except Exception:
-                                continue
-
+                        if action_log["street"] == "preflop" and hand_notation:
                             model.update_range_from_action(
                                 action_log["action"],
                                 hand_notation,
@@ -1977,27 +1833,6 @@ class HarrogateHoldEm:
     def end_round(
         self, *, win=False, loss=False, tie=False, split_pot=False, split_count=1
     ):
-        """
-        Concludes the current round.
-
-        Updates the human player's chip balance based on the outcome
-        (full pot for a solo win, split pot for a shared win, no change
-        for a loss or tie), persists the new balance to the database,
-        logs the outcome and remaining balance, updates poker statistics,
-        increments the round counter, handles tournament progression if
-        active and schedules finish_end_round() after the log queue
-        empties.
-
-        Args:
-            win (bool): Human player won. Defaults to False.
-            loss (bool): Human player lost. Defaults to False.
-            tie (bool): Round ended in a tie. Defaults to False.
-            split_pot (bool): Pot was split among multiple winners.
-                              Defaults to False.
-            split_count (int): Number of winners in a split.
-                               Defaults to 1.
-        """
-
         human_index = linear_search(self.players, "is_bot", False)
         human = self.players[human_index] if human_index != -1 else None
         if not human:
@@ -2020,7 +1855,7 @@ class HarrogateHoldEm:
         elif tie:
             self.log_message("It's a tie!", tie=True)
 
-        if not self.tournament_mode or win:
+        if not self.tournament_mode:
             self.dbm.modify_user_balance(self.user_data["username"], human["balance"])
 
         if getattr(self, "balance_label", None) and self.balance_label.winfo_exists():
@@ -2033,10 +1868,8 @@ class HarrogateHoldEm:
         self.current_round_number += 1
         self.actions_logged = []
 
-        # Tournament round evaluation.
         if self.tournament_mode and self.tournament:
-            round_won = self.tournament.evaluate_round_win(human, self.players)
-            result = self.tournament.advance_round(round_won)
+            result = self.tournament.advance_round(human_won_round=win)
             self.log_message(result["message"], is_tournament=True)
 
             if result["tournament_over"]:
@@ -2047,9 +1880,14 @@ class HarrogateHoldEm:
                 )
                 return
 
-            # Update blinds for next round.
+            # Update blinds label for next round.
             self.small_blind_value = self.tournament.current_small_blind
             self.big_blind_value = self.tournament.current_big_blind
+
+            if getattr(self, "blinds_label", None) and self.blinds_label.winfo_exists():
+                self.blinds_label.config(
+                    text=f"Blinds: £{self.small_blind_value} / £{self.big_blind_value}"
+                )
 
         # Schedule teardown after log queue drains.
         delay = self.log_delay_ms * (len(self.log_queue) + 1)
@@ -2057,22 +1895,33 @@ class HarrogateHoldEm:
 
     def finish_tournament(self, result):
         """
-        Called once a tournament has fully concluded (all rounds played).
+        Called once a tournament has fully concluded.
         Displays a summary dialog and returns to the main menu.
+
+        Always attempts to update the player's personal best for consecutive
+        rounds survived, regardless of whether the tournament was won.
 
         Args:
             result (dict): The result dict returned by
                            TournamentManager.advance_round() when
                            tournament_over is True.
         """
-        icon = "Tournament Victory!" if result["tournament_won"] else "Tournament Over"
-        messagebox.showinfo(icon, result["message"])
+        message = (
+            "Tournament Victory!" if result["tournament_won"] else "Tournament Over"
+        )
+
+        self.dbm.update_tournament_best(
+            self.user_data["user_id"],
+            self.tournament.rounds_survived,
+        )
+
+        messagebox.showinfo(message, result["message"])
         self.return_to_menu()
 
     def finish_end_round(self):
         """
-        Completes round teardown after the log queue has finished
-        rendering. Resets the current-bet label, eliminates bots with
+        Completes round after the log queue has finished rendering.
+        Resets the current-bet label, eliminates bots with
         zero chips, marks the human player as 'OUT' if they have no chips,
         checks for game-over conditions, increments the round display
         number and re-enables the Start Round button.
@@ -2082,7 +1931,7 @@ class HarrogateHoldEm:
             getattr(self, "current_bet_label", None)
             and self.current_bet_label.winfo_exists()
         ):
-            self.current_bet_label.config(text="Current Bet: £0")
+            self.current_bet_label.config(text="Raise Amount: £0")
 
         for player in self.players:
             if player["is_bot"] and player["balance"] <= 0:
@@ -2109,7 +1958,7 @@ class HarrogateHoldEm:
     def check_game_over(self):
         """
         Checks whether the game has ended. The game ends if the human
-        player's status is 'OUT' (loss), or if all bots are 'OUT'
+        player's status is 'OUT' (loss) or if all bots are 'OUT'
         (victory).
 
         When balance reaches zero, a message is shown and the player is
@@ -2143,29 +1992,6 @@ class HarrogateHoldEm:
 
         return False
 
-    def return_to_menu(self, is_error=False, error=None):
-        """
-        Destroys the game window and returns the user to the appropriate
-        interface: AdminInterface for administrators, CasinoInterface
-        for regular users. Optionally shows an error dialog
-        before navigating.
-
-        Args:
-            is_error (bool): If True, display an error message first.
-            error (Exception or None): The error to show if is_error is
-                                       True.
-        """
-        if is_error:
-            messagebox.showerror("Error", f"{error}\n\nExiting game.")
-        self.hhe_root.destroy()
-
-        from system_interfaces import CasinoInterface
-
-        CasinoInterface(
-            administrator=True if self.user_data.get("administrator") else False,
-            user_data=self.user_data,
-        )
-
     def fold(self):
         """
         Handles the human player choosing to fold. Sets their status to
@@ -2188,9 +2014,9 @@ class HarrogateHoldEm:
         Handles the human player choosing to call (or check).
 
         Determines the call amount and handles three cases:
-        - Call amount is zero → check.
-        - Call amount ≥ balance → all-in call for exact balance.
-        - Normal call → deduct call_amount, update pot.
+        - Call amount is zero -> check.
+        - Call amount >= balance -> all-in call for exact balance.
+        - Normal call -> deduct call_amount, update pot.
 
         Logs the action to the database, advances current_position and
         continues the decision loop.
@@ -2202,6 +2028,7 @@ class HarrogateHoldEm:
                 if call_amount == 0:
                     self.log_message(f"{player['player']} checks.")
                     action, bet_size = "check", 0
+                    self.modify_player(player, status="Decided")
 
                 elif call_amount >= player["balance"]:
                     all_in = player["balance"]
@@ -2210,6 +2037,7 @@ class HarrogateHoldEm:
                     self.pot_size += all_in
                     self.log_message(f"{player['player']} calls £{all_in} (ALL-IN).")
                     action, bet_size = "call", all_in
+                    self.modify_player(player, status="All-in")
 
                 else:
                     self.modify_player(player, change_balance=-call_amount)
@@ -2217,8 +2045,8 @@ class HarrogateHoldEm:
                     self.pot_size += call_amount
                     self.log_message(f"{player['player']} calls £{call_amount}.")
                     action, bet_size = "call", call_amount
+                    self.modify_player(player, status="Decided")
 
-                self.modify_player(player, status="Decided")
                 self.player_turn = False
                 self.log_player_action_to_db(action, bet_size)
                 self.current_position = (self.current_position + 1) % self.player_count
@@ -2241,12 +2069,15 @@ class HarrogateHoldEm:
             messagebox.showerror("Invalid Raise", "Please enter a valid number.")
             return
 
+        if raise_amount <= 0:
+            messagebox.showerror("Invalid Raise", "Raise must be greater than 0.")
+            return
+
         for player in self.players:
             if not player["is_bot"]:
-                min_raise = max(
-                    self.current_bet - player["bet"] + self.big_blind_value,
-                    self.big_blind_value,
-                )
+
+                call_amount = max(0, self.current_bet - player["bet"])
+                min_raise = call_amount + self.big_blind_value
 
                 if raise_amount < min_raise:
                     messagebox.showerror(
@@ -2256,24 +2087,51 @@ class HarrogateHoldEm:
                     return
 
                 if raise_amount > player["balance"]:
-                    messagebox.showerror(
-                        "Insufficient Funds",
-                        "You do not have enough chips to raise by that amount.",
-                    )
-                    return
+                    raise_amount = player["balance"]
 
+                # Apply raise
                 self.modify_player(player, change_balance=-raise_amount)
                 self.modify_player(player, bet=player["bet"] + raise_amount)
+
                 self.pot_size += raise_amount
-                self.current_bet = player["bet"]
+                self.current_bet = max(p["bet"] for p in self.players)
+
+                if player["balance"] == 0:
+                    self.modify_player(player, status="All-in")
+                else:
+                    self.modify_player(player, status="Decided")
 
                 self.log_message(f"{player['player']} raises to £{self.current_bet}.")
-                self.modify_player(player, status="Decided")
                 self.log_player_action_to_db("raise", raise_amount)
+
                 self.reset_after_raise(except_player=player)
 
                 self.current_position = (self.current_position + 1) % self.player_count
                 self.player_turn = False
+
                 self.update_ui()
                 self.decisions()
                 break
+
+    def return_to_menu(self, is_error=False, error=None):
+        """
+        Destroys the game window and returns the user to the appropriate
+        interface: AdminInterface for administrators, CasinoInterface
+        for regular users. Optionally shows an error dialog
+        before navigating.
+
+        Args:
+            is_error (bool): If True, display an error message first.
+            error (Exception or None): The error to show if is_error is
+                                       True.
+        """
+        if is_error:
+            messagebox.showerror("Error", f"{error}\n\nExiting game.")
+        self.hhe_root.destroy()
+
+        from system_interfaces import CasinoInterface
+
+        CasinoInterface(
+            administrator=True if self.user_data.get("administrator") else False,
+            user_data=self.user_data,
+        )

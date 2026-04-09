@@ -32,13 +32,10 @@ class EncryptionSoftware:
             "WM_DELETE_WINDOW", lambda: (self.enc_soft_root.quit(), sys.exit(0))
         )
 
-        try:
-            from database_management_and_logging import DatabaseManagement, DB_PATH
+        from database_management_and_logging import DatabaseManagement, DB_PATH
 
-            self.dbm = DatabaseManagement(DB_PATH)
-            self.dbm.admin_accessed_system("Encryption Software")
-        except Exception:
-            pass
+        self.dbm = DatabaseManagement(DB_PATH)
+        self.dbm.admin_accessed_system("Encryption Software")
 
         self.aes_key = None
 
@@ -86,7 +83,7 @@ class EncryptionSoftware:
         Generates a 2048-bit RSA keypair and saves both the private and public
         keys as PEM files to a user-selected directory. Filenames include a
         timestamp in DD-Month-YYYY format. Displays a success message with the
-        saved file paths, or an error message if generation or saving fails.
+        saved file paths or an error message if generation or saving fails.
         """
         save_dir = filedialog.askdirectory(title="Select folder to save RSA keys")
         if not save_dir:
@@ -125,7 +122,7 @@ class EncryptionSoftware:
         RSA public key through PKCS1-OAEP and saves the encrypted result as a
         binary file to a user-selected directory. The filename includes a
         timestamp in DD-Month-YYYY format. Displays a success message with the
-        saved file path, or an error message on failure.
+        saved file path or an error message on failure.
         """
         rsa_pub_file = filedialog.askopenfilename(
             title="Select RSA Public Key",
@@ -170,7 +167,7 @@ class EncryptionSoftware:
         Prompts the user to select an RSA private key file and an encrypted AES
         key file and then decrypts the AES key using PKCS1-OAEP and stores it in
         memory as self.aes_key. The loaded key is used for subsequent encrypt
-        and decrypt operations. Displays a success message on completion, or an
+        and decrypt operations. Displays a success message on completion or an
         error message if decryption fails.
         """
         rsa_private_file = filedialog.askopenfilename(
@@ -210,7 +207,7 @@ class EncryptionSoftware:
         mode. The encrypted output is saved to the same location with a .enc
         extension appended. The file contains the nonce, authentication tag and
         ciphertext concatenated in that order. Displays a warning if no AES key
-        is loaded, a success message with the output path on completion, or an
+        is loaded, a success message with the output path on completion or an
         error message on failure.
         """
         if not self.aes_key:
@@ -253,9 +250,9 @@ class EncryptionSoftware:
         in EAX mode. Reads the nonce, authentication tag and ciphertext from
         the file, verifies the authentication tag and writes the decrypted
         plaintext to disk. The output path is the input path with the .enc
-        extension removed, or with .dec appended if the file does not end in
+        extension removed or with .dec appended if the file does not end in
         .enc. Displays a warning if no AES key is loaded, a success message
-        with the output path on completion, or an error message if decryption
+        with the output path on completion or an error message if decryption
         or tag verification fails.
         """
         if not self.aes_key:

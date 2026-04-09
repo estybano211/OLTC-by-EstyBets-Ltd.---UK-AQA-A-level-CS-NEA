@@ -26,17 +26,12 @@ def fetch_text_styles(root):
         "subheading": font.Font(
             root=root, family="Bodoni 72 Smallcaps", size=30, weight="bold"
         ),
+        "rules": font.Font(root=root, family="Helvetica", size=20, weight="bold"),
         "text": font.Font(root=root, family="Verdana", size=26),
         "button": font.Font(root=root, family="Tahoma", size=22, weight="bold"),
         "label": font.Font(root=root, family="Didot", size=20),
-        "terms_and_conditions": font.Font(
-            root=root, family="American Typewriter", size=26
-        ),  # or Snell Roundhand
         "emphasis": font.Font(
             root=root, family="Georgia", size=16, weight="bold", slant="italic"
-        ),
-        "casino_style": font.Font(
-            root=root, family="Zapfino", size=28, weight="bold", slant="italic"
         ),
     }
     return text_styles
@@ -49,7 +44,7 @@ CS = {
     "admin": "#BB756D",
     "casino": "#1F6053",
     "rules": "#000000",
-    # Label, entry and button backgrounds.
+    # Labels, entrys and buttons.
     "label_bg": "#D7CBB4",
     "label_text": "#000000",
     "entry_bg": "#FDFEFE",
@@ -68,6 +63,7 @@ CS = {
     # Text.
     "text_bg": "#1A1A1A",
     "text_fg": "#FFFFFF",
+    "casino_text": "#E59866",
     # Log panel.
     "log_bg": "#000000",
     "log_fg": "#FFFFFF",
@@ -83,14 +79,15 @@ CS = {
     "thinking_bg": "#3C2A4A",
     "thinking_fg": "#D4B8E8",
     "tournament_bg": "#4A1E38",
-    "tournament_fg": "#E8B8D0",
-    "endless_bg": "#E74C3C",
-    "endless_fg": "#31A3AD",
+    "tournament_fg": "#F4BDD9",
     # Misc.
-    "table_even": "#9627C5",
-    "table_odd": "#D7BDE2",
+    "correct": "#13DF00",
+    "error": "#FF0000",
+    "table_even": "#0C0C0C",
+    "table_odd": "#364DE2",
     "separator": "#888888",
     "round_label_bg": "#1A5276",
+    "round_label_fg": "#FFFFFF",
 }
 
 # Default delay for message logging in seconds.
@@ -102,8 +99,7 @@ DELAY = 1.5
 
 def create_window(root, title, bg_color, is_main_frame=False):
     """
-    Creates and configures a standardised Tkinter window with consistent
-    styling.
+    Creates and configures a standardised Tkinter window.
 
     Args:
         root (Tk or Toplevel): The Tkinter root window to configure.

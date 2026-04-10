@@ -863,7 +863,7 @@ class DatabaseManagement:
                     """
                     SELECT user_id FROM users
                     WHERE registered = 0
-                    AND strftime('%s', 'now') - strftime('%s', created_at) > ?
+                    AND (julianday('now') - julianday(created_at)) * 86400.0 > ?
                     """,
                     (24 * 3600,),
                 ).fetchall()
@@ -907,7 +907,7 @@ class DatabaseManagement:
                     SELECT user_id FROM users
                     WHERE registered = 1
                     AND last_login IS NOT NULL
-                    AND strftime('%s', 'now') - strftime('%s', last_login) > ?
+                    AND (julianday('now') - julianday(last_login)) * 86400.0 > ?
                     """,
                     (24 * 3600,),
                 ).fetchall()
@@ -1157,6 +1157,7 @@ class DatabaseManagement:
                         upd.total_bets,
                         upd.fold_to_raise,
                         upd.call_when_weak,
+                        upd.tournament_wins,
                         upd.last_updated
                     FROM user_poker_data upd
                     WHERE upd.user_id = ?

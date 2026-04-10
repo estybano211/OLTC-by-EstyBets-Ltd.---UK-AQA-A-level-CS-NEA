@@ -1,0 +1,41 @@
+flowchart TD
+
+    START([Start]) --> EXISTING_ACCOUNT{Existing Account?}
+
+    %% New User - Registration
+    EXISTING_ACCOUNT -->|No|REGISTER_ACCOUNT[Register Account]
+    REGISTER_ACCOUNT --> ENTER_REG_CREDENTIALS[Enter Username and Password]
+    ENTER_REG_CREDENTIALS --> CREATE_ACCOUNT_DB[Create Account in Database]
+    CREATE_ACCOUNT_DB --> MAIN_MENU
+
+    %% Existing User - Login
+    EXISTING_ACCOUNT -->|Yes|LOGIN[Login]
+    LOGIN --> ENTER_LOGIN_CREDENTIALS[Enter Username and Password]
+    ENTER_LOGIN_CREDENTIALS --> CHECK_CREDENTIALS{Valid Credentials?}
+    CHECK_CREDENTIALS -->|No|ENTER_LOGIN_CREDENTIALS
+    CHECK_CREDENTIALS -->|Yes|MAIN_MENU[Access Main Menu]
+
+    %% Main Menu Options
+    MAIN_MENU --> SELECT_OPTION{Select Option}
+
+    SELECT_OPTION --> VIEW_ACCOUNT[View Account Information]
+    VIEW_ACCOUNT --> DISPLAY_BALANCE_STATS[Display Balance and Statistics]
+
+    SELECT_OPTION --> PLAY_GAME[Play Casino Game]
+    PLAY_GAME --> CHECK_GAME_BALANCE[Check Balance]
+    CHECK_GAME_BALANCE --> GAME_BALANCE_POSITIVE{Balance > 0?}
+    GAME_BALANCE_POSITIVE -->|No|RETURN_TO_MENU[Return to Menu]
+    RETURN_TO_MENU --> MAIN_MENU
+    GAME_BALANCE_POSITIVE -->|Yes|START_GAME[Start Game]
+    START_GAME --> PLAY_ROUNDS[Play Rounds]
+    PLAY_ROUNDS --> UPDATE_BALANCE[Update Balance]
+    UPDATE_BALANCE --> STORE_GAME_DATA[Store Game Data]
+    STORE_GAME_DATA --> CONTINUE_PLAYING{Continue Playing?}
+    CONTINUE_PLAYING -->|Yes|PLAY_ROUNDS
+    CONTINUE_PLAYING -->|No|MAIN_MENU
+
+    SELECT_OPTION --> VIEW_HISTORY[View Scores and History]
+    VIEW_HISTORY --> RETRIEVE_STORED_DATA[Retrieve Stored Data]
+
+    SELECT_OPTION --> EXIT[Exit]
+    EXIT --> END([End])

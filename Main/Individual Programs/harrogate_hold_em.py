@@ -55,13 +55,13 @@ class TournamentManager:
 
     @property
     def current_small_blind(self):
-        escalation = max(1, (self.current_round - 1) // 3)
+        escalation = (self.current_round - 1) // 3
         raw = int(self.base_small_blind * (1.5**escalation))
         return min(raw, TOURNAMENT_SMALL_BLIND_CAP)
 
     @property
     def current_big_blind(self):
-        escalation = max(1, (self.current_round - 1) // 3)
+        escalation = (self.current_round - 1) // 3
         raw = int(self.base_big_blind * (1.5**escalation))
         return min(raw, TOURNAMENT_BIG_BLIND_CAP)
 

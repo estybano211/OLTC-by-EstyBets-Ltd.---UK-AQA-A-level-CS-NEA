@@ -1,0 +1,41 @@
+flowchart TD
+
+    START([Start]) --> ENTER_PASSWORD[Enter Administrator Password]
+    ENTER_PASSWORD --> CHECK_PASSWORD{Password Correct?}
+
+    CHECK_PASSWORD -->|No|ENTER_PASSWORD
+    CHECK_PASSWORD -->|Yes|ADMIN_MENU[Access Admin Menu]
+
+    ADMIN_MENU --> SELECT_OPTION{Select Option}
+
+    %% Option 1 - Access Casino System
+    SELECT_OPTION --> ACCESS_CASINO[Access Casino System]
+    ACCESS_CASINO --> USE_AS_ADMIN[Use System as Admin]
+
+    %% Option 2 - Open Admin Console
+    SELECT_OPTION --> OPEN_CONSOLE[Open Admin Console]
+    OPEN_CONSOLE --> SELECT_CONSOLE_ACTION{Select Console Action}
+
+    SELECT_CONSOLE_ACTION --> CHANGE_PASSWORD[Change Administrator Password]
+    CHANGE_PASSWORD --> VERIFY_MASTER[Verify Master Password]
+    VERIFY_MASTER --> ENTER_OLD_PASSWORD[Enter Old Password]
+    ENTER_OLD_PASSWORD --> ENTER_NEW_PASSWORD[Enter New Password]
+    ENTER_NEW_PASSWORD --> UPDATE_PASSWORD_DB[Update Password in Database]
+
+    SELECT_CONSOLE_ACTION --> ACCESS_ENCRYPTION[Access Encryption Tools]
+    ACCESS_ENCRYPTION --> GENERATE_LOAD_KEYS[Generate or Load Encryption Keys]
+    GENERATE_LOAD_KEYS --> SELECT_FILE[Select File]
+    SELECT_FILE --> ENCRYPT_DECRYPT[Encrypt or Decrypt File]
+
+    SELECT_CONSOLE_ACTION --> DATABASE_MANAGEMENT[Database Management]
+    DATABASE_MANAGEMENT --> DB_ACTIONS[Create or Delete Database - View Tables - Export Tables]
+
+    SELECT_CONSOLE_ACTION --> USER_MANAGEMENT[User Management]
+    USER_MANAGEMENT --> MODIFY_USER_DATA[Modify User Data]
+
+    SELECT_CONSOLE_ACTION --> EXIT_CONSOLE[Exit Console]
+    EXIT_CONSOLE --> ADMIN_MENU
+
+    %% Option 3 - Exit System
+    SELECT_OPTION --> EXIT_SYSTEM[Exit System]
+    EXIT_SYSTEM   --> END([End])

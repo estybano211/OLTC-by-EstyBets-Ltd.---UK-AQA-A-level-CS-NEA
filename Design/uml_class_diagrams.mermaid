@@ -1,0 +1,406 @@
+classDiagram
+
+    %% ==================== LOGGING ====================
+
+    class LogHandler {
+        TABLE
+        queue
+        stop_event
+        worker_thread
+        __init__()
+        emit(record)
+        processor()
+        close()
+    }
+
+    class DatabaseLogHandler {
+        TABLE
+    }
+
+    class AdminLogHandler {
+        TABLE
+    }
+
+    %% ==================== DATABASE LAYER ====================
+
+    class DatabaseManagement {
+        SCHEMA
+        db_path
+        __init__(db_path)
+        connect()
+        check_database_exists()
+        create_database()
+        admin_account()
+        admin_logged_in()
+        admin_accessed_system(system)
+        admin_password_check(password)
+        change_admin_password(new_password)
+        view_database(table)
+        export_table_to_csv(table, file_path)
+        change_user_record()
+        change_user_username(user_id, new_username)
+        change_user_password(user_id, new_password)
+        change_user_account_type(user_id, registered)
+        change_user_balance(user_id, new_balance)
+        delete_user_record(user_id)
+        fetch_user_record()
+        fetch_user_presence(username)
+        register_user(username, password, registered)
+        verify_user_password(username, password)
+        record_user_login(username)
+        check_expired_guest_account()
+        apply_daily_login_bonus()
+        fetch_user_id(username)
+        fetch_username(user_id)
+        fetch_user_balance(username)
+        modify_user_balance(username, new_balance)
+        check_user_poker_data_exists(user_id)
+        initialise_user_poker_data(user_id)
+        load_user_poker_data(user_id)
+        update_player_range(user_id, player_range)
+        log_player_action(user_id, round_number, street, action, bet_size, pot_size)
+        resolve_player_actions(user_id, round_number)
+        update_hand_statistics(user_id, action, bet_size, voluntarily_entered, preflop_raised, faced_raise)
+        recalculate_frequencies(conn, user_id)
+        fetch_total_rounds(user_id)
+        fetch_tournament_scores()
+        update_tournament_best(user_id)
+    }
+
+    %% ==================== ENCRYPTION ====================
+
+    class EncryptionSoftware {
+        aes_key
+        dbm
+        enc_soft_root
+        __init__()
+        create_main_menu(frame)
+        generate_rsa_keys()
+        generate_encrypted_aes_key()
+        load_rsa_aes_key()
+        encrypt_file()
+        decrypt_file()
+    }
+
+    %% ==================== INTERFACES ====================
+
+    class BaseInterface {
+        WINDOW_BG_KEY
+        dbm
+        interface_root
+        __init__()
+        startup()
+        on_close()
+    }
+
+    class AdminInterface {
+        WINDOW_BG_KEY
+        WINDOW_TITLE
+        __init__()
+        startup()
+        administrative_check(frame)
+        interface_menu(frame)
+        admin_console()
+        access_casino()
+    }
+
+    class AdminConsole {
+        MASTER_PASSWORD
+        WINDOW_BG_KEY
+        WINDOW_TITLE
+        __init__()
+        startup()
+        show_console_menu(frame)
+        change_admin_password(frame)
+        encryption_software_access()
+        show_database_management(frame)
+        create_database()
+        delete_database()
+        show_view_database(frame)
+        display_table(frame, dataframe, table)
+        table_to_csv()
+        show_user_management(frame)
+        fetch_user_record(frame)
+        display_user_record(frame, record)
+        add_user(frame)
+        choose_account_type(frame, username)
+        create_password(frame, username)
+        edit_user(frame)
+        show_edit_form(frame, record)
+        delete_user(frame)
+    }
+
+    class CasinoInterface {
+        WINDOW_BG_KEY
+        WINDOW_TITLE
+        administrator
+        user_data_init
+        settings
+        user_data
+        __init__(administrator, user_data)
+        setup_user_data()
+        startup()
+        user_linked()
+        require_linked(action_label)
+        fetch_rounds_played()
+        casino_menu(frame)
+        show_game_menu(frame)
+        user_register()
+        user_login_setup()
+        username_input(frame, registered)
+        set_account_type(frame, username)
+        create_password(frame, username)
+        user_login(frame, username)
+        fetch_user_record(frame)
+        display_user_record(frame, record)
+        casino_exit()
+        game_settings(frame)
+        show_leaderboard(frame)
+        whitejoe_rules()
+        start_whitejoe()
+        hhe_rules()
+        start_hhe()
+    }
+
+    class ShowGameRules {
+        WJ_RULES
+        HHE_RULES
+        __init__(root)
+        show_whitejoe_rules(callback)
+        show_hhe_rules(callback)
+        show_rules_window(title, rules_text, callback)
+    }
+
+    %% ==================== DECK MANAGEMENT ====================
+
+    class CasinoDeckManager {
+        deck
+        evaluator
+        game_mode
+        __init__(shuffle, game_mode)
+        str_deck()
+        shuffle()
+        draw(n)
+        str_draw(n)
+        pretty_draw(n)
+        remove_card(card)
+        remaining()
+        copy()
+        str_to_treys(card)
+        treys_to_str(card)
+        treys_to_pretty(card)
+        treys_to_str_pretty(cards)
+        str_cards(cards)
+        pretty_cards(cards)
+        blackjack_hand_value(treys_hand)
+        evaluate_hand(hand, board)
+    }
+
+    %% ==================== GAMES ====================
+
+    class WhiteJoe {
+        bet_var
+        current_bet
+        dbm
+        dealer
+        dealer_hand
+        deck
+        player_hand
+        start_balance
+        user_data
+        wj_root
+        __init__(user_data)
+        admin_modify_bet(frame)
+        whitejoe_screen(frame)
+        update_button_states()
+        log_message(text, round_start, is_win, is_loss, is_push)
+        process_log_queue()
+        render_log(text, round_start, is_win, is_loss, is_push)
+        return_balance()
+        check_balance()
+        modify_user_balance(balance)
+        start_round()
+        logs_after_deal()
+        hit()
+        stand()
+        double_down()
+        surrender()
+        resolve_dealer()
+        end_round(win, loss, push)
+        return_to_menu(is_error, error)
+    }
+
+    class TournamentManager {
+        base_big_blind
+        base_small_blind
+        current_round
+        human_starting_balance
+        round_wins
+        rounds_survived
+        target_amount
+        total_players
+        total_rounds
+        tournament_over
+        tournament_won
+        win_criteria
+        __init__(settings)
+        current_small_blind()
+        current_big_blind()
+        advance_round(human_won_round)
+        fetch_status_text()
+    }
+
+    class HarrogateHoldEm {
+        board
+        bots
+        current_bet
+        dbm
+        deck
+        hhe_root
+        player_count
+        player_go
+        player_turn
+        players
+        pot_size
+        round_active
+        round_number
+        street
+        street_sequence
+        tournament_mode
+        user_data
+        __init__(user_data, settings, bots)
+        admin_modify_bet(frame)
+        harrogate_hold_em_screen(frame)
+        update_player_status()
+        update_ui()
+        update_labels()
+        update_button_states()
+        reset_players()
+        modify_player(player, cards, change_balance, bet, status, refresh_player_model)
+        log_message(text, round_start, is_win, is_loss, tie, is_thinking, is_tournament)
+        process_log_queue()
+        render_log(text, round_start, is_win, is_loss, tie, is_thinking, is_tournament)
+        return_balance()
+        check_balance()
+        modify_user_balance(balance)
+        log_player_action_to_db(action, bet_size)
+        check_round()
+        blind_management()
+        distribute_cards()
+        play_round()
+        decisions()
+        start_bot_decision_queue(player)
+        bot_decision_worker(player, min_thinking_ms)
+        check_bot_decision_queue()
+        bot_decision(player)
+        execute_bot_decision(player, decision)
+        is_betting_complete()
+        reset_after_raise(except_player)
+        bot_error(player, error)
+        get_community_cards()
+        next_street()
+        advance_street()
+        showdown()
+        update_user_poker_data()
+        end_round(win, loss, tie, split_pot, split_count)
+        finish_tournament(result)
+        finish_end_round()
+        check_game_over()
+        fold()
+        call()
+        raise_bet()
+        return_to_menu(is_error, error)
+    }
+
+    %% ==================== POKER PLAYER MODELS ====================
+
+    class HumanPokerPlayer {
+        active_range
+        aggression_factor
+        base_range
+        call_when_weak
+        dbm
+        fold_to_raise
+        pfr
+        record
+        statistics
+        stored_range
+        user_id
+        vpip
+        __init__(user_id)
+        refresh_from_db()
+        reset_active_range()
+        update_range_from_action(action, hand_notation)
+        fetch_player_info()
+    }
+
+    class BotPokerPlayer {
+        active_range
+        aggression_factor
+        base_range
+        bluff_freq
+        bot_characteristics
+        call_when_weak
+        difficulty
+        fold_to_raise
+        pfr
+        vpip
+        __init__(difficulty)
+        decide(player_hand, community_cards, opponents, pot, to_call, balance, street)
+        fetch_player_info()
+    }
+
+    class BotCharacteristics {
+        bluff_multiplier
+        difficulty
+        fold_bias
+        is_bot
+        mdf_threshold
+        noise_level
+        range_adherence
+        risk_tolerance
+        simulations
+        __init__(difficulty)
+    }
+
+    %% ==================== RELATIONSHIPS ====================
+
+    %% Inheritance
+    LogHandler <|-- DatabaseLogHandler
+    LogHandler <|-- AdminLogHandler
+    BaseInterface <|-- AdminInterface
+    BaseInterface <|-- AdminConsole
+    BaseInterface <|-- CasinoInterface
+
+    %% DatabaseManagement composition
+    DatabaseManagement --o BaseInterface : dbm
+    DatabaseManagement --o WhiteJoe : dbm
+    DatabaseManagement --o HarrogateHoldEm : dbm
+    DatabaseManagement --o HumanPokerPlayer : dbm
+    DatabaseManagement --o EncryptionSoftware : dbm
+
+    %% CasinoInterface launches games
+    CasinoInterface ..> WhiteJoe : starts
+    CasinoInterface ..> HarrogateHoldEm : starts
+    CasinoInterface ..> ShowGameRules : uses
+
+    %% AdminInterface navigation
+    AdminInterface ..> AdminConsole : opens
+    AdminInterface ..> CasinoInterface : opens
+
+    %% AdminConsole uses EncryptionSoftware
+    AdminConsole ..> EncryptionSoftware : opens
+
+    %% HarrogateHoldEm owns a TournamentManager
+    TournamentManager --o HarrogateHoldEm : tournament
+
+    %% Games use CasinoDeckManager
+    CasinoDeckManager --o HarrogateHoldEm : deck
+    CasinoDeckManager --o WhiteJoe : deck
+
+    %% HarrogateHoldEm uses player models
+    HumanPokerPlayer --o HarrogateHoldEm : players model
+    BotPokerPlayer --o HarrogateHoldEm : players model
+
+    %% BotPokerPlayer owns BotCharacteristics
+    BotCharacteristics --o BotPokerPlayer : bot_characteristics

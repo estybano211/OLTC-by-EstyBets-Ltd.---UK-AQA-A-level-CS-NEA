@@ -1,0 +1,60 @@
+flowchart TD
+
+    START([Start Blackjack]) --> CHECK_BALANCE[Check Player Balance]
+    CHECK_BALANCE --> BALANCE_POSITIVE{Balance > 0?}
+
+    %% Insufficient Balance
+    BALANCE_POSITIVE -->|No|ADMIN_OVERRIDE{Administrator Override?}
+    ADMIN_OVERRIDE -->|No|RETURN_TO_MENU[Return to Menu]
+    ADMIN_OVERRIDE -->|Yes|ENTER_NEW_BALANCE[Enter New Balance]
+    ENTER_NEW_BALANCE --> UPDATE_BALANCE[Update Balance]
+    UPDATE_BALANCE --> CHECK_BALANCE
+
+    %% Sufficient Balance
+    BALANCE_POSITIVE -->|Yes|PLACE_BET[Place Bet]
+    PLACE_BET --> DEAL_INITIAL_CARDS[Deal Initial Cards]
+    DEAL_INITIAL_CARDS --> SHOW_HANDS[Show Player Hand and Dealer Upcard]
+
+    SHOW_HANDS --> CHECK_BLACKJACK{Blackjack?}
+    CHECK_BLACKJACK -->|Yes|INSTANT_WIN[Player Wins]
+    CHECK_BLACKJACK -->|No|PLAYER_TURN[Player Turn]
+
+    %% Player Actions
+    PLAYER_TURN--> CHOOSE_ACTION{Choose Action}
+
+    CHOOSE_ACTION -->|Hit|DRAW_CARD[Draw Card]
+    CHOOSE_ACTION -->|Stand|DEALER_TURN[Dealer Turn]
+    CHOOSE_ACTION -->|Double Down|DOUBLE_BET[Double Bet]
+    CHOOSE_ACTION -->|Surrender|RETURN_HALF_BET[Return Half Bet]
+
+    DOUBLE_BET --> DRAW_CARD
+    RETURN_HALF_BET --> UPDATE_BALANCE_AFTER_ROUND
+
+    DRAW_CARD --> UPDATE_HAND_VALUE[Update Hand Value]
+    UPDATE_HAND_VALUE --> CHECK_BUST{Bust?}
+    CHECK_BUST -->|Yes|PLAYER_LOSES[Player Loses]
+    CHECK_BUST -->|No|CHECK_DOUBLE_DOWN{Double Down?}
+    CHECK_DOUBLE_DOWN -->|Yes|DEALER_TURN
+    CHECK_DOUBLE_DOWN -->|No|PLAYER_TURN
+
+    %% Dealer Turn
+    DEALER_TURN --> REVEAL_DEALER_HAND[Reveal Dealer Hand]
+    REVEAL_DEALER_HAND --> DEALER_BELOW_17{Dealer Value Less Than 17?}
+    DEALER_BELOW_17 -->|Yes|DEALER_DRAWS[Dealer Draws Card]
+    DEALER_DRAWS --> REVEAL_DEALER_HAND
+    DEALER_BELOW_17  -->|No|COMPARE_HANDS[Compare Hands]
+
+    %% Resolve Round
+    COMPARE_HANDS --> ROUND_RESULT{Result}
+    ROUND_RESULT -->|Player Wins| ADD_WINNINGS[Add Winnings]
+    ROUND_RESULT -->|Dealer Wins| DEDUCT_BET[Deduct Bet]
+    ROUND_RESULT -->|Draw|RETURN_BET[Return Bet]
+
+    ADD_WINNINGS --> UPDATE_BALANCE_AFTER_ROUND[Update Balance]
+    DEDUCT_BET --> UPDATE_BALANCE_AFTER_ROUND
+    RETURN_BET --> UPDATE_BALANCE_AFTER_ROUND
+    PLAYER_LOSES --> UPDATE_BALANCE_AFTER_ROUND
+
+    UPDATE_BALANCE_AFTER_ROUND --> PLAY_AGAIN{Play Again?}
+    PLAY_AGAIN -->|Yes|PLACE_BET
+    PLAY_AGAIN -->|No|END_GAME([End Game])

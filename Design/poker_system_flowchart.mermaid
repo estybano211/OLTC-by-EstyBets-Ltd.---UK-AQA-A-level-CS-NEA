@@ -1,0 +1,53 @@
+flowchart TD
+
+    START([Start Poker]) --> INITIALISE_PLAYERS[Initialise Players]
+    INITIALISE_PLAYERS --> CHECK_BALANCE[Check Player Balance]
+    CHECK_BALANCE --> BALANCE_POSITIVE{Balance > 0?}
+
+    %% Insufficient Balance
+    BALANCE_POSITIVE -->|No|ADMIN_OVERRIDE{Administrator Override?}
+    ADMIN_OVERRIDE -->|No|RETURN_TO_MENU[Return to Menu]
+    ADMIN_OVERRIDE -->|Yes|ENTER_NEW_BALANCE[Enter New Balance]
+    ENTER_NEW_BALANCE --> UPDATE_BALANCE[Update Balance]
+    UPDATE_BALANCE --> CHECK_BALANCE
+
+    %% Sufficient Balance - Start Round
+    BALANCE_POSITIVE -->|Yes|START_ROUND[Start Round]
+    START_ROUND --> DEAL_CARDS[Deal Cards]
+    DEAL_CARDS --> BEGIN_BETTING[Begin Betting Round]
+
+    %% Betting Loop
+    BEGIN_BETTING --> PLAYER_TURN{Player Turn}
+    PLAYER_TURN --> PLAYER_ACTION{Player Action}
+
+    PLAYER_ACTION --> ACTION_FOLD[Fold]
+    PLAYER_ACTION --> ACTION_CALL[Call]
+    PLAYER_ACTION --> ACTION_RAISE[Raise]
+
+    ACTION_FOLD --> UPDATE_PLAYER_STATUS[Update Player Status]
+    ACTION_CALL --> UPDATE_BET_AND_BALANCE[Update Bet and Balance]
+    ACTION_RAISE --> INCREASE_BET[Increase Bet]
+    INCREASE_BET --> RESET_OTHER_PLAYERS[Reset Other Players]
+
+    UPDATE_PLAYER_STATUS --> NEXT_PLAYER[Next Player]
+    UPDATE_BET_AND_BALANCE --> NEXT_PLAYER
+    RESET_OTHER_PLAYERS--> NEXT_PLAYER
+
+    NEXT_PLAYER --> ALL_PLAYERS_ACTED{All Players Acted?}
+    ALL_PLAYERS_ACTED -->|No|PLAYER_TURN
+    ALL_PLAYERS_ACTED -->|Yes|CHECK_ROUND_END[Check Round End]
+
+    %% Street Progression
+    CHECK_ROUND_END --> MORE_BETTING_ROUNDS{More Betting Rounds?}
+    MORE_BETTING_ROUNDS -->|Yes|REVEAL_NEXT_CARDS[Reveal Next Cards]
+    REVEAL_NEXT_CARDS --> BEGIN_BETTING
+
+    %% Showdown and Resolution
+    MORE_BETTING_ROUNDS -->|No|DETERMINE_WINNER[Determine Winner]
+    DETERMINE_WINNER --> DISTRIBUTE_WINNINGS[Distribute Winnings]
+    DISTRIBUTE_WINNINGS--> UPDATE_PLAYER_DATA[Update Player Data]
+    UPDATE_PLAYER_DATA --> STORE_RESULTS[Store Results]
+
+    STORE_RESULTS --> CONTINUE_GAME{Continue Game?}
+    CONTINUE_GAME -->|Yes|START_ROUND
+    CONTINUE_GAME -->|No|END_GAME([End Game])

@@ -1,0 +1,56 @@
+erDiagram
+
+    DB_LOGS {
+        int id PK
+        text timestamp
+        text level
+        text log_entry
+    }
+
+    ADMIN_LOGS {
+        int id PK
+        text timestamp
+        text level
+        text log_entry
+    }
+
+    USERS {
+        int user_id PK
+        text username
+        text password_hash
+        int registered
+        float balance
+        text created_at
+        text last_login
+    }
+
+    USER_POKER_DATA {
+        int id PK
+        int user_id FK
+        int rounds_played
+        text player_range
+        float vpip
+        float pfr
+        int total_hands_played
+        int total_hands_raised
+        int total_bets
+        int fold_to_raise
+        int call_when_weak
+        int tournament_wins
+        text last_updated
+    }
+
+    USER_POKER_ACTIONS {
+        int id PK
+        int user_id FK
+        int round_number
+        text street
+        text action
+        float bet_size
+        float pot_size
+        int resolved
+        text created_at
+    }
+
+    USERS ||--o| USER_POKER_DATA : has
+    USERS ||--o{ USER_POKER_ACTIONS : records

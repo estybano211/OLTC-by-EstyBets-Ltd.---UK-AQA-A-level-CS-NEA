@@ -1,0 +1,265 @@
+Import: OK
+
+PASS: Administrator account inserted on creation
+
+PASS: check_database_exists returns False when file absent
+
+PASS: Create database when none exists
+
+PASS: Create database when one already exists
+
+PASS: Foreign key constraints enabled on connection
+
+PASS: Expired guest account deletes poker data as well
+
+PASS: Guest account does not receive daily bonus
+
+PASS: Guest account exactly 24 hours old is kept
+
+PASS: Guest account just above 24 hours old is deleted
+
+PASS: initialise_user_poker_data creates a new record for a user
+
+PASS: initialise_user_poker_data skips administrators
+
+PASS: New guest account not deleted
+
+PASS: PFR calculated from preflop raise
+
+PASS: Registered user gets £1,000 bonus after 24 or more hours
+
+PASS: Registered user does not get a bonus within 24 hours
+
+PASS: rounds_played increments after each completed round
+
+PASS: VPIP calculated from preflop actions
+
+PASS: Log entry recorded with correct log level
+
+PASS: Log entry with empty message string
+
+PASS: Log entry with very long message
+
+PASS: Log entry written to admin_logs table
+
+PASS: Log entry written to db_logs table
+
+PASS: linear_search finds an existing key-value pair
+
+PASS: linear_search for a value not present
+
+PASS: linear_search on an empty list
+
+PASS: linear_search returns index of first match only
+
+PASS: bubble_sort ascending on a typical list
+
+PASS: bubble_sort descending on a typical list
+
+PASS: bubble_sort does not mutate the original list
+
+PASS: bubble_sort on an already sorted list
+
+PASS: bubble_sort on a single-element list
+
+PASS: Empty string can be hashed and verified
+
+PASS: hash_function raises an error for non-string input
+
+PASS: hash_function returns a $-delimited string
+
+PASS: Hash is non-deterministic
+
+PASS: verify_hash returns False for wrong password
+
+PASS: verify_hash returns True for correct password
+
+PASS: Password meeting all five criteria passes
+
+PASS: Password shorter than 8 characters fails
+
+PASS: Password with no digit fails
+
+PASS: Password with no lowercase fails
+
+PASS: Password with no special character fails
+
+PASS: Password with no uppercase fails
+
+PASS: Register a guest account (no password)
+
+PASS: Register username that already exists raises sqlite3.IntegrityError
+
+PASS: Register with empty username raises ValueError
+
+PASS: Register with reserved username Administrator raises ValueError
+
+PASS: Register with a valid unique username and password
+
+PASS: Starting balance is exactly £10,000
+
+PASS: Guest account has no password hash
+
+PASS: Login with correct username and password
+
+PASS: Login with correct username, wrong password
+
+PASS: Login with password containing only spaces
+
+PASS: Login with a username that does not exist
+
+PASS: record_user_login updates last_login timestamp
+
+PASS: blackjack_hand_value: Ace counts as 11 when safe
+
+PASS: blackjack_hand_value: Ace counts as 1 when 11 would bust
+
+PASS: blackjack_hand_value: natural blackjack = 21
+
+PASS: copy() creates an independent deck
+
+PASS: Deck auto-resets when exhausted
+
+PASS: draw(1) returns an integer and reduces deck by 1
+
+PASS: draw(n) returns a list of n integers
+
+PASS: evaluate_hand in blackjack mode returns int
+
+PASS: evaluate_hand with invalid game mode raises error
+
+PASS: evaluate_hand in poker mode requires a board
+
+PASS: evaluate_hand in poker mode returns (score, name) tuple
+
+PASS: Fresh deck contains 52 cards
+
+PASS: pretty_draw returns strings with Unicode suit symbols
+
+PASS: str_draw returns 2-character string representations
+
+PASS: String-to-treys round trip is lossless
+
+PASS: treys_to_str_pretty returns parallel lists of equal length
+
+PASS: All 13 pocket pairs present in chart
+
+PASS: cards_to_notation: lower-ranked card first is reordered
+
+PASS: cards_to_notation: offsuit returns AKo
+
+PASS: cards_to_notation: suited returns AKs
+
+PASS: cards_to_notation: two aces returns AA
+
+PASS: generate_bot_range at 20% VPIP selects approx 20% of hands
+
+PASS: generate_range_chart returns dict with 169 entries
+
+PASS: hand_strength_rank: AA stronger than KK
+
+PASS: hand_strength_rank: suited beats offsuit
+
+PASS: Suited and offsuit hands present in chart
+
+PASS: update_range normalises probabilities to sum 1.0
+
+PASS: update_range raises ValueError on invalid hand
+
+PASS: validate_hand_notation: invalid format rejected
+
+PASS: validate_hand_notation: offsuit hands accepted
+
+PASS: validate_hand_notation: suited hands accepted
+
+PASS: validate_hand_notation: valid pocket pairs accepted
+
+PASS: BotCharacteristics: fold_bias higher for easy bots
+
+PASS: BotCharacteristics: noise decreases with difficulty
+
+PASS: BotCharacteristics: simulations scale with difficulty
+
+PASS: BotPokerPlayer created with valid difficulty
+
+PASS: BotPokerPlayer.decide raise includes amount
+
+PASS: BotPokerPlayer.decide returns valid action tuple
+
+PASS: BotPokerPlayer.fetch_player_info returns dict with required keys
+
+PASS: BotPokerPlayer: missing difficulty raises ValueError
+
+PASS: HumanPokerPlayer raises ValueError without user_id
+
+PASS: Tournament: 1 bot gets difficulty 75 (midpoint)
+
+PASS: Tournament bot difficulties evenly distributed 50-100 with 5 bots
+
+PASS: apply_noise: result always in [0.0, 1.0]
+
+PASS: calculate_raise_amount: result does not exceed player balance
+
+PASS: difficulty_curve: clamps above 100
+
+PASS: difficulty_curve: clamps below 0
+
+PASS: difficulty_curve: returns high value at level 100
+
+PASS: difficulty_curve: returns low value at level 0
+
+PASS: estimate_outs: flush draw returns approx 9 outs
+
+PASS: estimate_outs: result non-negative and within MAX_OUTS
+
+PASS: expected_value_of_call: negative EV when equity < pot odds
+
+PASS: expected_value_of_call: positive EV when equity > pot odds
+
+PASS: minimum_defense_frequency: result in [0, 1]
+
+PASS: minimum_defense_frequency: zero bet returns 0.0
+
+PASS: optimal_bluff_ratio: zero bet returns 0.0
+
+PASS: optimal_bluff_ratio: zero pot returns 0.0
+
+PASS: pot_odds: basic calculation
+
+PASS: pot_odds: result always in [0, 1]
+
+PASS: pot_odds: zero call amount returns 0.0
+
+PASS: probability_to_hit_by_river: increases with more outs
+
+PASS: probability_to_hit_by_river: zero cards remaining gives 0.0
+
+PASS: probability_to_hit_by_river: zero outs gives 0.0
+
+PASS: advance_round(False) does not increment round_wins
+
+PASS: advance_round(True) increments round_wins
+
+PASS: Big blind capped at £4,000
+
+PASS: Blind escalation occurs every 3 rounds
+
+PASS: rounds_survived always increments regardless of outcome
+
+PASS: Small blind capped at £2,000
+
+PASS: Tournament ends after all configured rounds
+
+PASS: Tournament lost if zero rounds were won
+
+PASS: Tournament starts with correct balances
+
+PASS: Tournament won if at least one round was won
+
+PASS: update_tournament_best does not lower existing score
+
+PASS: update_tournament_best stores higher score
+----------------------------------------------------------------------
+Ran 130 tests in 81.639s
+
+OK

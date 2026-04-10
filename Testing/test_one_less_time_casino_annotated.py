@@ -117,8 +117,8 @@ try:
     )
 
     print("Import: OK")
-except ImportError as e:
-    print(f"Import error: {e}")
+except ImportError as error:
+    print(f"Import error: {error}")
     print("Ensure one_less_time_casino.py is in the same directory.")
     sys.exit(1)
 
@@ -156,7 +156,7 @@ class TestDatabaseCreation(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        if os.path.exists(cls.TEST_DB):\
+        if os.path.exists(cls.TEST_DB):
             os.remove(cls.TEST_DB)
 
     def test_create_database_when_none_exists(self):

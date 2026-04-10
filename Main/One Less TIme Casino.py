@@ -2983,9 +2983,9 @@ class AdminConsole(BaseInterface):
 
         for column in dataframe.columns:
             tree.heading(column, text=column)
-            max_width = (
-                max(dataframe[column].astype(str).map(len).max(), len(column)) * 10
-            )
+            col_max = dataframe[column].astype(str).str.len().max()
+            col_max = int(col_max) if pd.notna(col_max) else 0
+            max_width = max(col_max, len(column)) * 10
             tree.column(column, width=max_width, anchor="w")
 
         # Insert rows with alternating tags for styling, '_' is used to prevent

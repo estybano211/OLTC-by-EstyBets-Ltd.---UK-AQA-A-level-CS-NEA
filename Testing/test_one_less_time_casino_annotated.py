@@ -491,7 +491,6 @@ class TestLoggingHandlers(unittest.TestCase):
 
         oltc.DB_PATH = cls.TEST_DB
 
-        # Build isolated loggers so we don't pollute the module-level ones
         cls.db_handler = DatabaseLogHandler()
         cls.db_logger = logging.getLogger("test_db_log")
         cls.db_logger.setLevel(logging.DEBUG)
@@ -1460,7 +1459,6 @@ class TestBotPokerPlayer(unittest.TestCase):
                 self.assertIsInstance(result[1], (int, float))
                 found_raise = True
                 break
-        # We cannot guarantee a raise in every run, so we just pass
         print("\nPASS: BotPokerPlayer.decide raise includes amount")
 
     def test_bot_fetch_player_info_returns_dict_with_required_keys(self):

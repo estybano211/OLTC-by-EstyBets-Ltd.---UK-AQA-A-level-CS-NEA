@@ -260,6 +260,6 @@ PASS: update_tournament_best does not lower existing score
 
 PASS: update_tournament_best stores higher score
 ----------------------------------------------------------------------
-Ran 130 tests in 81.639s
+Ran 130 tests in 81.783s
 
 OK
